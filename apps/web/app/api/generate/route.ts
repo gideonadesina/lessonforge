@@ -15,46 +15,27 @@ function buildPrompt(input: GeneratePayload) {
   const durationMins = input.durationMins ?? 40;
 
   return `
-You are an expert teacher and instructional designer.
+Return STRICT JSON only. No markdown. No backticks. No extra text.
 
-Generate a COMPLETE lesson pack as valid JSON only (no markdown, no extra text).
 Audience: Grade ${input.grade}
 Subject: ${input.subject}
 Topic: ${input.topic}
 Curriculum: ${curriculum}
 Duration: ${durationMins} minutes
 
-Return JSON with this exact shape:
+JSON shape:
 {
-  "meta": {
-    "subject": string,
-    "topic": string,
-    "grade": string,
-    "curriculum": string,
-    "durationMins": number
-  },
-  "objectives": string[],
-  "lessonNotes": string,
-  "slides": {
-    "title": string,
-    "bullets": string[],
-    "imageQuery": string,
-    "videoQuery": string,
-    "interactivePrompt": string
-  }[],
+  "meta": { "subject": "", "topic": "", "grade": "", "curriculum": "", "durationMins": 40 },
+  "objectives": [],
+  "lessonNotes": "",
+  "slides": [{ "title": "", "bullets": [], "imageQuery": "", "videoQuery": "", "interactivePrompt": "" }],
   "quiz": {
-    "mcq": { "question": string, "options": string[], "answerIndex": number }[],
-    "theory": { "question": string, "markingGuide": string }[]
+    "mcq": [{ "question": "", "options": ["","","",""], "answerIndex": 0 }],
+    "theory": [{ "question": "", "markingGuide": "" }]
   },
-  "liveApplications": string[]
+  "liveApplications": []
 }
-
-Rules:
-- Age-appropriate
-- Nigeria-friendly examples where relevant
-- 10 MCQs, 2 theory questions
-- 8–12 slides
-- STRICT JSON ONLY
+Rules: 8–12 slides, 10 MCQs, 2 theory.
 `;
 }
 
@@ -62,28 +43,52 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json()) as GeneratePayload;
 
-    if (!body.subject || !body.topic || !body.grade) {
-      return Response.json({ error: "Missing fields" }, { status: 400 });
+    if (!body?.subject || !body?.topic || !body?.grade) {
+      return Response.json(
+        { error: "Missing required fields: subject, topic, grade" },
+        { status: 400 }
+      );
     }
 
-    const client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return Response.json(
+        { error: "OPENAI_API_KEY missing in apps/web/.env.local" },
+        { status: 500 }
+      );
+    }
+
+    const client = new OpenAI({ apiKey });
 
     const resp = await client.responses.create({
       model: "gpt-4.1-mini",
       input: buildPrompt(body),
+      temperature: 0.2,
     });
 
-    const text = resp.output_text || "";
+    const raw = resp.output_text ?? "";
 
-    const data = JSON.parse(text);
-
-    return Response.json({ data });
+    // Don’t crash if non-JSON; return it for debugging
+    try {
+      const data = JSON.parse(raw);
+      return Response.json({ data }, { status: 200 });
+    } catch {
+      return Response.json(
+        { error: "Non-JSON from model", rawPreview: raw.slice(0, 1500) },
+        { status: 502 }
+      );
+    }
   } catch (err: any) {
+    const status = err?.status || err?.response?.status || 500;
+    const message =
+      err?.message ||
+      err?.response?.data?.error?.message ||
+      String(err);
+
     return Response.json(
-      { error: "Generation failed", details: String(err) },
-      { status: 500 }
+      { error: "Generation failed", status, message },
+      { status }
     );
   }
 }
+console.log("KEY starts with:", (process.env.OPENAI_API_KEY || "").slice(0, 6));
