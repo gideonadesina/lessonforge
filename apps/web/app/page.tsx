@@ -138,6 +138,44 @@ export default function Home() {
 >
   📄 Download Lesson Notes (PDF)
 </button>
+<button
+  onClick={async () => {
+    try {
+      const res = await fetch("/api/export-pptx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          meta: result?.meta,
+          slides: result?.slides,
+        }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        alert(`PPTX export failed (${res.status}): ${text}`);
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `LessonForge-${result?.meta?.subject || "Lesson"}-${Date.now()}.pptx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(`PPTX export error: ${String(err?.message ?? err)}`);
+    }
+  }}
+  className="px-4 py-2 rounded-xl border"
+>
+  📊 Download Slides (PPTX)
+</button>
+
       </div>
     </section>
 
