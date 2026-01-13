@@ -7,10 +7,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { youtubeSearchUrl, wikimediaSearchUrl } from "./lib/media";
 
- <div className="flex gap-2">
-  <Link className="px-3 py-2 rounded-xl border" href="/login">Login</Link>
-  <Link className="px-3 py-2 rounded-xl border" href="/dashboard">Dashboard</Link>
-</div>
+
 
 export default function Home() {
 const [user, setUser] = useState<any>(null);
@@ -100,6 +97,7 @@ const [subject, setSubject] = useState("Chemistry");
 
   return (
     <main className="min-h-screen p-6 max-w-5xl mx-auto space-y-6">
+
       {/* ===== Auth Navigation (Step A4) ===== */}
 <div className="flex justify-end gap-3 mb-6">
   {!user && (
@@ -133,24 +131,7 @@ const [subject, setSubject] = useState("Chemistry");
   )}
 </div>
 {/* ===== End Step A4 ===== */}
-      <div className="flex gap-2 items-center">
-  {user ? (
-    <>
-      <Link className="px-3 py-2 rounded-xl border" href="/dashboard">Dashboard</Link>
-      <button
-        className="px-3 py-2 rounded-xl border"
-        onClick={async () => {
-          await supabase.auth.signOut();
-          setUser(null);
-        }}
-      >
-        Logout
-      </button>
-    </>
-  ) : (
-    <Link className="px-3 py-2 rounded-xl border" href="/login">Login</Link>
-  )}
-</div>
+     
       <h1 className="text-3xl font-bold">LessonForge MVP</h1>
       <p className="text-sm opacity-80">
         Type a topic → get lesson plan, notes, slides, quiz + media queries.
