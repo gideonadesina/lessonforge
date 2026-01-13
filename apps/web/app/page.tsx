@@ -1,10 +1,70 @@
-"use client";
 
+"use client";
+import { supabase } from "./lib/supabaseclient";
+import link from "next/link";
+import { useEffect } from "react";
+import Link from "next/link";
 import { useState } from "react";
 import { youtubeSearchUrl, wikimediaSearchUrl } from "./lib/media";
 
+ <div className="flex gap-2">
+  <Link className="px-3 py-2 rounded-xl border" href="/login">Login</Link>
+  <Link className="px-3 py-2 rounded-xl border" href="/dashboard">Dashboard</Link>
+</div>
+
 export default function Home() {
-  const [subject, setSubject] = useState("Chemistry");
+const [user, setUser] = useState<any>(null);
+const [saving, setSaving] = useState(false);
+const [saveMsg, setSaveMsg] = useState<string | null>(null);
+
+useEffect(() => {
+  (async () => {
+    const { data } = await supabase.auth.getUser();
+    setUser(data?.user ?? null);
+  })();
+
+  const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    setUser(session?.user ?? null);
+  });
+
+  return () => {
+    sub.subscription.unsubscribe();
+  };
+}, []);
+async function saveLesson() {
+  setSaveMsg(null);
+
+  if (!user) {
+    setSaveMsg("Please log in first to save lessons.");
+    return;
+  }
+  if (!result) {
+    setSaveMsg("Generate a lesson first.");
+    return;
+  }
+
+  setSaving(true);
+  try {
+    const payload = {
+      user_id: user.id,
+      subject,
+      topic,
+      grade,
+      curriculum,
+      result_json: result,
+    };
+
+    const { error } = await supabase.from("lessons").insert(payload);
+    if (error) throw error;
+
+    setSaveMsg("Saved to your library ✅");
+  } catch (e: any) {
+    setSaveMsg(`Save failed: ${e?.message ?? String(e)}`);
+  } finally {
+    setSaving(false);
+  }
+}
+const [subject, setSubject] = useState("Chemistry");
   const [topic, setTopic] = useState("Solutions");
   const [grade, setGrade] = useState("11");
   const [curriculum, setCurriculum] = useState("Cambridge / WAEC-friendly");
@@ -40,6 +100,57 @@ export default function Home() {
 
   return (
     <main className="min-h-screen p-6 max-w-5xl mx-auto space-y-6">
+      {/* ===== Auth Navigation (Step A4) ===== */}
+<div className="flex justify-end gap-3 mb-6">
+  {!user && (
+    <Link
+      href="/login"
+      className="px-4 py-2 rounded-xl border hover:bg-white hover:text-black transition"
+    >
+      Login
+    </Link>
+  )}
+
+  {user && (
+    <>
+      <Link
+        href="/dashboard"
+        className="px-4 py-2 rounded-xl border hover:bg-white hover:text-black transition"
+      >
+        Dashboard
+      </Link>
+
+      <button
+        onClick={async () => {
+          await supabase.auth.signOut();
+          setUser(null);
+        }}
+        className="px-4 py-2 rounded-xl border hover:bg-red-600 transition"
+      >
+        Logout
+      </button>
+    </>
+  )}
+</div>
+{/* ===== End Step A4 ===== */}
+      <div className="flex gap-2 items-center">
+  {user ? (
+    <>
+      <Link className="px-3 py-2 rounded-xl border" href="/dashboard">Dashboard</Link>
+      <button
+        className="px-3 py-2 rounded-xl border"
+        onClick={async () => {
+          await supabase.auth.signOut();
+          setUser(null);
+        }}
+      >
+        Logout
+      </button>
+    </>
+  ) : (
+    <Link className="px-3 py-2 rounded-xl border" href="/login">Login</Link>
+  )}
+</div>
       <h1 className="text-3xl font-bold">LessonForge MVP</h1>
       <p className="text-sm opacity-80">
         Type a topic → get lesson plan, notes, slides, quiz + media queries.
@@ -195,7 +306,15 @@ export default function Home() {
                 <li key={j}>{b}</li>
               ))}
             </ul>
+            <button
+  onClick={saveLesson}
+  disabled={saving}
+  className="px-4 py-2 rounded-xl border font-semibold"
+>
+  {saving ? "Saving..." : "Save to Library"}
+</button>
 
+{saveMsg && <div className="text-sm opacity-80">{saveMsg}</div>}
             {/* Media links */}
             <div className="flex flex-wrap gap-4 text-sm pt-2">
               <a

@@ -30,8 +30,15 @@ export default function LoginPage() {
         return;
       }
 
-      setMsg(mode === "signup" ? "Account created. You can log in now." : "Logged in!");
-      router.push("/dashboard");
+     if (mode === "signup") {
+  setMsg("Account created. Check your email if confirmation is enabled, then log in.");
+  setMode("login");
+  return;
+}
+
+setMsg("Logged in!");
+router.push("/dashboard");
+router.refresh();
     } finally {
       setLoading(false);
     }
