@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { supabase } from "../lib/supabaseclient";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "../lib/supabase/browser";
 
 export default function LoginPage() {
   const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
+
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,27 +20,23 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const fn =
-        mode === "login"
-          ? supabase.auth.signInWithPassword
-          : supabase.auth.signUp;
+      if (mode === "login") {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) return setMsg(error.message);
 
-      const { error } = await fn({ email, password });
-
-      if (error) {
-        setMsg(error.message);
+        setMsg("Logged in!");
+        router.push("/dashboard");
+        router.refresh();
         return;
       }
 
-     if (mode === "signup") {
-  setMsg("Account created. Check your email if confirmation is enabled, then log in.");
-  setMode("login");
-  return;
-}
+      const { error } = await supabase.auth.signUp({ email, password });
+      if (error) return setMsg(error.message);
 
-setMsg("Logged in!");
-router.push("/dashboard");
-router.refresh();
+      setMsg("Account created ✅ You can log in now.");
+      setMode("login");
+    } catch (e: any) {
+      setMsg(String(e?.message ?? e));
     } finally {
       setLoading(false);
     }
@@ -47,15 +45,18 @@ router.refresh();
   return (
     <div className="max-w-md mx-auto p-6 space-y-4">
       <h1 className="text-2xl font-semibold">LessonForge</h1>
+      <p className="text-sm opacity-80">Sign in to access your dashboard.</p>
 
       <div className="flex gap-2">
         <button
+          type="button"
           className={`px-3 py-2 rounded-xl border ${mode === "login" ? "font-semibold" : ""}`}
           onClick={() => setMode("login")}
         >
           Log in
         </button>
         <button
+          type="button"
           className={`px-3 py-2 rounded-xl border ${mode === "signup" ? "font-semibold" : ""}`}
           onClick={() => setMode("signup")}
         >
