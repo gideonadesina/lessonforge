@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "./lib/supabase/browser";
-import { youtubeSearchUrl, wikimediaSearchUrl } from "./lib/media";
+import { youtubeSearchUrl, wikimediaSearchUrl, unsplashImageUrl } from "./lib/media";
 
 type LessonResult = any;
 
@@ -215,7 +215,8 @@ export default function Home() {
               Trusted by <span className="text-slate-900 font-semibold">schools</span> & teachers
             </span>
           </div>
-
+          
+        
           <h1 className="animate-fade-up delay-200 leading-[0.95] lg:text-[4.5rem] text-5xl font-semibold text-slate-900 tracking-tighter mb-8">
             Create Curriculum-Aligned Lessons
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-500 font-bold block">
@@ -507,26 +508,49 @@ export default function Home() {
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="space-y-2">
-              <span className="text-sm font-medium text-slate-900">Subject</span>
-              <input className="w-full border rounded-xl p-3 bg-white" value={subject} onChange={(e) => setSubject(e.target.value)} />
-            </label>
+            
+         <label className="space-y-2">
+  <span className="text-sm font-medium text-slate-900">Subject</span>
 
-            <label className="space-y-2">
-              <span className="text-sm font-medium text-slate-900">Grade/Class</span>
-              <input className="w-full border rounded-xl p-3 bg-white" value={grade} onChange={(e) => setGrade(e.target.value)} />
-            </label>
+  <label className="space-y-2">
+  <span className="text-sm font-medium text-slate-900">Subject</span>
+  <input
+    className="w-full rounded-xl border border-slate-300 bg-white p-3 font-semibold text-slate-900 placeholder:font-semibold placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+    placeholder="Chemistry"
+    value={subject}
+    onChange={(e) => setSubject(e.target.value)}
+  />
+</label>
 
-            <label className="space-y-2 md:col-span-2">
-              <span className="text-sm font-medium text-slate-900">Topic</span>
-              <input className="w-full border rounded-xl p-3 bg-white" value={topic} onChange={(e) => setTopic(e.target.value)} />
-            </label>
+<label className="space-y-2">
+  <span className="text-sm font-medium text-slate-900">Grade / Class</span>
+  <input
+    className="w-full rounded-xl border border-slate-300 bg-white p-3 font-semibold text-slate-900 placeholder:font-semibold placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+    placeholder="11"
+    value={grade}
+    onChange={(e) => setGrade(e.target.value)}
+  />
+</label>
 
-            <label className="space-y-2 md:col-span-2">
-              <span className="text-sm font-medium text-slate-900">Curriculum</span>
-              <input className="w-full border rounded-xl p-3 bg-white" value={curriculum} onChange={(e) => setCurriculum(e.target.value)} />
-            </label>
-          </div>
+<label className="space-y-2 md:col-span-2">
+  <span className="text-sm font-medium text-slate-900">Topic</span>
+  <input
+    className="w-full rounded-xl border border-slate-300 bg-white p-3 font-semibold text-slate-900 placeholder:font-semibold placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+    placeholder="Solutions"
+    value={topic}
+    onChange={(e) => setTopic(e.target.value)}
+  />
+</label>
+
+<label className="space-y-2 md:col-span-2">
+  <span className="text-sm font-medium text-slate-900">Curriculum</span>
+  <input
+    className="w-full rounded-xl border border-slate-300 bg-white p-3 font-semibold text-slate-900 placeholder:font-semibold placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+    placeholder="Cambridge / WAEC-friendly"
+    value={curriculum}
+    onChange={(e) => setCurriculum(e.target.value)}
+  />
+</label>
 
           <button
             onClick={generate}
@@ -549,74 +573,81 @@ export default function Home() {
             </div>
           )}
 
-          {result && (
-            <div className="border rounded-2xl p-4 space-y-6 bg-white">
-              <h3 className="text-xl font-semibold">
-                {result?.meta?.subject}: {result?.meta?.topic} (Grade {result?.meta?.grade})
-              </h3>
+         {result && (
+  <div className="border rounded-2xl p-4 space-y-6">
+    <section>
+      <h4 className="font-semibold text-lg">Objectives</h4>
+      <ul className="list-disc pl-6">
+        {(result.objectives || []).map((x: string, i: number) => (
+          <li key={i}>{x}</li>
+        ))}
+      </ul>
+    </section>
 
-              <section>
-                <h4 className="font-semibold text-lg">Objectives</h4>
-                <ul className="list-disc pl-6">
-                  {(result.objectives || []).map((x: string, i: number) => (
-                    <li key={i}>{x}</li>
-                  ))}
-                </ul>
-              </section>
+    <section>
+      <h4 className="font-semibold text-lg">Lesson Notes</h4>
+      <div className="whitespace-pre-wrap leading-relaxed">
+        {result.lessonNotes || "No lesson notes generated."}
+      </div>
+    </section>
 
-              <section>
-                <h4 className="font-semibold text-lg">Lesson Notes</h4>
-                <div className="whitespace-pre-wrap leading-relaxed">{result.lessonNotes || "No lesson notes generated."}</div>
-              </section>
+    <section className="space-y-2">
+      <div className="flex flex-wrap gap-2 items-center">
+        <button
+          onClick={saveLesson}
+          disabled={saving}
+          className="px-4 py-2 rounded-xl border font-semibold"
+        >
+          {saving ? "Saving..." : "Save to Library"}
+        </button>
+        {saveMsg && <div className="text-sm opacity-80">{saveMsg}</div>}
+      </div>
+    </section>
 
-              <section className="space-y-2">
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={saveLesson}
-                    disabled={saving}
-                    className="px-4 py-2 rounded-xl border font-semibold"
-                  >
-                    {saving ? "Saving..." : "Save to Library"}
-                  </button>
-                  {saveMsg && <div className="text-sm opacity-80">{saveMsg}</div>}
-                </div>
-              </section>
-
-              <section>
-                <h4 className="font-semibold text-lg">Slides (Preview)</h4>
-                <div className="grid gap-4 mt-3">
-                  {(result.slides || []).map((s: any, i: number) => (
-                    <div key={i} className="rounded-2xl border p-4 space-y-2">
-                      <div className="font-semibold">
-                        {i + 1}. {s?.title || "Untitled slide"}
-                      </div>
-
-                      <ul className="list-disc pl-6">
-                        {(s?.bullets || []).map((b: string, j: number) => (
-                          <li key={j}>{b}</li>
-                        ))}
-                      </ul>
-
-                      <div className="flex flex-wrap gap-4 text-sm pt-2">
-                        <a href={youtubeSearchUrl(s?.videoQuery)} target="_blank" rel="noreferrer" className="text-blue-600 underline">
-                          🎥 Watch video
-                        </a>
-                        <a href={wikimediaSearchUrl(s?.imageQuery)} target="_blank" rel="noreferrer" className="text-green-600 underline">
-                          🖼️ View image
-                        </a>
-                      </div>
-
-                      <div className="mt-2 p-3 rounded-xl border bg-yellow-50 text-sm">
-                        <b>👩🏽‍🏫 Classroom Activity:</b> {s?.interactivePrompt || "No interactive activity provided."}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
+    <section>
+      <h4 className="font-semibold text-lg">Slides (Preview)</h4>
+      <div className="grid gap-4 mt-3">
+        {(result.slides || []).map((s: any, i: number) => (
+          <div key={i} className="rounded-2xl border p-4 space-y-2">
+            <div className="font-semibold">
+              {i + 1}. {s?.title || "Untitled slide"}
             </div>
-          )}
-        </div>
-      </section>
+
+            <ul className="list-disc pl-6">
+              {(s?.bullets || []).map((b: string, j: number) => (
+                <li key={j}>{b}</li>
+              ))}
+            </ul>
+
+            <div className="flex flex-wrap gap-4 text-sm pt-2">
+              <a
+                href={youtubeSearchUrl(s?.videoQuery)}
+                target="_blank"
+                rel="noreferrer"
+                className="text-blue-600 underline"
+              >
+                🎥 Watch video
+              </a>
+              <a
+                href={wikimediaSearchUrl(s?.imageQuery)}
+                target="_blank"
+                rel="noreferrer"
+                className="text-green-600 underline"
+              >
+                🖼️ View image
+              </a>
+            </div>
+
+            <div className="mt-2 p-3 rounded-xl border bg-yellow-50 text-sm">
+              <b>👩🏽‍🏫 Classroom Activity:</b>{" "}
+              {s?.interactivePrompt || "No interactive activity provided."}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  </div>
+)}
 
       {/* Footer */}
       <footer className="relative z-10 px-6 md:px-10 xl:px-12 py-12 border-t border-slate-200">
@@ -639,6 +670,8 @@ export default function Home() {
           </div>
         </div>
       </footer>
-    </div>
-  );
-}
+     </div>
+  </main>
+  
+
+
