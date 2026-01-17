@@ -80,10 +80,16 @@ export default function Home() {
 
       const json = await res.json();
       if (!res.ok) {
-        setError(json?.error || "Request failed");
-      } else {
-        setResult(json.data);
-      }
+  const details =
+    json?.message ||
+    json?.rawPreview ||
+    (typeof json === "string" ? json : JSON.stringify(json, null, 2));
+
+  setError(`${json?.error || "Request failed"} (HTTP ${res.status})\n${details}`);
+  return;
+}
+
+setResult(json.data);
     } catch (e: any) {
       setError(String(e?.message ?? e));
     } finally {
@@ -486,168 +492,253 @@ export default function Home() {
   </div>
 </section>
 
-      {/* Generator (your existing app) */}
-      <section id="generator" className="relative z-10 px-6 md:px-10 xl:px-12 py-24 scroll-mt-24">
-        <div className="max-w-5xl mx-auto space-y-6">
-          <div className="flex items-end justify-between gap-4">
-            <div>
-              <h2 className="text-3xl font-bold text-slate-900">Generate a Lesson Pack</h2>
-              <p className="text-sm text-slate-600 mt-1">Type a topic → get lesson plan, notes, slides, quiz + media queries.</p>
-            </div>
-            <div className="flex gap-2">
-              {!user ? (
-                <Link className="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50" href="/login">
-                  Login to Save
-                </Link>
-              ) : (
-                <Link className="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50" href="/dashboard">
-                  Open Dashboard
-                </Link>
-              )}
-            </div>
-          </div>
+      
+    {/* Generator (your existing app) */}
+<section id="generator" className="relative z-10 px-6 md:px-10 xl:px-12 py-24 scroll-mt-24">
+  <div className="max-w-5xl mx-auto space-y-6">
+    <div className="flex items-end justify-between gap-4">
+      <div>
+        <h2 className="text-3xl font-bold text-slate-900">Generate a Lesson Pack</h2>
+        <p className="text-sm text-slate-600 mt-1">
+          Type a topic → get lesson plan, notes, slides, quiz + media queries.
+        </p>
+      </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            
-         <label className="space-y-2">
-  <span className="text-sm font-medium text-slate-900">Subject</span>
+      <div className="flex gap-2">
+        {!user ? (
+          <Link className="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50" href="/login">
+            Login to Save
+          </Link>
+        ) : (
+          <Link className="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50" href="/dashboard">
+            Open Dashboard
+          </Link>
+        )}
+      </div>
+    </div>
+
+   <div className="grid gap-4 md:grid-cols-2">
+  <label className="space-y-2">
+    <span className="text-sm font-medium text-slate-900">Subject</span>
+    <input
+      className="w-full rounded-xl border border-slate-300 bg-white p-3 font-semibold text-slate-900 placeholder:font-semibold placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+      placeholder="Chemistry"
+      value={subject}
+      onChange={(e) => setSubject(e.target.value)}
+    />
+  </label>
 
   <label className="space-y-2">
-  <span className="text-sm font-medium text-slate-900">Subject</span>
-  <input
-    className="w-full rounded-xl border border-slate-300 bg-white p-3 font-semibold text-slate-900 placeholder:font-semibold placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
-    placeholder="Chemistry"
-    value={subject}
-    onChange={(e) => setSubject(e.target.value)}
-  />
-</label>
+    <span className="text-sm font-medium text-slate-900">Grade / Class</span>
+    <input
+      className="w-full rounded-xl border border-slate-300 bg-white p-3 font-semibold text-slate-900 placeholder:font-semibold placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+      placeholder="11"
+      value={grade}
+      onChange={(e) => setGrade(e.target.value)}
+    />
+  </label>
 
-<label className="space-y-2">
-  <span className="text-sm font-medium text-slate-900">Grade / Class</span>
-  <input
-    className="w-full rounded-xl border border-slate-300 bg-white p-3 font-semibold text-slate-900 placeholder:font-semibold placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
-    placeholder="11"
-    value={grade}
-    onChange={(e) => setGrade(e.target.value)}
-  />
-</label>
+  <label className="space-y-2 md:col-span-2">
+    <span className="text-sm font-medium text-slate-900">Topic</span>
+    <input
+      className="w-full rounded-xl border border-slate-300 bg-white p-3 font-semibold text-slate-900 placeholder:font-semibold placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+      placeholder="Solutions"
+      value={topic}
+      onChange={(e) => setTopic(e.target.value)}
+    />
+  </label>
 
-<label className="space-y-2 md:col-span-2">
-  <span className="text-sm font-medium text-slate-900">Topic</span>
-  <input
-    className="w-full rounded-xl border border-slate-300 bg-white p-3 font-semibold text-slate-900 placeholder:font-semibold placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
-    placeholder="Solutions"
-    value={topic}
-    onChange={(e) => setTopic(e.target.value)}
-  />
-</label>
-
-<label className="space-y-2 md:col-span-2">
-  <span className="text-sm font-medium text-slate-900">Curriculum</span>
-  <input
-    className="w-full rounded-xl border border-slate-300 bg-white p-3 font-semibold text-slate-900 placeholder:font-semibold placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
-    placeholder="Cambridge / WAEC-friendly"
-    value={curriculum}
-    onChange={(e) => setCurriculum(e.target.value)}
-  />
-</label>
-
-          <button
-            onClick={generate}
-            disabled={loading}
-            className="px-5 py-3 rounded-2xl border shadow-sm hover:shadow disabled:opacity-60 bg-white"
-          >
-            {loading ? "Generating..." : "Generate Lesson Pack"}
-          </button>
-          <div className="text-xs text-slate-500 leading-relaxed">
-  <span className="font-medium text-slate-700">Data privacy:</span>{" "}
-  We don’t sell your data. Your saved lessons are stored securely in your private library.
-  Avoid entering sensitive student information (names, addresses, results).
+  <label className="space-y-2 md:col-span-2">
+    <span className="text-sm font-medium text-slate-900">Curriculum</span>
+    <input
+      className="w-full rounded-xl border border-slate-300 bg-white p-3 font-semibold text-slate-900 placeholder:font-semibold placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+      placeholder="Cambridge / WAEC-friendly"
+      value={curriculum}
+      onChange={(e) => setCurriculum(e.target.value)}
+    />
+  </label>
 </div>
-<div className="text-xs text-slate-500">
-  🔒 Secure auth via Supabase • ✅ Export-ready (PDF/PPTX) • ⚡ Built for real classrooms
-</div>
-          {error && (
-            <div className="border rounded-2xl p-4 text-red-600 bg-white">
-              <b>Error:</b> {error}
-            </div>
-          )}
 
-         {result && (
-  <div className="border rounded-2xl p-4 space-y-6">
-    <section>
-      <h4 className="font-semibold text-lg">Objectives</h4>
-      <ul className="list-disc pl-6">
-        {(result.objectives || []).map((x: string, i: number) => (
-          <li key={i}>{x}</li>
-        ))}
-      </ul>
-    </section>
+    <button
+      onClick={generate}
+      disabled={loading}
+      className="px-5 py-3 rounded-2xl border shadow-sm hover:shadow disabled:opacity-60 bg-white"
+    >
+      {loading ? "Generating..." : "Generate Lesson Pack"}
+    </button>
 
-    <section>
-      <h4 className="font-semibold text-lg">Lesson Notes</h4>
-      <div className="whitespace-pre-wrap leading-relaxed">
-        {result.lessonNotes || "No lesson notes generated."}
+    <div className="text-xs text-slate-500 leading-relaxed">
+      <span className="font-medium text-slate-700">Data privacy:</span>{" "}
+      We don’t sell your data. Your saved lessons are stored securely in your private library.
+      Avoid entering sensitive student information (names, addresses, results).
+    </div>
+
+    <div className="text-xs text-slate-500">
+      🔒 Secure auth via Supabase • ✅ Export-ready (PDF/PPTX) • ⚡ Built for real classrooms
+    </div>
+
+    {error && (
+      <div className="border rounded-2xl p-4 text-red-600 bg-white">
+        <b>Error:</b> {error}
       </div>
-    </section>
+    )}
 
-    <section className="space-y-2">
-      <div className="flex flex-wrap gap-2 items-center">
-        <button
-          onClick={saveLesson}
-          disabled={saving}
-          className="px-4 py-2 rounded-xl border font-semibold"
-        >
-          {saving ? "Saving..." : "Save to Library"}
-        </button>
-        {saveMsg && <div className="text-sm opacity-80">{saveMsg}</div>}
-      </div>
-    </section>
+    {result && (
+      <div className="border rounded-2xl p-6 bg-white space-y-8">
+       <section className="space-y-4">
+  <h4 className="text-xl font-bold text-slate-900">
+    Objectives
+  </h4>
 
-    <section>
-      <h4 className="font-semibold text-lg">Slides (Preview)</h4>
-      <div className="grid gap-4 mt-3">
-        {(result.slides || []).map((s: any, i: number) => (
-          <div key={i} className="rounded-2xl border p-4 space-y-2">
-            <div className="font-semibold">
-              {i + 1}. {s?.title || "Untitled slide"}
-            </div>
+  <ul className="list-disc pl-6 space-y-2 text-slate-800">
+    {(result.objectives || []).map((x: string, i: number) => (
+      <li key={i} className="leading-relaxed font-medium">
+        {x}
+      </li>
+    ))}
+  </ul>
+</section>
 
-            <ul className="list-disc pl-6">
-              {(s?.bullets || []).map((b: string, j: number) => (
-                <li key={j}>{b}</li>
-              ))}
-            </ul>
+      <section>
+  <h4 className="font-semibold text-lg text-slate-900 mb-2">
+    Lesson Notes
+  </h4>
 
-            <div className="flex flex-wrap gap-4 text-sm pt-2">
-              <a
-                href={youtubeSearchUrl(s?.videoQuery)}
-                target="_blank"
-                rel="noreferrer"
-                className="text-blue-600 underline"
-              >
-                🎥 Watch video
-              </a>
-              <a
-                href={wikimediaSearchUrl(s?.imageQuery)}
-                target="_blank"
-                rel="noreferrer"
-                className="text-green-600 underline"
-              >
-                🖼️ View image
-              </a>
-            </div>
-
-            <div className="mt-2 p-3 rounded-xl border bg-yellow-50 text-sm">
-              <b>👩🏽‍🏫 Classroom Activity:</b>{" "}
-              {s?.interactivePrompt || "No interactive activity provided."}
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
+  <div className="
+    whitespace-pre-wrap
+    leading-relaxed
+    text-slate-800
+    text-sm
+    bg-white
+    border
+    border-slate-200
+    rounded-xl
+    p-4
+  ">
+    {result.lessonNotes || "No lesson notes generated."}
   </div>
-)}
+</section>
+
+       <section className="space-y-3">
+  <div className="flex flex-wrap gap-3 items-center">
+
+    {/* Save */}
+   <button
+  onClick={saveLesson}
+  className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition disabled:opacity-50"
+  disabled={saving}
+>
+  {saving ? "Saving..." : "Save to Library"}
+</button>
+<div className="flex flex-wrap gap-3 pt-2">
+  <a
+    href={`/api/export/pdf?lessonId=${result?.meta?.topic}`}
+    className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-black transition"
+  >
+    📄 Download PDF
+  </a>
+
+  <a
+    href={`/api/export/pptx?lessonId=${result?.meta?.topic}`}
+    className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition"
+  >
+    📊 Download PowerPoint
+  </a>
+</div>
+
+    {/* PDF */}
+    <button
+      disabled
+      className="px-4 py-2 rounded-xl border bg-white text-slate-400 cursor-not-allowed"
+      title="Coming next"
+    >
+      Download PDF
+    </button>
+
+    {/* PPTX */}
+    <button
+      disabled
+      className="px-4 py-2 rounded-xl border bg-white text-slate-400 cursor-not-allowed"
+      title="Coming next"
+    >
+      Download PowerPoint
+    </button>
+
+    {saveMsg && <div className="text-sm opacity-80">{saveMsg}</div>}
+  </div>
+
+  <p className="text-xs text-slate-500">
+    🔒 Exports available after save (PDF & PPTX)
+  </p>
+</section>
+
+      <section className="space-y-4">
+  <h4 className="text-xl font-bold text-slate-900">
+    Slides (Preview)
+  </h4>
+
+  <div className="grid gap-6">
+    {(result.slides || []).map((s: any, i: number) => (
+      <div
+        key={i}
+        className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm"
+      >
+        <div className="text-lg font-semibold text-slate-900">
+          {i + 1}. {s?.title || "Untitled slide"}
+        </div>
+
+        <ul className="list-disc pl-6 space-y-1 text-slate-800">
+          {(s?.bullets || []).map((b: string, j: number) => (
+            <li key={j}>{b}</li>
+          ))}
+        </ul>
+                {/* ✅ Inline image preview using Unsplash (reliable) */}
+                <div className="rounded-xl overflow-hidden border bg-slate-50">
+                  <img
+                    src={unsplashImageUrl(s?.imageQuery || s?.title || topic)}
+                    alt={s?.imageQuery || s?.title || "Slide image"}
+                    className="w-full h-44 object-cover"
+                    loading="lazy"
+                  />
+                </div>
+
+                <ul className="list-disc pl-6">
+                  {(s?.bullets || []).map((b: string, j: number) => (
+                    <li key={j}>{b}</li>
+                  ))}
+                </ul>
+
+                <div className="flex flex-wrap gap-4 text-sm pt-2">
+                  <a
+                    href={youtubeSearchUrl(s?.videoQuery)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-blue-600 underline"
+                  >
+                    🎥 Watch video
+                  </a>
+                  <a
+                    href={wikimediaSearchUrl(s?.imageQuery)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-green-600 underline"
+                  >
+                    🖼️ View image
+                  </a>
+                </div>
+
+                <div className="mt-2 p-3 rounded-xl border bg-yellow-50 text-sm">
+                  <b>👩🏽‍🏫 Classroom Activity:</b>{" "}
+                  {s?.interactivePrompt || "No interactive activity provided."}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    )}
+  </div>
+</section>
 
       {/* Footer */}
       <footer className="relative z-10 px-6 md:px-10 xl:px-12 py-12 border-t border-slate-200">
@@ -670,8 +761,6 @@ export default function Home() {
           </div>
         </div>
       </footer>
-     </div>
-  </main>
-  
-
-
+       </div>
+  );
+}
