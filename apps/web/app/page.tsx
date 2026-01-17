@@ -646,23 +646,7 @@ setResult(json.data);
   </a>
 </div>
 
-    {/* PDF */}
-    <button
-      disabled
-      className="px-4 py-2 rounded-xl border bg-white text-slate-400 cursor-not-allowed"
-      title="Coming next"
-    >
-      Download PDF
-    </button>
 
-    {/* PPTX */}
-    <button
-      disabled
-      className="px-4 py-2 rounded-xl border bg-white text-slate-400 cursor-not-allowed"
-      title="Coming next"
-    >
-      Download PowerPoint
-    </button>
 
     {saveMsg && <div className="text-sm opacity-80">{saveMsg}</div>}
   </div>
