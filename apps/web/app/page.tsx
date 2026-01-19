@@ -64,6 +64,50 @@ export default function Home() {
     els.forEach((el) => obs.observe(el));
     return () => obs.disconnect();
   }, []);
+   
+  async function exportFile(kind: "pdf" | "pptx") {
+  if (!result) return;
+
+  try {
+    const lesson = {
+      meta: { subject, topic, grade, curriculum, durationMins: 40 },
+      objectives: result.objectives ?? [],
+      lessonNotes: result.lessonNotes ?? "",
+      slides: result.slides ?? [],
+      quiz: result.quiz ?? null,
+      liveApplications: result.liveApplications ?? [],
+    };
+
+    const res = await fetch(`/api/export/${kind}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        lesson,
+        filename: `LessonForge-${subject}-${topic}.${kind}`,
+      }),
+    });
+
+    if (!res.ok) {
+      const msg = await res.text();
+      alert(`Export failed (${res.status}): ${msg}`);
+      return;
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `LessonForge-${subject}-${topic}.${kind}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    window.URL.revokeObjectURL(url);
+  } catch (e: any) {
+    alert(`Export error: ${e?.message ?? String(e)}`);
+  }
+}
 async function downloadPdf() {
   if (!result) return;
 
