@@ -22,6 +22,56 @@ export default function Home() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
+  // ===== EXPORT STATE =====
+const [exporting, setExporting] = useState<null | "pdf" | "pptx">(null);
+const [exportError, setExportError] = useState<string | null>(null);
+
+// ===== EXPORT HELPERS =====
+function filenameFromHeaders(res: Response, fallback: string) {
+  const cd = res.headers.get("content-disposition") || "";
+  const match = cd.match(/filename="([^"]+)"/i);
+  return match?.[1] || fallback;
+}
+
+async function handleExport(kind: "pdf" | "pptx") {
+  try {
+    setExportError(null);
+    setExporting(kind);
+
+    if (!result) throw new Error("Generate a lesson first");
+
+    const res = await fetch(`/api/export/${kind}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lesson: result }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Export failed (${res.status})`);
+    }
+
+    const blob = await res.blob();
+    const filename = filenameFromHeaders(
+      res,
+      `LessonForge-${Date.now()}.${kind}`
+    );
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e: any) {
+    setExportError(e?.message ?? "Export failed");
+  } finally {
+    setExporting(null);
+  }
+}
+
   // Auth state
   useEffect(() => {
     let alive = true;
@@ -719,57 +769,50 @@ setResult(json.data);
   </div>
 </section>
 
-       <section className="space-y-3">
-  <div className="flex flex-wrap gap-3 items-center">
+
 
     {/* Save */}
-   <button
-  onClick={saveLesson}
-  className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition disabled:opacity-50"
-  disabled={saving}
->
-  {saving ? "Saving..." : "Save to Library"}
-</button>
-<div className="flex flex-wrap gap-3 pt-2">
-  <a
-    href={`/api/export/pdf?lessonId=${result?.meta?.topic}`}
-    className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-black transition"
-  >
-    📄 Download PDF
-  </a>
+   <section className="space-y-2">
+  <div className="flex flex-wrap gap-3 items-center">
+    <button
+      onClick={saveLesson}
+      disabled={saving}
+      type="button"
+      className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-50"
+    >
+      {saving ? "Saving..." : "Save to Library"}
+    </button>
 
-  <a
-    href={`/api/export/pptx?lessonId=${result?.meta?.topic}`}
-    className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition"
-  >
-    📊 Download PowerPoint
-  </a>
-</div>
-<button
-  onClick={downloadPdf}
-  disabled={!result}
-  className="px-4 py-2 rounded-xl border font-semibold bg-white hover:bg-slate-50 disabled:opacity-50"
->
-  ⬇️ Download PDF
-</button>
-<button
-  onClick={downloadPptx}
-  disabled={!result}
-  className="px-4 py-2 rounded-xl border font-semibold bg-white hover:bg-slate-50 disabled:opacity-50"
->
-  ⬇️ Download PPTX
-</button>
+    <button
+      type="button"
+      onClick={() => handleExport("pdf")}
+      disabled={!result || exporting !== null}
+      className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-black disabled:opacity-50"
+    >
+      {exporting === "pdf" ? "Downloading PDF..." : "📄 Download PDF"}
+    </button>
 
+    <button
+      type="button"
+      onClick={() => handleExport("pptx")}
+      disabled={!result || exporting !== null}
+      className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50"
+    >
+      {exporting === "pptx" ? "Downloading PPTX..." : "📊 Download PowerPoint"}
+    </button>
 
-
-
-    {saveMsg && <div className="text-sm opacity-80">{saveMsg}</div>}
+    {saveMsg && <div className="text-sm text-slate-700">{saveMsg}</div>}
   </div>
 
+  {exportError && (
+    <div className="text-sm text-red-600">{exportError}</div>
+  )}
+
   <p className="text-xs text-slate-500">
-    🔒 Exports available after save (PDF & PPTX)
+    🔒 Exports are generated securely after lesson generation
   </p>
 </section>
+
 
       <section className="space-y-4">
   <h4 className="text-xl font-bold text-slate-900">
