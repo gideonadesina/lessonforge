@@ -64,6 +64,62 @@ export default function Home() {
     els.forEach((el) => obs.observe(el));
     return () => obs.disconnect();
   }, []);
+async function downloadPdf() {
+  if (!result) return;
+
+  const res = await fetch("/api/export/pdf", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      lesson: result, // your PDF route expects { lesson: LessonPack }
+      filename: `LessonForge-${Date.now()}.pdf`,
+    }),
+  });
+
+  if (!res.ok) {
+    const j = await res.json().catch(() => null);
+    alert(j?.error || j?.message || "PDF export failed");
+    return;
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `LessonForge-${Date.now()}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+async function downloadPptx() {
+  if (!result) return;
+
+  const res = await fetch("/api/export/pptx", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      meta: result?.meta,
+      slides: result?.slides, // your pptx route expects { meta, slides }
+    }),
+  });
+
+  if (!res.ok) {
+    const j = await res.json().catch(() => null);
+    alert(j?.error || j?.message || "PPTX export failed");
+    return;
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `LessonForge-${Date.now()}.pptx`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
   async function generate() {
     setLoading(true);
@@ -645,6 +701,21 @@ setResult(json.data);
     📊 Download PowerPoint
   </a>
 </div>
+<button
+  onClick={downloadPdf}
+  disabled={!result}
+  className="px-4 py-2 rounded-xl border font-semibold bg-white hover:bg-slate-50 disabled:opacity-50"
+>
+  ⬇️ Download PDF
+</button>
+<button
+  onClick={downloadPptx}
+  disabled={!result}
+  className="px-4 py-2 rounded-xl border font-semibold bg-white hover:bg-slate-50 disabled:opacity-50"
+>
+  ⬇️ Download PPTX
+</button>
+
 
 
 

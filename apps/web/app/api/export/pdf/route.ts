@@ -2,10 +2,16 @@ import PDFDocument from "pdfkit";
 
 export const runtime = "nodejs";
 
-type PDFDocumentType = InstanceType<typeof PDFDocument>;
+
 
 type LessonPack = {
-  meta?: { subject?: string; topic?: string; grade?: string; curriculum?: string };
+  meta?: {
+    subject?: string;
+    topic?: string;
+    grade?: string;
+    curriculum?: string;
+    durationMins?: number;
+  };
   objectives?: string[];
   lessonNotes?: string;
   slides?: { title?: string; bullets?: string[] }[];
@@ -16,18 +22,17 @@ type LessonPack = {
   liveApplications?: string[];
 };
 
-function safeStr(x: unknown, fallback = ""): string {
+function s(x: any, fallback = ""): string {
   return typeof x === "string" ? x : fallback;
 }
-function safeArr<T>(x: unknown): T[] {
-  return Array.isArray(x) ? (x as T[]) : [];
+function a<T = any>(x: any): T[] {
+  return Array.isArray(x) ? x : [];
 }
 
-/** Collect PDFKit output into a Node Buffer */
-function bufferFromPdf(doc: PDFDocumentType): Promise<Buffer> {
+function pdfToBuffer(doc: any): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    doc.on("data", (c: Buffer) => chunks.push(c));
+    doc.on("data", (chunk: any) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
     doc.end();
@@ -37,103 +42,129 @@ function bufferFromPdf(doc: PDFDocumentType): Promise<Buffer> {
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as { lesson?: LessonPack; filename?: string };
-    const lesson = body?.lesson;
 
-    if (!lesson?.meta?.subject) {
-      return Response.json({ error: "Missing 'lesson.meta.subject' in request body" }, { status: 400 });
+    const lesson = body?.lesson;
+    if (!lesson) {
+      return Response.json({ error: "Missing 'lesson' in request body" }, { status: 400 });
     }
 
     const meta = lesson.meta ?? {};
-    const subject = safeStr(meta.subject, "Lesson");
-    const topic = safeStr(meta.topic, "");
-    const grade = safeStr(meta.grade, "");
-    const curriculum = safeStr(meta.curriculum, "");
+    const subject = s(meta.subject, "Lesson");
+    const topic = s(meta.topic, "");
+    const grade = s(meta.grade, "");
+    const curriculum = s(meta.curriculum, "");
+    const durationMins = typeof meta.durationMins === "number" ? meta.durationMins : undefined;
 
     const title = `${subject}${topic ? `: ${topic}` : ""}${grade ? ` (Grade ${grade})` : ""}`;
 
-    const doc = new PDFDocument({ size: "A4", margin: 50 });
+    // Build PDF
+    const doc = new (PDFDocument as any)({ size: "A4", margin: 50 });
 
     // Title
-    doc.fontSize(18).fillColor("black").text(title);
-    doc.moveDown(0.4);
+    doc.font("Helvetica-Bold").fontSize(18).fillColor("#0f172a").text(title);
+    doc.moveDown(0.5);
 
-    if (curriculum) {
-      doc.fontSize(10).fillColor("gray").text(`Curriculum: ${curriculum}`);
-      doc.moveDown(0.8);
+    const subtitleBits = [
+      curriculum ? `Curriculum: ${curriculum}` : "",
+      durationMins ? `Duration: ${durationMins} mins` : "",
+    ].filter(Boolean);
+
+    if (subtitleBits.length) {
+      doc.font("Helvetica").fontSize(10).fillColor("#475569").text(subtitleBits.join(" • "));
+      doc.moveDown(1);
     } else {
-      doc.moveDown(0.4);
-    }
-
-    // Objectives
-    const objectives = safeArr<string>(lesson.objectives);
-    doc.fontSize(14).fillColor("black").text("Objectives");
-    doc.moveDown(0.25);
-    doc.fontSize(11);
-    if (objectives.length) objectives.forEach((o) => doc.text(`• ${o}`));
-    else doc.fillColor("gray").text("No objectives provided.").fillColor("black");
-    doc.moveDown(0.8);
-
-    // Notes
-    doc.fontSize(14).fillColor("black").text("Lesson Notes");
-    doc.moveDown(0.25);
-    doc.fontSize(11).text(safeStr(lesson.lessonNotes, "No lesson notes generated."), { align: "left" });
-    doc.moveDown(0.8);
-
-    // Slides
-    const slides = safeArr<any>(lesson.slides);
-    if (slides.length) {
-      doc.fontSize(14).fillColor("black").text("Slides Outline");
-      doc.moveDown(0.25);
-      slides.slice(0, 12).forEach((s: any, idx: number) => {
-        doc.font("Helvetica-Bold").fontSize(11).text(`${idx + 1}. ${safeStr(s?.title, "Untitled slide")}`);
-        doc.font("Helvetica").fontSize(11);
-        safeArr<string>(s?.bullets).slice(0, 8).forEach((b) => doc.text(`   • ${b}`));
-        doc.moveDown(0.35);
-      });
       doc.moveDown(0.5);
     }
 
-    // Quiz
-    const mcq = safeArr<any>(lesson.quiz?.mcq);
-    const theory = safeArr<any>(lesson.quiz?.theory);
+    // Objectives
+    const objectives = a<string>(lesson.objectives);
+    if (objectives.length) {
+      doc.font("Helvetica-Bold").fontSize(14).fillColor("#0f172a").text("Objectives");
+      doc.moveDown(0.3);
+      doc.font("Helvetica").fontSize(11).fillColor("#0f172a");
+      objectives.forEach((o) => doc.text(`• ${s(o)}`));
+      doc.moveDown(0.8);
+    }
+
+    // Lesson Notes
+    doc.font("Helvetica-Bold").fontSize(14).fillColor("#0f172a").text("Lesson Notes");
+    doc.moveDown(0.3);
+    doc.font("Helvetica").fontSize(11).fillColor("#0f172a").text(s(lesson.lessonNotes, "No lesson notes generated."), {
+      align: "left",
+    });
+    doc.moveDown(0.8);
+
+    // Slides outline (optional)
+    const slides = a<any>(lesson.slides);
+    if (slides.length) {
+      doc.font("Helvetica-Bold").fontSize(14).fillColor("#0f172a").text("Slides Outline");
+      doc.moveDown(0.3);
+
+      slides.slice(0, 12).forEach((sl, idx) => {
+        doc.font("Helvetica-Bold").fontSize(12).fillColor("#0f172a").text(`${idx + 1}. ${s(sl?.title, "Untitled slide")}`);
+        doc.font("Helvetica").fontSize(11).fillColor("#0f172a");
+        a<string>(sl?.bullets).slice(0, 8).forEach((b) => doc.text(`   • ${s(b)}`));
+        doc.moveDown(0.4);
+      });
+
+      doc.moveDown(0.6);
+    }
+
+    // Quiz (optional)
+    const mcq = a<any>(lesson.quiz?.mcq);
+    const theory = a<any>(lesson.quiz?.theory);
 
     if (mcq.length || theory.length) {
-      doc.fontSize(14).fillColor("black").text("Quiz");
-      doc.moveDown(0.25);
+      doc.font("Helvetica-Bold").fontSize(14).fillColor("#0f172a").text("Quiz");
+      doc.moveDown(0.3);
 
       if (mcq.length) {
         doc.font("Helvetica-Bold").fontSize(12).text("Multiple Choice");
         doc.font("Helvetica").fontSize(11);
-        mcq.slice(0, 10).forEach((q: any, i: number) => {
-          doc.text(`${i + 1}. ${safeStr(q?.question, "Question")}`);
-          const opts = safeArr<string>(q?.options).slice(0, 4);
-          opts.forEach((opt, j) => doc.text(`   ${String.fromCharCode(65 + j)}) ${opt}`));
+
+        mcq.slice(0, 10).forEach((q, i) => {
+          doc.fillColor("#0f172a").text(`${i + 1}. ${s(q?.question, "Question")}`);
+          const opts = a<string>(q?.options).slice(0, 4);
+          opts.forEach((opt, j) => doc.text(`   ${String.fromCharCode(65 + j)}) ${s(opt)}`));
           const ai = typeof q?.answerIndex === "number" ? q.answerIndex : null;
-          if (ai !== null && ai >= 0 && ai <= 3) doc.fillColor("gray").text(`   Answer: ${String.fromCharCode(65 + ai)}`).fillColor("black");
-          doc.moveDown(0.25);
+          if (ai !== null && ai >= 0 && ai <= 3) {
+            doc.fillColor("#475569").text(`   Answer: ${String.fromCharCode(65 + ai)}`);
+          }
+          doc.moveDown(0.3);
         });
-        doc.moveDown(0.35);
+
+        doc.moveDown(0.4);
       }
 
       if (theory.length) {
-        doc.font("Helvetica-Bold").fontSize(12).text("Theory");
+        doc.fillColor("#0f172a").font("Helvetica-Bold").fontSize(12).text("Theory");
         doc.font("Helvetica").fontSize(11);
-        theory.slice(0, 2).forEach((t: any, i: number) => {
-          doc.text(`${i + 1}. ${safeStr(t?.question, "Theory question")}`);
-          const mg = safeStr(t?.markingGuide, "");
-          if (mg) doc.fillColor("gray").text(`Marking guide: ${mg}`).fillColor("black");
-          doc.moveDown(0.25);
+
+        theory.slice(0, 2).forEach((t, i) => {
+          doc.fillColor("#0f172a").text(`${i + 1}. ${s(t?.question, "Theory question")}`);
+          const mg = s(t?.markingGuide, "");
+          if (mg) doc.fillColor("#475569").text(`Marking guide: ${mg}`);
+          doc.moveDown(0.3);
         });
       }
     }
 
-    const pdfBuf = await bufferFromPdf(doc);
+    // Live applications (optional)
+    const apps = a<string>(lesson.liveApplications);
+    if (apps.length) {
+      doc.addPage();
+      doc.font("Helvetica-Bold").fontSize(14).fillColor("#0f172a").text("Live Applications");
+      doc.moveDown(0.3);
+      doc.font("Helvetica").fontSize(11).fillColor("#0f172a");
+      apps.slice(0, 8).forEach((x) => doc.text(`• ${s(x)}`));
+    }
+
+    const pdfBuf = await pdfToBuffer(doc);
+
     const filename = body?.filename || `LessonForge-${Date.now()}.pdf`;
 
-    // ✅ TS-safe BodyInit: use Uint8Array
-    const bytes = new Uint8Array(pdfBuf);
-
-    return new Response(bytes, {
+    // ✅ Important: cast avoids TS "BodyInit" complaints in some Next setups
+    return new Response(pdfBuf as unknown as BodyInit, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",

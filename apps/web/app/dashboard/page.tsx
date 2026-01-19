@@ -10,16 +10,23 @@ type LessonRow = {
   subject: string | null;
   topic: string | null;
   grade: string | null;
+  curriculum: string | null;
   created_at: string;
+};
+
+type LessonFullRow = LessonRow & {
+  result_json: any;
 };
 
 function formatDate(iso: string) {
   const d = new Date(iso);
-  return d.toLocaleString();
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString();
 }
 
 function relativeTime(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime();
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "";
+  const diff = Date.now() - t;
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;
@@ -27,6 +34,22 @@ function relativeTime(iso: string) {
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
   return `${days}d ago`;
+}
+
+async function downloadBlob(res: Response, filename: string) {
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Export failed (${res.status}): ${text}`);
+  }
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
 }
 
 export default function DashboardPage() {
@@ -40,6 +63,7 @@ export default function DashboardPage() {
 
   const [q, setQ] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [exportingId, setExportingId] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   // Auth + initial load
@@ -47,32 +71,36 @@ export default function DashboardPage() {
     let alive = true;
 
     (async () => {
-      const { data } = await supabase.auth.getUser();
-      if (!alive) return;
+      try {
+        const { data } = await supabase.auth.getUser();
+        if (!alive) return;
 
-      if (!data?.user) {
-        router.push("/login");
-        return;
+        if (!data?.user) {
+          router.push("/login");
+          return;
+        }
+
+        setUserEmail(data.user.email ?? null);
+
+        const { data: rows, error } = await supabase
+          .from("lessons")
+          .select("id, subject, topic, grade, curriculum, created_at")
+          .order("created_at", { ascending: false })
+          .limit(100);
+
+        if (!alive) return;
+
+        if (error) {
+          setMsg(`Failed to load lessons: ${error.message}`);
+          setLessons([]);
+        } else {
+          setLessons((rows as LessonRow[]) ?? []);
+        }
+      } catch (e: any) {
+        setMsg(`Dashboard error: ${e?.message ?? String(e)}`);
+      } finally {
+        if (alive) setLoading(false);
       }
-
-      setUserEmail(data.user.email ?? null);
-
-      const { data: rows, error } = await supabase
-        .from("lessons")
-        .select("id, subject, topic, grade, created_at")
-        .order("created_at", { ascending: false })
-        .limit(100);
-
-      if (!alive) return;
-
-      if (error) {
-        setMsg(`Failed to load lessons: ${error.message}`);
-        setLessons([]);
-      } else {
-        setLessons((rows as LessonRow[]) ?? []);
-      }
-
-      setLoading(false);
     })();
 
     return () => {
@@ -106,36 +134,91 @@ export default function DashboardPage() {
     }
   }
 
+  async function exportLesson(id: string, kind: "pdf" | "pptx") {
+    setMsg(null);
+    setExportingId(id);
+
+    try {
+      // Fetch the full row (needs RLS SELECT permission!)
+      const { data, error } = await supabase
+        .from("lessons")
+        .select("id, subject, topic, grade, curriculum, created_at, result_json")
+        .eq("id", id)
+        .single();
+
+      if (error) throw error;
+      const row = data as LessonFullRow;
+
+      const safeSubject = row.subject || "Lesson";
+      const safeTopic = row.topic ? `-${row.topic}` : "";
+      const ts = Date.now();
+
+      if (kind === "pdf") {
+        const filename = `LessonForge-${safeSubject}${safeTopic}-${ts}.pdf`;
+        const res = await fetch("/api/export-pdf", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            lesson: row.result_json,
+            filename,
+          }),
+        });
+        await downloadBlob(res, filename);
+      } else {
+        const filename = `LessonForge-${safeSubject}${safeTopic}-${ts}.pptx`;
+        const res = await fetch("/api/export-pptx", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            meta: row.result_json?.meta ?? {
+              subject: row.subject ?? "Lesson",
+              topic: row.topic ?? "",
+              grade: row.grade ?? "",
+            },
+            slides: row.result_json?.slides ?? [],
+            filename,
+          }),
+        });
+        await downloadBlob(res, filename);
+      }
+
+      setMsg(`Exported ${kind.toUpperCase()} ✅`);
+    } catch (e: any) {
+      setMsg(`Export failed: ${e?.message ?? String(e)}`);
+    } finally {
+      setExportingId(null);
+    }
+  }
+
   const filtered = lessons.filter((l) => {
-    const hay =
-      `${l.subject ?? ""} ${l.topic ?? ""} ${l.grade ?? ""}`.toLowerCase();
+    const hay = `${l.subject ?? ""} ${l.topic ?? ""} ${l.grade ?? ""} ${l.curriculum ?? ""}`.toLowerCase();
     return hay.includes(q.trim().toLowerCase());
   });
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 text-slate-900">
       {/* Header */}
-      <header className="sticky top-0 z-20 border-b bg-white/80 backdrop-blur">
+      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
           <Link href="/" className="flex items-center gap-2">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 shadow-md" />
             <div className="leading-tight">
               <div className="font-semibold text-slate-900">LessonForge</div>
-              <div className="text-[11px] text-slate-500">Teacher Dashboard</div>
+              <div className="text-[11px] text-slate-600">Teacher Dashboard</div>
             </div>
           </Link>
 
           <div className="flex items-center gap-2">
             <Link
               href="/"
-              className="hidden sm:inline-flex px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm font-medium"
+              className="hidden sm:inline-flex px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-900"
             >
               + Generate New
             </Link>
 
             <button
               onClick={logout}
-              className="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm font-medium"
+              className="px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-900"
             >
               Logout
             </button>
@@ -143,21 +226,22 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-8">
-        {/* Top row */}
+     
+     
+     <main className="max-w-6xl mx-auto px-6 py-8">
         <div className="flex flex-col lg:flex-row lg:items-start gap-6">
           {/* Main column */}
           <section className="flex-1 space-y-4">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
+                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
                   My Lesson Library
                 </h1>
-                <p className="text-sm text-slate-600 mt-1">
+                <p className="text-sm text-slate-700 mt-1">
                   Search, reuse, and export your saved lessons.
                   {userEmail ? (
-                    <span className="block mt-1 text-xs text-slate-500">
-                      Signed in as {userEmail}
+                    <span className="block mt-1 text-xs text-slate-600">
+                      Signed in as <span className="font-semibold text-slate-900">{userEmail}</span>
                     </span>
                   ) : null}
                 </p>
@@ -171,29 +255,30 @@ export default function DashboardPage() {
               </Link>
             </div>
 
-            {/* Search + filters (UI) */}
-            <div className="rounded-2xl border bg-white p-4 shadow-sm">
+            {/* Search */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex flex-col md:flex-row gap-3">
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder="Search by subject, topic, or grade…"
-                  className="flex-1 rounded-xl border px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Search by subject, topic, grade, or curriculum…"
+                  className="flex-1 rounded-xl border border-slate-300 px-4 py-3 text-slate-900 placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
                 />
-                <select className="rounded-xl border px-3 py-3 bg-white text-sm">
+                {/* Optional filters: keep, but disabled so they don’t confuse users */}
+                <select disabled className="rounded-xl border border-slate-300 px-3 py-3 bg-white text-sm text-slate-700 opacity-60">
                   <option>All subjects</option>
                 </select>
-                <select className="rounded-xl border px-3 py-3 bg-white text-sm">
+                <select disabled className="rounded-xl border border-slate-300 px-3 py-3 bg-white text-sm text-slate-700 opacity-60">
                   <option>All grades</option>
                 </select>
-                <select className="rounded-xl border px-3 py-3 bg-white text-sm">
+                <select disabled className="rounded-xl border border-slate-300 px-3 py-3 bg-white text-sm text-slate-700 opacity-60">
                   <option>Newest first</option>
                 </select>
               </div>
             </div>
 
             {msg && (
-              <div className="rounded-2xl border bg-white p-4 text-sm text-slate-700">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-800">
                 {msg}
               </div>
             )}
@@ -202,7 +287,7 @@ export default function DashboardPage() {
             {loading ? (
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="rounded-2xl border bg-white p-4 shadow-sm">
+                  <div key={i} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <div className="h-4 w-24 bg-slate-200 rounded mb-3" />
                     <div className="h-5 w-3/4 bg-slate-200 rounded mb-2" />
                     <div className="h-3 w-1/2 bg-slate-200 rounded mb-6" />
@@ -211,14 +296,12 @@ export default function DashboardPage() {
                 ))}
               </div>
             ) : filtered.length === 0 ? (
-              <div className="rounded-2xl border bg-white p-10 text-center shadow-sm">
+              <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
                 <div className="mx-auto w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
                   <span className="text-2xl">📚</span>
                 </div>
-                <h2 className="text-lg font-semibold text-slate-900">
-                  No saved lessons yet
-                </h2>
-                <p className="text-sm text-slate-600 mt-2">
+                <h2 className="text-lg font-semibold text-slate-900">No saved lessons yet</h2>
+                <p className="text-sm text-slate-700 mt-2">
                   Generate a lesson and click “Save to Library” to see it here.
                 </p>
                 <Link
@@ -233,31 +316,29 @@ export default function DashboardPage() {
                 {filtered.map((l) => (
                   <div
                     key={l.id}
-                    className="rounded-2xl border bg-white p-4 shadow-sm hover:shadow-md transition"
+                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition"
                   >
                     <div className="flex items-center gap-2 mb-3">
-                      <span className="text-xs px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
+                      <span className="text-xs px-2 py-1 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-100 font-semibold">
                         {l.subject || "Subject"}
                       </span>
-                      <span className="text-xs px-2 py-1 rounded-full bg-slate-50 text-slate-700 border">
+                      <span className="text-xs px-2 py-1 rounded-full bg-slate-50 text-slate-800 border border-slate-200 font-semibold">
                         Grade {l.grade || "-"}
                       </span>
                     </div>
 
-                    <div className="font-semibold text-slate-900 line-clamp-2">
+                    <div className="font-bold text-slate-900">
                       {l.topic || "Untitled topic"}
                     </div>
 
-                    <div className="text-xs text-slate-500 mt-2">
-                      <span title={formatDate(l.created_at)}>
-                        {relativeTime(l.created_at)}
-                      </span>
+                    <div className="text-xs text-slate-600 mt-2">
+                      <span title={formatDate(l.created_at)}>{relativeTime(l.created_at)}</span>
                     </div>
 
                     <div className="mt-4 grid grid-cols-2 gap-2">
                       <Link
                         href={`/lesson/${l.id}`}
-                        className="px-3 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm font-medium text-center"
+                        className="px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-center text-slate-900"
                       >
                         View
                       </Link>
@@ -265,23 +346,25 @@ export default function DashboardPage() {
                       <button
                         onClick={() => deleteLesson(l.id)}
                         disabled={deletingId === l.id}
-                        className="px-3 py-2 rounded-xl border bg-white hover:bg-red-50 text-sm font-medium"
+                        className="px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-red-50 text-sm font-semibold text-slate-900 disabled:opacity-60"
                       >
                         {deletingId === l.id ? "Deleting…" : "Delete"}
                       </button>
 
                       <button
-                        onClick={() => alert("Hook this to your PDF export later")}
-                        className="px-3 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm"
+                        onClick={() => exportLesson(l.id, "pdf")}
+                        disabled={exportingId === l.id}
+                        className="px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-900 disabled:opacity-60"
                       >
-                        Export PDF
+                        {exportingId === l.id ? "Exporting…" : "Export PDF"}
                       </button>
 
                       <button
-                        onClick={() => alert("Hook this to your PPTX export later")}
-                        className="px-3 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm"
+                        onClick={() => exportLesson(l.id, "pptx")}
+                        disabled={exportingId === l.id}
+                        className="px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-900 disabled:opacity-60"
                       >
-                        Export PPTX
+                        {exportingId === l.id ? "Exporting…" : "Export PPTX"}
                       </button>
                     </div>
                   </div>
@@ -292,20 +375,20 @@ export default function DashboardPage() {
 
           {/* Trust / Tips panel */}
           <aside className="w-full lg:w-[360px] space-y-4">
-            <div className="rounded-2xl border bg-white p-5 shadow-sm">
-              <div className="font-semibold text-slate-900">Data & Privacy</div>
-              <p className="text-sm text-slate-600 mt-2 leading-relaxed">
-                Your lessons are private to your account. Avoid entering student names
-                or sensitive personal information. We don’t sell your data.
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="font-bold text-slate-900">Data & Privacy</div>
+              <p className="text-sm text-slate-700 mt-2 leading-relaxed">
+                Your lessons are private to your account. Avoid entering student names or
+                sensitive personal information. We don’t sell your data.
               </p>
-              <div className="mt-3 text-xs text-slate-500">
+              <div className="mt-3 text-xs text-slate-600">
                 🔒 Secure auth via Supabase • ✅ Exports on demand
               </div>
             </div>
 
-            <div className="rounded-2xl border bg-white p-5 shadow-sm">
-              <div className="font-semibold text-slate-900">Tips</div>
-              <ul className="mt-2 text-sm text-slate-600 space-y-2 list-disc pl-5">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="font-bold text-slate-900">Tips</div>
+              <ul className="mt-2 text-sm text-slate-700 space-y-2 list-disc pl-5">
                 <li>Use curriculum keywords (WAEC / NECO / Cambridge).</li>
                 <li>Add duration for better pacing and activities.</li>
                 <li>Save your best lessons to standardize teaching quality.</li>
