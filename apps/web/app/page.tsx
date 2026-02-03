@@ -797,68 +797,82 @@ setResult(json.data);
     🔒 Exports are generated securely after lesson generation
   </p>
 </section>
-
-
-      <section className="space-y-4">
+ 
+<section className="space-y-4">
   <h4 className="text-xl font-extrabold text-slate-900 tracking-tight">
     Slides (Preview)
   </h4>
 
-  <div className="grid gap-6">
-    {(result.slides || []).map((s: any, i: number) => (
-      <div
-        key={i}
-        className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm"
-      >
-        <div className="text-lg font-semibold text-slate-900">
-          {i + 1}. {s?.title || "Untitled slide"}
-        </div>
+  {(result?.slides ?? []).length ? (
+    <div className="grid gap-6">
+      {(result.slides ?? []).map((s: any, i: number) => {
+        const title = s?.title || "Untitled slide";
+        const bullets: string[] = Array.isArray(s?.bullets) ? s.bullets : [];
+        const videoQuery = s?.videoQuery || title || `${subject} ${topic}`;
+        const imageQuery = s?.imageQuery || title || `${subject} ${topic}`;
+        const activity = s?.interactivePrompt || "No interactive activity provided.";
 
-       <ul className="list-disc pl-6 space-y-2 text-slate-800 font-medium">
-          {(s?.bullets || []).map((b: string, j: number) => (
-            <li key={j}>{b}</li>
-          ))}
-        </ul>
-               <div className="rounded-xl overflow-hidden border bg-slate-100">
-  <img
-    src={unsplashImage(
-      s?.imageQuery ||
-      s?.title ||
-      `${subject} ${topic}`
-    )}
-    alt={s?.title || "Lesson image"}
-    className="w-full h-48 object-cover"
-    loading="lazy"
-  />
-</div>
-
-
-                <ul className="list-disc pl-6">
-                  {(s?.bullets || []).map((b: string, j: number) => (
-                    <li key={j}>{b}</li>
-                  ))}
-                </ul>
-
-                <div className="flex flex-wrap gap-4 text-sm pt-2">
-                  <a
-                    href={youtubeSearchUrl(s?.videoQuery)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-blue-600 underline"
-                  >
-                    🎥 Watch video
-                  </a>
-
-                </div>
-
-                <div className="mt-2 p-3 rounded-xl border bg-yellow-50 text-sm">
-                  <b>👩🏽‍🏫 Classroom Activity:</b>{" "}
-                  {s?.interactivePrompt || "No interactive activity provided."}
-                </div>
+        return (
+          <div
+            key={i}
+            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4"
+          >
+            {/* Title */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="text-lg font-bold text-slate-900">
+                {i + 1}. {title}
               </div>
-            ))}
+              <span className="text-[11px] font-semibold px-2 py-1 rounded-full border bg-slate-50 text-slate-700">
+                Slide {i + 1}
+              </span>
+            </div>
+
+            {/* Image */}
+            <div className="rounded-xl overflow-hidden border bg-slate-100">
+              <img
+                src={unsplashImage(imageQuery)}
+                alt={title}
+                className="w-full h-52 object-cover"
+                loading="lazy"
+              />
+            </div>
+
+            {/* Bullets */}
+            {bullets.length ? (
+              <ul className="list-disc pl-6 space-y-2 text-slate-800 font-medium">
+                {bullets.map((b, j) => (
+                  <li key={j}>{b}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-slate-600">No bullet points.</p>
+            )}
+
+            {/* Links */}
+            <div className="flex flex-wrap gap-4 text-sm">
+              <a
+                href={youtubeSearchUrl(videoQuery)}
+                target="_blank"
+                rel="noreferrer"
+                className="text-blue-600 font-semibold hover:underline"
+              >
+                🎥 Watch video
+              </a>
+            </div>
+
+            {/* Classroom activity */}
+            <div className="rounded-xl border bg-yellow-50 p-3 text-sm text-slate-900">
+              <span className="font-bold">👩🏽‍🏫 Classroom Activity:</span>{" "}
+              {activity}
+            </div>
           </div>
-        </section>
+        );
+      })}
+    </div>
+  ) : (
+    <p className="text-sm text-slate-600">No slides generated yet.</p>
+  )}
+</section>
       </div>
     )}
   </div>
