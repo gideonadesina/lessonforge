@@ -12,10 +12,7 @@ type LessonRow = {
   grade: string | null;
   curriculum: string | null;
   created_at: string;
-};
-
-type LessonFullRow = LessonRow & {
-  result_json: any;
+ 
 };
 
 function formatDate(iso: string) {
@@ -34,22 +31,7 @@ function relativeTime(iso: string) {
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
   return `${days}d ago`;
-}
 
-async function downloadBlob(res: Response, filename: string) {
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Export failed (${res.status}): ${text}`);
-  }
-  const blob = await res.blob();
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  window.URL.revokeObjectURL(url);
 }
 
 export default function DashboardPage() {
@@ -62,8 +44,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   const [q, setQ] = useState("");
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [exportingId, setExportingId] = useState<string | null>(null);
+   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   // Auth + initial load
@@ -132,66 +113,13 @@ export default function DashboardPage() {
     } finally {
       setDeletingId(null);
     }
-  }
-
-  async function exportLesson(id: string, kind: "pdf" | "pptx") {
-    setMsg(null);
-    setExportingId(id);
-
-    try {
-      // Fetch the full row (needs RLS SELECT permission!)
-      const { data, error } = await supabase
-        .from("lessons")
-        .select("id, subject, topic, grade, curriculum, created_at, result_json")
-        .eq("id", id)
-        .single();
-
-      if (error) throw error;
-      const row = data as LessonFullRow;
-
-      const safeSubject = row.subject || "Lesson";
-      const safeTopic = row.topic ? `-${row.topic}` : "";
-      const ts = Date.now();
-
-      if (kind === "pdf") {
-        const filename = `LessonForge-${safeSubject}${safeTopic}-${ts}.pdf`;
-        const res = await fetch("/api/export-pdf", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            lesson: row.result_json,
-            filename,
-          }),
-        });
-        await downloadBlob(res, filename);
-      } else {
-        const filename = `LessonForge-${safeSubject}${safeTopic}-${ts}.pptx`;
-        const res = await fetch("/api/export-pptx", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            meta: row.result_json?.meta ?? {
-              subject: row.subject ?? "Lesson",
-              topic: row.topic ?? "",
-              grade: row.grade ?? "",
-            },
-            slides: row.result_json?.slides ?? [],
-            filename,
-          }),
-        });
-        await downloadBlob(res, filename);
-      }
-
-      setMsg(`Exported ${kind.toUpperCase()} ✅`);
-    } catch (e: any) {
-      setMsg(`Export failed: ${e?.message ?? String(e)}`);
-    } finally {
-      setExportingId(null);
-    }
+  
   }
 
   const filtered = lessons.filter((l) => {
-    const hay = `${l.subject ?? ""} ${l.topic ?? ""} ${l.grade ?? ""} ${l.curriculum ?? ""}`.toLowerCase();
+    const hay = `${l.subject ?? ""} ${l.topic ?? ""} ${l.grade ?? ""} ${l.curriculum ?? ""}`
+      .toLowerCase()
+      .trim();
     return hay.includes(q.trim().toLowerCase());
   });
 
@@ -226,9 +154,7 @@ export default function DashboardPage() {
         </div>
       </header>
 
-     
-     
-     <main className="max-w-6xl mx-auto px-6 py-8">
+      <main className="max-w-6xl mx-auto px-6 py-8">
         <div className="flex flex-col lg:flex-row lg:items-start gap-6">
           {/* Main column */}
           <section className="flex-1 space-y-4">
@@ -238,10 +164,11 @@ export default function DashboardPage() {
                   My Lesson Library
                 </h1>
                 <p className="text-sm text-slate-700 mt-1">
-                  Search, reuse, and export your saved lessons.
+                  Search, reuse, and review your saved lessons.
                   {userEmail ? (
                     <span className="block mt-1 text-xs text-slate-600">
-                      Signed in as <span className="font-semibold text-slate-900">{userEmail}</span>
+                      Signed in as{" "}
+                      <span className="font-semibold text-slate-900">{userEmail}</span>
                     </span>
                   ) : null}
                 </p>
@@ -264,14 +191,23 @@ export default function DashboardPage() {
                   placeholder="Search by subject, topic, grade, or curriculum…"
                   className="flex-1 rounded-xl border border-slate-300 px-4 py-3 text-slate-900 placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
                 />
-                {/* Optional filters: keep, but disabled so they don’t confuse users */}
-                <select disabled className="rounded-xl border border-slate-300 px-3 py-3 bg-white text-sm text-slate-700 opacity-60">
+                {/* Optional filters: keep disabled for now */}
+                <select
+                  disabled
+                  className="rounded-xl border border-slate-300 px-3 py-3 bg-white text-sm text-slate-700 opacity-60"
+                >
                   <option>All subjects</option>
                 </select>
-                <select disabled className="rounded-xl border border-slate-300 px-3 py-3 bg-white text-sm text-slate-700 opacity-60">
+                <select
+                  disabled
+                  className="rounded-xl border border-slate-300 px-3 py-3 bg-white text-sm text-slate-700 opacity-60"
+                >
                   <option>All grades</option>
                 </select>
-                <select disabled className="rounded-xl border border-slate-300 px-3 py-3 bg-white text-sm text-slate-700 opacity-60">
+                <select
+                  disabled
+                  className="rounded-xl border border-slate-300 px-3 py-3 bg-white text-sm text-slate-700 opacity-60"
+                >
                   <option>Newest first</option>
                 </select>
               </div>
@@ -287,7 +223,10 @@ export default function DashboardPage() {
             {loading ? (
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div
+                    key={i}
+                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                  >
                     <div className="h-4 w-24 bg-slate-200 rounded mb-3" />
                     <div className="h-5 w-3/4 bg-slate-200 rounded mb-2" />
                     <div className="h-3 w-1/2 bg-slate-200 rounded mb-6" />
@@ -349,23 +288,7 @@ export default function DashboardPage() {
                         className="px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-red-50 text-sm font-semibold text-slate-900 disabled:opacity-60"
                       >
                         {deletingId === l.id ? "Deleting…" : "Delete"}
-                      </button>
-
-                      <button
-                        onClick={() => exportLesson(l.id, "pdf")}
-                        disabled={exportingId === l.id}
-                        className="px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-900 disabled:opacity-60"
-                      >
-                        {exportingId === l.id ? "Exporting…" : "Export PDF"}
-                      </button>
-
-                      <button
-                        onClick={() => exportLesson(l.id, "pptx")}
-                        disabled={exportingId === l.id}
-                        className="px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-900 disabled:opacity-60"
-                      >
-                        {exportingId === l.id ? "Exporting…" : "Export PPTX"}
-                      </button>
+                       </button>
                     </div>
                   </div>
                 ))}
@@ -382,7 +305,7 @@ export default function DashboardPage() {
                 sensitive personal information. We don’t sell your data.
               </p>
               <div className="mt-3 text-xs text-slate-600">
-                🔒 Secure auth via Supabase • ✅ Exports on demand
+                🔒 Secure auth via Supabase • 📚 Saved lesson library
               </div>
             </div>
 

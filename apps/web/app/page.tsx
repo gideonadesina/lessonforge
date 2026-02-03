@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "./lib/supabase/browser";
-import { youtubeSearchUrl, wikimediaSearchUrl, unsplashImageUrl } from "./lib/media";
+import { youtubeSearchUrl } from "./lib/media";
+import { unsplashImage } from "./lib/unsplash";
 
 type LessonResult = any;
 
@@ -712,7 +713,7 @@ setResult(json.data);
     <button
       onClick={generate}
       disabled={loading}
-      className="px-5 py-3 rounded-2xl border shadow-sm hover:shadow disabled:opacity-60 bg-white"
+      className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-50"
     >
       {loading ? "Generating..." : "Generate Lesson Pack"}
     </button>
@@ -783,23 +784,7 @@ setResult(json.data);
       {saving ? "Saving..." : "Save to Library"}
     </button>
 
-    <button
-      type="button"
-      onClick={() => handleExport("pdf")}
-      disabled={!result || exporting !== null}
-      className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-black disabled:opacity-50"
-    >
-      {exporting === "pdf" ? "Downloading PDF..." : "📄 Download PDF"}
-    </button>
 
-    <button
-      type="button"
-      onClick={() => handleExport("pptx")}
-      disabled={!result || exporting !== null}
-      className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50"
-    >
-      {exporting === "pptx" ? "Downloading PPTX..." : "📊 Download PowerPoint"}
-    </button>
 
     {saveMsg && <div className="text-sm text-slate-700">{saveMsg}</div>}
   </div>
@@ -815,7 +800,7 @@ setResult(json.data);
 
 
       <section className="space-y-4">
-  <h4 className="text-xl font-bold text-slate-900">
+  <h4 className="text-xl font-extrabold text-slate-900 tracking-tight">
     Slides (Preview)
   </h4>
 
@@ -829,20 +814,24 @@ setResult(json.data);
           {i + 1}. {s?.title || "Untitled slide"}
         </div>
 
-        <ul className="list-disc pl-6 space-y-1 text-slate-800">
+       <ul className="list-disc pl-6 space-y-2 text-slate-800 font-medium">
           {(s?.bullets || []).map((b: string, j: number) => (
             <li key={j}>{b}</li>
           ))}
         </ul>
-                {/* ✅ Inline image preview using Unsplash (reliable) */}
-                <div className="rounded-xl overflow-hidden border bg-slate-50">
-                  <img
-                    src={unsplashImageUrl(s?.imageQuery || s?.title || topic)}
-                    alt={s?.imageQuery || s?.title || "Slide image"}
-                    className="w-full h-44 object-cover"
-                    loading="lazy"
-                  />
-                </div>
+               <div className="rounded-xl overflow-hidden border bg-slate-100">
+  <img
+    src={unsplashImage(
+      s?.imageQuery ||
+      s?.title ||
+      `${subject} ${topic}`
+    )}
+    alt={s?.title || "Lesson image"}
+    className="w-full h-48 object-cover"
+    loading="lazy"
+  />
+</div>
+
 
                 <ul className="list-disc pl-6">
                   {(s?.bullets || []).map((b: string, j: number) => (
@@ -859,14 +848,7 @@ setResult(json.data);
                   >
                     🎥 Watch video
                   </a>
-                  <a
-                    href={wikimediaSearchUrl(s?.imageQuery)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-green-600 underline"
-                  >
-                    🖼️ View image
-                  </a>
+
                 </div>
 
                 <div className="mt-2 p-3 rounded-xl border bg-yellow-50 text-sm">
