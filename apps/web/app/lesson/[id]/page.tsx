@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "../../lib/supabase/browser";
-import { unsplashImageUrl } from "../../lib/unsplash";
+import { unsplashImageUrl } from "@/app/lib/unsplash";
+import { youtubeSearchUrl } from "../../lib/media";
 
 type LessonRow = {
   id: string;
@@ -198,50 +199,67 @@ export default function LessonPage() {
       </section>
 
       {/* Slides */}
-      <section className="rounded-2xl border bg-white p-5">
-        <h2 className="text-xl font-semibold mb-4">Slides</h2>
+<section className="rounded-2xl border bg-white p-5">
+  <h2 className="text-xl font-semibold mb-4">Slides</h2>
 
-        {slides.length ? (
-          <div className="grid gap-4">
-            {slides.map((s: any, i: number) => {
-              const title = s?.title || `Slide ${i + 1}`;
-              const bullets = Array.isArray(s?.bullets) ? s.bullets : [];
+  {slides.length ? (
+    <div className="grid gap-4">
+      {slides.map((s: any, i: number) => {
+        const title = s?.title || `Slide ${i + 1}`;
+        const bullets: string[] = Array.isArray(s?.bullets) ? s.bullets : [];
 
-              const q = (s?.imageQuery || title || row.topic || "education") as string;
-              const seededQuery = `${q} ${row.id}-${i}`;
+        const q = (s?.imageQuery || title || row.topic || "education") as string;
+        
+        return (
+          <div key={i} className="rounded-xl border p-4 bg-slate-50">
+            <div className="font-semibold mb-3">
+              {i + 1}. {title}
+            </div>
 
-              return (
-                <div key={i} className="rounded-xl border p-4 bg-slate-50">
-                  <div className="font-semibold mb-3">
-                    {i + 1}. {title}
-                  </div>
+            <div className="rounded-xl overflow-hidden border bg-white mb-3">
+          const q =
+  (s?.imageQuery ||
+    `${row.subject || ""} ${row.topic || ""} diagram` ||
+    "education classroom") as string;
 
-                  <div className="rounded-xl overflow-hidden border bg-white mb-3">
-                    <img
-                      src={unsplashImageUrl(seededQuery)}
-                      alt={q}
-                      className="w-full h-48 object-cover"
-                      loading="lazy"
-                    />
-                  </div>
+<img
+  src={unsplashImageUrl(s?.imageQuery || s?.title || row.topic || "education")}
+  alt={s?.title || "Lesson illustration"}
+  className="w-full h-48 object-cover"
+  loading="lazy"
+  onError={(e) => {
+    e.currentTarget.src = unsplashImageUrl("education classroom");
+  }}
+/>
 
-                  {bullets.length ? (
-                    <ul className="list-disc pl-6 space-y-1">
-                      {bullets.map((b: string, j: number) => (
-                        <li key={j}>{b}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-slate-700">No bullet points.</p>
-                  )}
-                </div>
-              );
-            })}
+<a
+  href={youtubeSearchUrl(s?.videoQuery || s?.title || row.topic || "lesson")}
+  target="_blank"
+  rel="noreferrer"
+  className="text-blue-600 underline text-sm"
+>
+  🎥 Watch video
+</a>
+
+            </div>
+
+            {bullets.length ? (
+              <ul className="list-disc pl-6 space-y-1">
+                {bullets.map((b, j) => (
+                  <li key={j}>{b}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-slate-700">No bullet points.</p>
+            )}
           </div>
-        ) : (
-          <p className="text-sm text-slate-700">No slides found.</p>
-        )}
-      </section>
+        );
+      })}
+    </div>
+  ) : (
+    <p className="text-sm text-slate-700">No slides found.</p>
+  )}
+</section>
     </div>
   );
 }

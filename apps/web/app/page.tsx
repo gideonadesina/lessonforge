@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "./lib/supabase/browser";
 import { youtubeSearchUrl } from "./lib/media";
-import { unsplashImage } from "./lib/unsplash";
+import { unsplashImageUrl } from "./lib/unsplash";
 
 type LessonResult = any;
 
@@ -828,14 +828,17 @@ setResult(json.data);
             </div>
 
             {/* Image */}
-            <div className="rounded-xl overflow-hidden border bg-slate-100">
-              <img
-                src={unsplashImage(imageQuery)}
-                alt={title}
-                className="w-full h-52 object-cover"
-                loading="lazy"
-              />
-            </div>
+          <div className="rounded-xl overflow-hidden border bg-slate-100">
+  <img
+    src={unsplashImageUrl(s?.imageQuery || s?.title || `${subject} ${topic}`)}
+    alt={s?.title || "Lesson illustration"}
+    className="w-full h-48 object-cover"
+    loading="lazy"
+    onError={(e) => {
+      e.currentTarget.src = unsplashImageUrl("education classroom");
+    }}
+  />
+</div>
 
             {/* Bullets */}
             {bullets.length ? (
@@ -859,6 +862,24 @@ setResult(json.data);
                 🎥 Watch video
               </a>
             </div>
+            {result?.quiz?.mcq?.length ? (
+  <section className="space-y-3">
+    <h4 className="text-xl font-extrabold text-slate-900">Student Questions</h4>
+
+    <div className="space-y-4">
+      {(result.quiz.mcq || []).map((m: any, i: number) => (
+        <div key={i} className="rounded-xl border bg-white p-4">
+          <div className="font-semibold">{i + 1}. {m.q}</div>
+          <ul className="mt-2 list-disc pl-6 text-slate-800">
+            {(m.options || []).map((op: string, j: number) => (
+              <li key={j}>{op}</li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  </section>
+) : null}
 
             {/* Classroom activity */}
             <div className="rounded-xl border bg-yellow-50 p-3 text-sm text-slate-900">
