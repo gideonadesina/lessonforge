@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "../../lib/supabase/browser";
-import { unsplashImageUrl } from "@/app/lib/unsplash";
-import { youtubeSearchUrl } from "../../lib/media";
+ import { youtubeSearchUrl } from "../../lib/media";
+
 
 type LessonRow = {
   id: string;
@@ -18,61 +18,54 @@ type LessonRow = {
 
 export default function LessonPage() {
   const router = useRouter();
-  const params = useParams<{ id: string }>();
-  const lessonId = params?.id;
-
+  const params = useParams();
   const supabase = useMemo(() => createClient(), []);
 
+  const lessonId = Array.isArray((params as any)?.id) ? (params as any).id[0] : (params as any)?.id;
+
   const [loading, setLoading] = useState(true);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [row, setRow] = useState<LessonRow | null>(null);
-  const [error, setError] = useState<string | null>(null);
+   const [row, setRow] = useState<LessonRow | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
 
     (async () => {
       try {
-        setLoading(true);
-        setError(null);
+        setMsg(null);
 
-        const { data: authData, error: authErr } = await supabase.auth.getUser();
-
+        const { data: auth } = await supabase.auth.getUser();
         if (!alive) return;
 
-        if (authErr) {
-          setError(authErr.message);
-          setLoading(false);
-          return;
-        }
-
-        if (!authData?.user) {
+        if (!auth?.user) {
           router.push("/login");
           return;
         }
 
-        setUserEmail(authData.user.email ?? null);
+        if (!lessonId) {
+          setMsg("Missing lesson id.");
+          setLoading(false);
+          return;
+       }
 
         const { data, error } = await supabase
           .from("lessons")
-          .select("id, subject, topic, grade, curriculum, result_json")
+          .select("id, subject, topic, grade, curriculum,created_at, result_json")
           .eq("id", lessonId)
           .single();
 
         if (!alive) return;
 
-        if (error || !data) {
-          setError(error?.message || "Lesson not found (or no access).");
+        if (error) {
+          setMsg(`Failed to load lesson: ${error.message}`);
           setRow(null);
         } else {
           setRow(data as LessonRow);
         }
       } catch (e: any) {
-        if (!alive) return;
-        setError(e?.message ?? String(e));
+        setMsg(e?.message ?? "Unknown error");
       } finally {
-        if (!alive) return;
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     })();
 
@@ -89,25 +82,19 @@ export default function LessonPage() {
     );
   }
 
-  if (error) {
+  if (!row) {
     return (
       <div className="max-w-5xl mx-auto p-6 md:p-10 text-slate-900 space-y-4">
         <div className="rounded-2xl border bg-white p-6">
-          <h1 className="text-2xl font-bold">Auth / Load error</h1>
-          <p className="mt-2 text-slate-700">{error}</p>
+          <div className="font-bold text-lg">Couldn’t load lesson</div>
+          <div className="text-sm text-slate-700 mt-1">{msg ?? "Unknown error"}</div>
 
-          <div className="flex gap-2 mt-6">
-            <Link
-              href="/dashboard"
-              className="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 font-medium"
-            >
+          <div className="mt-4 flex gap-2">
+            <Link href="/dashboard" className="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 font-medium">
               Back to Dashboard
             </Link>
-            <Link
-              href="/login"
-              className="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 font-medium"
-            >
-              Go to Login
+            <Link href="/" className="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 font-medium">
+              New Lesson
             </Link>
           </div>
         </div>
@@ -115,23 +102,24 @@ export default function LessonPage() {
     );
   }
 
-  if (!row) {
-    return (
-      <div className="max-w-5xl mx-auto p-6 md:p-10 text-slate-900">
-        <div className="rounded-2xl border bg-white p-6">
-          Lesson not found.
-          <div className="mt-4">
-            <Link href="/dashboard" className="underline text-blue-600">
-              Back to Dashboard
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const result = row.result_json ?? {};
+  const objectives: string[] = Array.isArray(result?.objectives) ? result.objectives : [];
+  const slides: any[] = Array.isArray(result?.slides) ? result.slides : [];
 
-  const lesson = row.result_json ?? {};
-  const slides = Array.isArray(lesson?.slides) ? lesson.slides : [];
+  const quiz = result?.quiz ?? {};
+  const mcq: any[] = Array.isArray(quiz?.mcq) ? quiz.mcq : [];
+  const theory: any[] = Array.isArray(quiz?.theory) ? quiz.theory : [];
+const chunk = <T,>(arr: T[], size: number) =>
+  Array.from({ length: Math.ceil(arr.length / size) }, (_, i) =>
+    arr.slice(i * size, i * size + size)
+  );
+
+// 4 MCQs per slide → 10 MCQs becomes 3 slides (Slides 10–12 if you have 9 normal slides)
+const mcqSlides = chunk(mcq, 4).map((group, idx) => ({
+  title: `📝 MULTIPLE CHOICE QUESTIONS (${idx + 1}/${Math.ceil(mcq.length / 4)})`,
+  bullets: [] as string[],
+  mcqGroup: group,
+}));
 
   return (
     <div className="max-w-5xl mx-auto p-6 md:p-10 space-y-6 text-slate-900">
@@ -149,26 +137,15 @@ export default function LessonPage() {
                 {" "}
                 • Curriculum: <span className="font-medium">{row.curriculum}</span>
               </>
-            ) : null}
-            {userEmail ? (
-              <span className="block mt-1 text-xs text-slate-500">
-                Signed in as <span className="font-semibold">{userEmail}</span>
-              </span>
-            ) : null}
+             ) : null}
           </p>
         </div>
 
         <div className="flex gap-2">
-          <Link
-            href="/dashboard"
-            className="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 font-medium"
-          >
+          <Link href="/dashboard" className="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 font-medium">
             Back
           </Link>
-          <Link
-            href="/"
-            className="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 font-medium"
-          >
+          <Link href="/" className="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 font-medium">
             New Lesson
           </Link>
         </div>
@@ -177,9 +154,9 @@ export default function LessonPage() {
       {/* Objectives */}
       <section className="rounded-2xl border bg-white p-5">
         <h2 className="text-xl font-semibold mb-3">Objectives</h2>
-        {(lesson?.objectives ?? []).length ? (
+        {objectives.length ? (
           <ul className="list-disc pl-6 space-y-1">
-            {(lesson.objectives ?? []).map((o: string, i: number) => (
+            {objectives.map((o, i) => (
               <li key={i} className="leading-relaxed">
                 {o}
               </li>
@@ -194,72 +171,166 @@ export default function LessonPage() {
       <section className="rounded-2xl border bg-white p-5">
         <h2 className="text-xl font-semibold mb-3">Lesson Notes</h2>
         <div className="whitespace-pre-wrap leading-relaxed text-slate-900">
-          {lesson?.lessonNotes || "No lesson notes found."}
+          {result?.lessonNotes || "No lesson notes found."}
         </div>
       </section>
 
       {/* Slides */}
-<section className="rounded-2xl border bg-white p-5">
-  <h2 className="text-xl font-semibold mb-4">Slides</h2>
+      <section className="rounded-2xl border bg-white p-5">
+        <h2 className="text-xl font-semibold mb-4">Slides</h2>
 
-  {slides.length ? (
-    <div className="grid gap-4">
-      {slides.map((s: any, i: number) => {
-        const title = s?.title || `Slide ${i + 1}`;
-        const bullets: string[] = Array.isArray(s?.bullets) ? s.bullets : [];
-
-        const q = (s?.imageQuery || title || row.topic || "education") as string;
-        
-        return (
-          <div key={i} className="rounded-xl border p-4 bg-slate-50">
-            <div className="font-semibold mb-3">
-              {i + 1}. {title}
-            </div>
-
-            <div className="rounded-xl overflow-hidden border bg-white mb-3">
-          const q =
-  (s?.imageQuery ||
-    `${row.subject || ""} ${row.topic || ""} diagram` ||
-    "education classroom") as string;
-
-<img
-  src={unsplashImageUrl(s?.imageQuery || s?.title || row.topic || "education")}
-  alt={s?.title || "Lesson illustration"}
-  className="w-full h-48 object-cover"
-  loading="lazy"
-  onError={(e) => {
-    e.currentTarget.src = unsplashImageUrl("education classroom");
-  }}
-/>
-
-<a
-  href={youtubeSearchUrl(s?.videoQuery || s?.title || row.topic || "lesson")}
-  target="_blank"
-  rel="noreferrer"
-  className="text-blue-600 underline text-sm"
->
-  🎥 Watch video
-</a>
-
-            </div>
-
-            {bullets.length ? (
-              <ul className="list-disc pl-6 space-y-1">
-                {bullets.map((b, j) => (
-                  <li key={j}>{b}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-slate-700">No bullet points.</p>
-            )}
+        {slides.length ? (
+          <div className="grid gap-4">
+           {slides.map((s: any, i: number) => {
+  // ✅ MCQ slide rendering
+  if (s.kind === "mcq") {
+    return (
+      <div key={`mcq-${i}`} className="rounded-xl border p-4 bg-slate-50">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="font-semibold text-slate-900">
+            {i + 1}. {s.title}
           </div>
-        );
-      })}
-    </div>
+          <span className="text-xs px-2 py-1 rounded-full border bg-white text-slate-700">
+            Slide {i + 1}
+          </span>
+        </div>
+
+        <ol className="space-y-4">
+          {(s.mcqGroup ?? []).map((q: any, qi: number) => (
+            <li key={qi} className="text-slate-900">
+              <div className="font-medium">
+                {q?.q || "Question"}
+              </div>
+
+              <div className="mt-2 space-y-1">
+                {(Array.isArray(q?.options) ? q.options : []).map(
+                  (opt: string, oi: number) => (
+                    <div key={oi}>
+                      <span className="font-semibold">
+                        {String.fromCharCode(65 + oi)}.
+                      </span>{" "}
+                      {opt}
+                    </div>
+                  )
+                )}
+              </div>
+            </li>
+          ))}
+        </ol>
+      </div>
+    );
+  }
+
+  // ✅ Normal slide rendering (your existing UI)
+  const title = s?.title || `Slide ${i + 1}`;
+  const bullets: string[] = Array.isArray(s?.bullets) ? s.bullets : [];
+  const imgQuery = s?.imageQuery || title || row.topic || "education";
+  const videoQuery = s?.videoQuery || title || row.topic || "";
+
+  return (
+    <div key={i} className="rounded-xl border p-4 bg-slate-50">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="font-semibold text-slate-900">
+          {i + 1}. {title}
+        </div>
+        <span className="text-xs px-2 py-1 rounded-full border bg-white text-slate-700">
+          Slide {i + 1}
+        </span>
+      </div>
+
+      <div className="rounded-xl overflow-hidden border bg-white mb-3">
+  {s?.image ? (
+    <img
+      src={s.image}
+      alt={title}
+      className="w-full h-48 object-cover"
+      loading="lazy"
+      referrerPolicy="no-referrer"
+    />
   ) : (
-    <p className="text-sm text-slate-700">No slides found.</p>
+    <div className="w-full h-48 flex items-center justify-center text-sm text-slate-600 bg-slate-100">
+      No image saved for this slide
+    </div>
   )}
-</section>
+</div>
+
+      {bullets.length ? (
+        <ul className="list-disc pl-6 space-y-1">
+          {bullets.map((b: string, j: number) => (
+            <li key={j}>{b}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-slate-700">No bullet points.</p>
+      )}
+
+      <div className="mt-3 flex flex-wrap gap-3 text-sm">
+        {videoQuery ? (
+          <a
+            href={youtubeSearchUrl(videoQuery)}
+            target="_blank"
+            rel="noreferrer"
+            className="text-blue-600 underline font-semibold"
+          >
+            🎥 Watch video
+          </a>
+        ) : null}
+      </div>
+
+      {s?.interactivePrompt ? (
+        <div className="mt-3 p-3 rounded-xl border bg-yellow-50 text-sm">
+          <b>👩🏽‍🏫 Classroom Activity:</b> {s.interactivePrompt}
+        </div>
+      ) : null}
+    </div>
+  );
+})}
+
+          </div>
+        ) : (
+          <p className="text-sm text-slate-700">No slides found.</p>
+        )}
+      </section>
+
+      {/* Student Questions */}
+      <section className="rounded-2xl border bg-white p-5">
+        <h2 className="text-xl font-semibold mb-4">Student Questions</h2>
+
+        {mcq.length ? (
+          <div className="space-y-4">
+            {mcq.map((q: any, i: number) => (
+              <div key={i} className="rounded-xl border p-4 bg-slate-50">
+                <div className="font-semibold mb-2">
+                  {i + 1}. {q?.q || "Question"}
+                </div>
+                <ul className="list-disc pl-6 space-y-1">
+                  {(Array.isArray(q?.options) ? q.options : []).map((opt: string, j: number) => (
+                    <li key={j}>{opt}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-700">No multiple choice questions found.</p>
+        )}
+
+        {theory.length ? (
+          <div className="mt-6 space-y-4">
+            <h3 className="text-lg font-semibold">Theory</h3>
+            {theory.map((t: any, i: number) => (
+              <div key={i} className="rounded-xl border p-4 bg-slate-50">
+                <div className="font-semibold">{i + 1}. {t?.q || "Theory question"}</div>
+                {t?.answerGuide ? (
+                  <div className="mt-2 text-sm text-slate-700">
+                    <b>Marking guide:</b> {t.answerGuide}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </section>
     </div>
   );
 }

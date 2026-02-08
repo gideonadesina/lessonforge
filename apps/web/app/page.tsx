@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "./lib/supabase/browser";
 import { youtubeSearchUrl } from "./lib/media";
-import { unsplashImageUrl } from "./lib/unsplash";
+import SlideImage from "./components/SlideImage";
 
 type LessonResult = any;
 
@@ -57,6 +57,16 @@ async function handleExport(kind: "pdf" | "pptx") {
       res,
       `LessonForge-${Date.now()}.${kind}`
     );
+    function simplify(q: string) {
+  return (q || "education classroom")
+    .toLowerCase()
+    .replace(/\b(diagram|labeled|labelled|with|of|showing|explain)\b/g, "")
+    .replace(/[^a-z0-9\s]/g, "")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 3)
+    .join(" ");
+}
 
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -239,6 +249,15 @@ async function downloadPptx() {
   setError(`${json?.error || "Request failed"} (HTTP ${res.status})\n${details}`);
   return;
 }
+setResult(json.data);
+
+// 🆕 DEBUG: Log what we got
+console.log("📊 Total slides:", json.data?.slides?.length);
+console.log("🖼️  Images per slide:", json.data?.slides?.map((s: any, i: number) => `Slide ${i + 1}: ${s.image?.substring(0, 50)}...`));
+console.log("📝 MCQ count:", json.data?.quiz?.mcq?.length);
+console.log("✍️  Theory count:", json.data?.quiz?.theory?.length);
+console.log("📋 First MCQ:", json.data?.quiz?.mcq?.[0]);
+console.log("📋 First Theory:", json.data?.quiz?.theory?.[0]);
 
 setResult(json.data);
     } catch (e: any) {
@@ -247,7 +266,7 @@ setResult(json.data);
       setLoading(false);
     }
   }
-
+  
   async function saveLesson() {
     setSaveMsg(null);
 
@@ -281,6 +300,7 @@ setResult(json.data);
       setSaving(false);
     }
   }
+  
 
   return (
     <div className="max-w-[1400px] mx-auto border-x border-slate-200 relative bg-slate-50">
@@ -816,6 +836,7 @@ setResult(json.data);
           <div
             key={i}
             className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4"
+            
           >
             {/* Title */}
             <div className="flex items-start justify-between gap-3">
@@ -827,15 +848,14 @@ setResult(json.data);
               </span>
             </div>
 
-            {/* Image */}
-          <div className="rounded-xl overflow-hidden border bg-slate-100">
+           {/* Image */}
+<div className="rounded-xl overflow-hidden border bg-slate-100">
   <img
-    src={unsplashImageUrl(s?.imageQuery || s?.title || `${subject} ${topic}`)}
-    alt={s?.title || "Lesson illustration"}
-    className="w-full h-48 object-cover"
-    loading="lazy"
+    src={s?.image || "https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?w=1200"}
+    alt={title}
+     className="w-full h-48 object-cover"
     onError={(e) => {
-      e.currentTarget.src = unsplashImageUrl("education classroom");
+      e.currentTarget.src = "https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?w=1200";
     }}
   />
 </div>
@@ -862,25 +882,7 @@ setResult(json.data);
                 🎥 Watch video
               </a>
             </div>
-            {result?.quiz?.mcq?.length ? (
-  <section className="space-y-3">
-    <h4 className="text-xl font-extrabold text-slate-900">Student Questions</h4>
-
-    <div className="space-y-4">
-      {(result.quiz.mcq || []).map((m: any, i: number) => (
-        <div key={i} className="rounded-xl border bg-white p-4">
-          <div className="font-semibold">{i + 1}. {m.q}</div>
-          <ul className="mt-2 list-disc pl-6 text-slate-800">
-            {(m.options || []).map((op: string, j: number) => (
-              <li key={j}>{op}</li>
-            ))}
-          </ul>
-        </div>
-      ))}
-    </div>
-  </section>
-) : null}
-
+            
             {/* Classroom activity */}
             <div className="rounded-xl border bg-yellow-50 p-3 text-sm text-slate-900">
               <span className="font-bold">👩🏽‍🏫 Classroom Activity:</span>{" "}
@@ -894,6 +896,65 @@ setResult(json.data);
     <p className="text-sm text-slate-600">No slides generated yet.</p>
   )}
 </section>
+{/* ✅ Multiple Choice Questions - Shuffled */}
+{result?.quiz?.mcq?.length ? (
+  <section className="space-y-4">
+    <h4 className="text-2xl font-bold text-slate-900">
+      📝 Multiple Choice Questions
+    </h4>
+
+    <div className="space-y-6">
+      {result.quiz.mcq.map((q: any, i: number) => {
+        // 🆕 Shuffle options
+        const shuffledOptions = [...(q.options || [])].sort(() => Math.random() - 0.5);
+        
+        return (
+          <div key={i} className="rounded-xl border border-slate-200 p-5 bg-white shadow-sm">
+            <p className="font-semibold text-lg mb-3 text-slate-900">
+              {i + 1}. {q?.q || q?.question || "Question text missing"}
+            </p>
+            <ul className="space-y-2">
+              {shuffledOptions.map((opt: string, j: number) => (
+                <li key={j} className="flex items-start gap-3 text-slate-800">
+                  <span className="font-bold text-indigo-600 min-w-[24px]">
+                    {String.fromCharCode(65 + j)}.
+                  </span>
+                  <span>{opt}</span>
+                </li>
+              ))}
+            </ul>
+            {/* 🆕 REMOVED: Correct answer display */}
+          </div>
+        );
+      })}
+    </div>
+  </section>
+) : null}
+              {/* Theory Questions */}
+              {result?.quiz?.theory?.length ? (
+                <section className="space-y-4">
+                  <h4 className="text-2xl font-bold text-slate-900">
+                    ✍️ Theory Questions
+                  </h4>
+
+                  <div className="space-y-4">
+                    {result.quiz.theory.map((q: any, i: number) => (
+                      <div key={i} className="rounded-xl border border-slate-200 p-5 bg-white shadow-sm">
+                         <p className="font-semibold text-lg mb-2 text-slate-900">
+                          {i + 1}. {q?.q || q?.question || "Question text missing"}
+                            </p>
+                        {/* 🆕 Only show marking guide if it exists */}
+          {q?.markingGuide && (
+            <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+              <p className="text-xs font-semibold text-slate-700 mb-1">Marking Guide:</p>
+              <p className="text-sm text-slate-600">{q.markingGuide}</p>
+                </div>
+                  )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
       </div>
     )}
   </div>
