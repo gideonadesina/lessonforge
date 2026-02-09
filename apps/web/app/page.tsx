@@ -677,7 +677,7 @@ setResult(json.data);
 
       <div className="flex gap-2">
         {!user ? (
-          <Link className="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50" href="/login">
+          <Link className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-50" href="/login">
             Login to Save
           </Link>
         ) : (
