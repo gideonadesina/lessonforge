@@ -396,7 +396,7 @@ setResult(json.data);
         
           <h1 className="animate-fade-up delay-200 leading-[0.95] lg:text-[4.5rem] text-5xl font-semibold text-slate-900 tracking-tighter mb-8">
             Create Curriculum-Aligned Lessons
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-500 font-bold block">
+            <span className="bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-500 font-bold block">
               in Minutes
             </span>
           </h1>
@@ -528,7 +528,7 @@ setResult(json.data);
           ))}
         </div>
       </section>
-
+      
       <div className="w-full h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent opacity-60" />
 
       {/* Features (kept minimal) */}
