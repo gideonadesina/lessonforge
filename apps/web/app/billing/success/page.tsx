@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-export default function BillingSuccessPage() {
+function SuccessInner() {
   const sp = useSearchParams();
   const reference = sp.get("reference");
 
@@ -25,10 +25,10 @@ export default function BillingSuccessPage() {
 
         if (res.ok) {
           setState("ok");
-          setMsg("✅ Subscription activated! You can now generate unlimited lessons.");
+          setMsg("✅ Subscription activated! You can now continue.");
         } else {
           setState("bad");
-          setMsg(json?.error || "⚠️ Could not confirm payment yet. If you paid, refresh in a minute.");
+          setMsg(json?.error || "⚠️ Could not confirm payment yet. Refresh in a minute.");
         }
       } catch (e: any) {
         setState("bad");
@@ -47,17 +47,10 @@ export default function BillingSuccessPage() {
         </p>
 
         <div className="mt-6 flex gap-3">
-          <Link
-            href="/dashboard"
-            className="px-4 py-2 rounded-xl bg-slate-900 text-white font-semibold"
-          >
+          <Link href="/dashboard" className="px-4 py-2 rounded-xl bg-slate-900 text-white font-semibold">
             Go to Dashboard
           </Link>
-
-          <Link
-            href="/"
-            className="px-4 py-2 rounded-xl border border-slate-300 bg-white font-semibold"
-          >
+          <Link href="/" className="px-4 py-2 rounded-xl border border-slate-300 bg-white font-semibold">
             Generate Lesson
           </Link>
         </div>
@@ -69,5 +62,19 @@ export default function BillingSuccessPage() {
         ) : null}
       </div>
     </div>
+  );
+}
+
+export default function BillingSuccessPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center p-6 text-slate-900">
+          Loading…
+        </div>
+      }
+    >
+      <SuccessInner />
+    </Suspense>
   );
 }
