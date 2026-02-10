@@ -13,7 +13,7 @@ type LessonResult = any;
 export default function Home() {
   const supabase = useMemo(() => createClient(), []);
   const [user, setUser] = useState<any>(null);
-  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [authChecked, setAuthChecked] = useState(false);
 
   const [subject, setSubject] = useState("Chemistry");
   const [topic, setTopic] = useState("Solutions");
@@ -88,31 +88,39 @@ async function handleExport(kind: "pdf" | "pptx") {
 
   // Auth state
   useEffect(() => {
-    let alive = true;
+  let alive = true;
 
-    (async () => {
-      const { data } = await supabase.auth.getUser();
+  (async () => {
+    try {
+      const { data, error } = await supabase.auth.getUser();
+
+      // If refresh token is invalid, clear and continue as guest
+      if (error?.message?.toLowerCase().includes("refresh token")) {
+        await supabase.auth.signOut(); // clears bad tokens
+      }
+
       if (!alive) return;
       setUser(data?.user ?? null);
-       setCheckingAuth(false);
-    })();
+    } catch (e) {
+      // swallow errors and continue as guest
+      if (!alive) return;
+      setUser(null);
+    } finally {
+      if (!alive) return;
+      setAuthChecked(true); // ✅ always ends loading
+    }
+  })();
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      setCheckingAuth(false);
-    });
+  const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    setUser(session?.user ?? null);
+    setAuthChecked(true);
+  });
 
-    return () => {
-      alive = false;
-      subscription.unsubscribe();
-    };
-  }, [supabase]);
-
-  if (checkingAuth) {
-  return <div className="p-6 text-slate-900">Loading…</div>;
- }
+  return () => {
+    alive = false;
+    sub.subscription.unsubscribe();
+  };
+}, [supabase]);
 
   // Rocket animations replacement: nav-load + reveal on scroll
   useEffect(() => {
@@ -134,7 +142,10 @@ async function handleExport(kind: "pdf" | "pptx") {
     els.forEach((el) => obs.observe(el));
     return () => obs.disconnect();
   }, []);
-   
+
+   if (!authChecked) {
+  return <div className="min-h-screen grid place-items-center">Loading…</div>;
+} 
   async function exportFile(kind: "pdf" | "pptx") {
   if (!result) return;
 
