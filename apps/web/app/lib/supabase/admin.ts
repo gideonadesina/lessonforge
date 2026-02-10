@@ -7,3 +7,5 @@ export function createAdminClient() {
     auth: { persistSession: false },
   });
 }
+console.log("SUPABASE_URL exists?", !!process.env.NEXT_PUBLIC_SUPABASE_URL);
+console.log("SERVICE_ROLE exists?", !!process.env.SUPABASE_SERVICE_ROLE_KEY);

@@ -1,91 +1,19 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* optional: your font */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Plus Jakarta Sans", sans-serif;
 }
-/* Smooth scrolling for anchor links */
-html {
-  scroll-behavior: smooth;
-}
-
-/* Nav load animation */
-.nav-load {
-  transform: translateY(-8px);
-  opacity: 0;
-  transition: transform 500ms ease, opacity 500ms ease;
-}
-.nav-load.loaded {
-  transform: translateY(0);
-  opacity: 1;
+/* Force visible text in inputs (fix invisible/transparent typing bug) */
+input, textarea, select {
+  color: #0f172a !important;                  /* slate-900 */
+  -webkit-text-fill-color: #0f172a !important; /* fixes Chrome/Safari text fill */
+  caret-color: #0f172a !important;
 }
 
-/* Reveal on scroll */
-.reveal {
-  opacity: 0;
-  transform: translateY(14px);
-  transition: opacity 700ms ease, transform 700ms ease;
-}
-.reveal.active {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* Simple keyframes used by Rocket */
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-@keyframes fadeScale {
-  from { opacity: 0; transform: scale(0.98); }
-  to { opacity: 1; transform: scale(1); }
-}
-@keyframes floaty {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
-}
-
-.animate-fade-up {
-  animation: fadeUp 700ms ease both;
-}
-.animate-fade-scale {
-  animation: fadeScale 700ms ease both;
-}
-.animate-float {
-  animation: floaty 4s ease-in-out infinite;
-}
-
-.delay-100 { animation-delay: 100ms; }
-.delay-200 { animation-delay: 200ms; }
-.delay-300 { animation-delay: 300ms; }
-.delay-400 { animation-delay: 400ms; }
-.delay-500 { animation-delay: 500ms; }
-.delay-700 { animation-delay: 700ms; }
-
-/* Optional: small curved separator */
-.curve-separator {
-  width: 40px;
-  height: 18px;
-  border-right: 1px solid rgba(15, 23, 42, 0.15);
-  border-radius: 999px;
+input::placeholder, textarea::placeholder {
+  color: #94a3b8 !important; /* slate-400 */
+  -webkit-text-fill-color: #94a3b8 !important;
 }

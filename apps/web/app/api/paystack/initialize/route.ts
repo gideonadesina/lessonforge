@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { paystackHeaders, appUrl } from "../../lib/paystack";
+import { paystackHeaders, appUrl } from "../../../lib/paystack";
 import { createAdminClient } from "../../../lib/supabase/admin";
 
 export async function POST(req: Request) {
@@ -36,22 +36,29 @@ export async function POST(req: Request) {
     );
 
     // Initialize transaction with plan => Paystack creates subscription after first payment
-    const res = await fetch("https://api.paystack.co/transaction/initialize", {
-      method: "POST",
-      headers: paystackHeaders(),
-      body: JSON.stringify({
-        email,
-        plan,
-        currency,
-        callback_url: appUrl("/billing/success"),
-        metadata: {
-          user_id,
-          plan_currency: currency,
-        },
-      }),
-    });
+   const amount = currency === "NGN" ? 200000 : 500; // NGN in kobo, USD in cents (if you later add USD)
+
+const res = await fetch("https://api.paystack.co/transaction/initialize", {
+  method: "POST",
+  headers: paystackHeaders(),
+  body: JSON.stringify({
+    email,
+    amount,              // ✅ ADD THIS (Paystack wants it)
+    plan,                // ✅ keep this for subscription
+    currency,
+    callback_url: appUrl("/billing/success"),
+    metadata: {
+      user_id,
+      plan_currency: currency,
+    },
+  }),
+});
 
     const json = await res.json();
+
+    console.log("PAYSTACK_INIT_STATUS", res.status);
+console.log("PAYSTACK_INIT_RESPONSE", json);
+
 
     if (!res.ok || !json?.status) {
       return NextResponse.json({ error: "Paystack init failed", details: json }, { status: 400 });

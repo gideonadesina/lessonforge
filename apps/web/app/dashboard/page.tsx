@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "../lib/supabase/browser";
 
+
 type LessonRow = {
   id: string;
   subject: string | null;
@@ -136,21 +137,52 @@ export default function DashboardPage() {
             </div>
           </Link>
 
-          <div className="flex items-center gap-2">
-            <Link
-              href="/"
-              className="hidden sm:inline-flex px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-900"
-            >
-              + Generate New
-            </Link>
+        <div className="flex items-center gap-2">
 
-            <button
-              onClick={logout}
-              className="px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-900"
-            >
-              Logout
-            </button>
-          </div>
+  {/* 🔥 UPGRADE BUTTON */}
+  <button
+    onClick={async () => {
+      const { data } = await supabase.auth.getUser();
+      const user = data.user;
+      if (!user) return;
+
+      const res = await fetch("/api/paystack/initialize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: user.id,
+          email: user.email,
+          currency: "NGN",
+        }),
+      });
+
+      const json = await res.json();
+
+      if (res.ok) {
+        window.location.href = json.authorization_url;
+      } else {
+        alert(json.error || "Payment failed");
+      }
+    }}
+    className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700"
+  > upgrade
+  </button>
+
+  <Link
+    href="/"
+    className="px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-900"
+  >
+    + Generate New
+  </Link>
+
+  <button
+    onClick={logout}
+    className="px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-900"
+  >
+    Logout
+  </button>
+</div>
+
         </div>
       </header>
 
