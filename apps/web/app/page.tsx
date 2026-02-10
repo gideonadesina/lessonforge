@@ -5,12 +5,15 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "./lib/supabase/browser";
 import { youtubeSearchUrl } from "./lib/media";
 import SlideImage from "./components/SlideImage";
+import { useRouter } from "next/navigation";
+
 
 type LessonResult = any;
 
 export default function Home() {
   const supabase = useMemo(() => createClient(), []);
   const [user, setUser] = useState<any>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
 
   const [subject, setSubject] = useState("Chemistry");
   const [topic, setTopic] = useState("Solutions");
@@ -91,12 +94,14 @@ async function handleExport(kind: "pdf" | "pptx") {
       const { data } = await supabase.auth.getUser();
       if (!alive) return;
       setUser(data?.user ?? null);
+       setCheckingAuth(false);
     })();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      setCheckingAuth(false);
     });
 
     return () => {
@@ -104,6 +109,50 @@ async function handleExport(kind: "pdf" | "pptx") {
       subscription.unsubscribe();
     };
   }, [supabase]);
+
+  if (checkingAuth) {
+  return <div className="p-6 text-slate-900">Loading…</div>;
+}
+
+if (!user) {
+  return (
+    <main className="min-h-screen bg-slate-50 text-slate-900">
+      <header className="border-b bg-white">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="font-bold">LessonForge</div>
+          <Link
+            href="/login"
+            className="px-4 py-2 rounded-xl bg-slate-900 text-white font-semibold"
+          >
+            Log in
+          </Link>
+        </div>
+      </header>
+
+      <div className="max-w-3xl mx-auto px-6 py-16">
+        <h1 className="text-3xl font-extrabold">Generate lessons in minutes</h1>
+        <p className="mt-3 text-slate-700">
+          Please log in to generate lesson packs. New users get 5 free trials.
+        </p>
+
+        <div className="mt-6 flex gap-3">
+          <Link
+            href="/login"
+            className="px-5 py-3 rounded-2xl bg-slate-900 text-white font-semibold"
+          >
+            Log in to Generate
+          </Link>
+          <Link
+            href="/login"
+            className="px-5 py-3 rounded-2xl border border-slate-300 bg-white font-semibold"
+          >
+            Create Account
+          </Link>
+        </div>
+      </div>
+    </main>
+  );
+}
 
   // Rocket animations replacement: nav-load + reveal on scroll
   useEffect(() => {
@@ -983,4 +1032,8 @@ setResult(json.data);
       </footer>
        </div>
   );
+}
+
+function setCheckingAuth(arg0: boolean) {
+  throw new Error("Function not implemented.");
 }

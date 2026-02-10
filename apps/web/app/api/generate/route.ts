@@ -1,4 +1,8 @@
 import OpenAI from "openai";
+import { createAdminClient } from "../../lib/supabase/admin";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +15,7 @@ type GeneratePayload = {
   grade: string;
   curriculum?: string;
   durationMins?: number;
+  user_id?: string;
 };
 
 function buildUserInstructions(input: GeneratePayload) {
@@ -157,9 +162,83 @@ async function fetchUnsplashImage(
   }
 }
 
+
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as GeneratePayload;
+     const cookieStore = await cookies();
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options);
+            });
+          } catch {
+            // ignore if runtime doesn't allow setting cookies here
+          }
+        },
+      },
+    }
+  );
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  // ✅ END AUTH GATE
+
+     // ✅ PAYWALL CHECK STARTS HERE (inside POST, after body exists)
+    const userId = body.user_id; // you must send this from client
+    if (!userId) {
+      return Response.json({ error: "Missing user_id" }, { status: 401 });
+    }
+
+    const admin = createAdminClient();
+
+    const { data: prof, error: profErr } = await admin
+      .from("profiles")
+      .select("free_credits, is_pro, pro_expires_at")
+      .eq("id", userId)
+      .single();
+
+    if (profErr && profErr.code !== "PGRST116") {
+      return Response.json({ error: profErr.message }, { status: 500 });
+    }
+
+    const credits = prof?.free_credits ?? 5;
+    const isPro = prof?.is_pro === true;
+
+    if (!isPro && credits <= 0) {
+      return Response.json(
+        { error: "Free limit reached. Please upgrade to continue." },
+        { status: 402 }
+      );
+    }
+
+    if (!isPro) {
+      await admin.from("profiles").upsert(
+        {
+          id: userId,
+          free_credits: credits - 1,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id" }
+      );
+    }
+    // ✅ PAYWALL CHECK ENDS HERE
+
+    
 
     if (!body?.subject || !body?.topic || !body?.grade) {
       return Response.json(
