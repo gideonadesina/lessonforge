@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "../lib/supabase/browser";
+import { track } from "@/lib/analytics";
+import SchoolCodeInput from "../components/SchoolCodeInput";
 
 
 type LessonRow = {
@@ -140,12 +142,13 @@ export default function DashboardPage() {
         <div className="flex items-center gap-2">
 
   {/* 🔥 UPGRADE BUTTON */}
+
   <button
     onClick={async () => {
       const { data } = await supabase.auth.getUser();
       const user = data.user;
       if (!user) return;
-
+      track("start_payment", { plan: "pro_monthly", currency: "NGN" });
       const res = await fetch("/api/paystack/initialize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -167,6 +170,7 @@ export default function DashboardPage() {
     className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700"
   > upgrade
   </button>
+
 
   <Link
     href="/"
@@ -340,7 +344,9 @@ export default function DashboardPage() {
                 🔒 Secure auth via Supabase • 📚 Saved lesson library
               </div>
             </div>
-
+                    <section className="max-w-6xl mx-auto px-6 py-6">
+                     <SchoolCodeInput />
+                     </section>
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="font-bold text-slate-900">Tips</div>
               <ul className="mt-2 text-sm text-slate-700 space-y-2 list-disc pl-5">

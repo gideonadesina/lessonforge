@@ -6,6 +6,7 @@ import { createClient } from "./lib/supabase/browser";
 import { youtubeSearchUrl } from "./lib/media";
 import SlideImage from "./components/SlideImage";
 import { useRouter } from "next/navigation";
+import { track } from "@/lib/analytics";
 
 
 type LessonResult = any;
@@ -253,12 +254,18 @@ async function downloadPptx() {
     setSaveMsg(null);
 
     try {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject, topic, grade, curriculum, durationMins: 40 }),
-      });
+      const { data: { session } } = await supabase.auth.getSession();
 
+const res = await fetch("/api/generate", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${session?.access_token}`,
+  },
+  body: JSON.stringify({ subject, topic, grade, curriculum, durationMins: 40 }),
+});
+
+     track("generate_lesson", { subject, topic, grade, curriculum });
       const json = await res.json();
       if (!res.ok) {
   const details =
@@ -311,6 +318,7 @@ setResult(json.data);
       };
 
       const { error } = await supabase.from("lessons").insert(payload);
+      track("save_lesson", { subject, topic, grade });
       if (error) throw error;
 
       setSaveMsg("Saved to your library ✅");

@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import { createAdminClient } from "../../lib/supabase/admin";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-
+import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -163,60 +163,67 @@ async function fetchUnsplashImage(
 }
 
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as GeneratePayload;
-     const cookieStore = await cookies();
+    // 1) Auth header
+    const auth = req.headers.get("authorization") ?? "";
+    const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, options);
-            });
-          } catch {
-            // ignore if runtime doesn't allow setting cookies here
-          }
-        },
-      },
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized (no token)" }, { status: 401 });
     }
-  );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    // 2) Supabase client (no cookies)
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() { return []; },
+          setAll() {},
+        },
+      }
+    );
 
-  if (!user) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  // ✅ END AUTH GATE
+    // 3) Verify token
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
-     // ✅ PAYWALL CHECK STARTS HERE (inside POST, after body exists)
-    const userId = body.user_id; // you must send this from client
-    if (!userId) {
-      return Response.json({ error: "Missing user_id" }, { status: 401 });
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: "Unauthorized (invalid token)", message: authError?.message },
+        { status: 401 }
+      );
     }
+
+    console.log("✅ Authenticated user:", user.id);
+
+    // 4) Parse JSON body safely (no req.text)
+    let body: GeneratePayload;
+    try {
+      body = (await req.json()) as GeneratePayload;
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+
+    if (!body?.subject || !body?.topic || !body?.grade) {
+      return NextResponse.json(
+        { error: "Missing required fields: subject, topic, grade" },
+        { status: 400 }
+      );
+    }
+
+    // ✅ PAYWALL CHECK (use authenticated user id)
+    const userId = user.id;
 
     const admin = createAdminClient();
 
     const { data: prof, error: profErr } = await admin
       .from("profiles")
-      .select("free_credits, is_pro, pro_expires_at")
+      .select("free_credits, is_pro, pro_expires_at, school_id")
       .eq("id", userId)
       .single();
 
-    if (profErr && profErr.code !== "PGRST116") {
-      return Response.json({ error: profErr.message }, { status: 500 });
-    }
-
-    const credits = prof?.free_credits ?? 5;
+     const credits = prof?.free_credits ?? 5;
     const isPro = prof?.is_pro === true;
 
     if (!isPro && credits <= 0) {
@@ -236,6 +243,9 @@ export async function POST(req: Request) {
         { onConflict: "id" }
       );
     }
+
+    // ... continue with OpenAI generation
+
     // ✅ PAYWALL CHECK ENDS HERE
 
     

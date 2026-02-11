@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { track } from "@/lib/analytics";
 
 function SuccessInner() {
   const sp = useSearchParams();
@@ -66,6 +67,7 @@ function SuccessInner() {
 }
 
 export default function BillingSuccessPage() {
+  track("payment_success", { plan: "pro_monthly" });
   return (
     <Suspense
       fallback={
