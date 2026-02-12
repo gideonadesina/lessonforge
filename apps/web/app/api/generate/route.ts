@@ -3,6 +3,8 @@ import { createAdminClient } from "../../lib/supabase/admin";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -118,11 +120,11 @@ async function fetchUnsplashImage(
 
   try {
     // Build query: subject + slide-specific hint + extra bias words
-    const raw = `${subject} ${query || topic} anatomy medical health science`.trim();
+    const raw = `${subject} ${query || topic} classroom education`.trim();
 
     const cleaned = raw
       .toLowerCase()
-      .replace(/\b(diagram|labeled|labelled|with|of|the|a|an|in|on|at)\b/gi, "")
+      .replace(/\b(with|of|the|a|an|in|on|at)\b/gi, "")
       .replace(/[^a-z0-9\s]/g, " ")
       .replace(/\s+/g, " ")
       .trim()
@@ -172,30 +174,24 @@ export async function POST(req: NextRequest) {
     if (!token) {
       return NextResponse.json({ error: "Unauthorized (no token)" }, { status: 401 });
     }
+// 2) Supabase client that carries the JWT (so rpc/auth.uid works)
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  }
+);
 
-    // 2) Supabase client (no cookies)
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() { return []; },
-          setAll() {},
-        },
-      }
-    );
-
-    // 3) Verify token
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: "Unauthorized (invalid token)", message: authError?.message },
-        { status: 401 }
-      );
-    }
-
-    console.log("✅ Authenticated user:", user.id);
+// 3) Verify token (now uses header)
+const { data: { user }, error: authError } = await supabase.auth.getUser();
+if (authError || !user) {
+  return NextResponse.json(
+    { error: "Unauthorized (invalid token)", message: authError?.message },
+    { status: 401 }
+  );
+}
 
     // 4) Parse JSON body safely (no req.text)
     let body: GeneratePayload;
@@ -218,46 +214,11 @@ if (creditErr) {
 }
 
 if (!creditData?.ok) {
-  return NextResponse.json({ error: creditData?.error || "No credits" }, { status: 402 });
+  const msg = creditData?.error || "No credits";
+  const status = msg.toLowerCase().includes("not authenticated") ? 401 : 402;
+  return NextResponse.json({ error: msg }, { status });
 }
 
-    // ✅ PAYWALL CHECK (use authenticated user id)
-    const userId = user.id;
-
-    const admin = createAdminClient();
-
-    const { data: prof, error: profErr } = await admin
-      .from("profiles")
-      .select("free_credits, is_pro, pro_expires_at, school_id")
-      .eq("id", userId)
-      .single();
-
-     const credits = prof?.free_credits ?? 5;
-    const isPro = prof?.is_pro === true;
-
-    if (!isPro && credits <= 0) {
-      return Response.json(
-        { error: "Free limit reached. Please upgrade to continue." },
-        { status: 402 }
-      );
-    }
-
-    if (!isPro) {
-      await admin.from("profiles").upsert(
-        {
-          id: userId,
-          free_credits: credits - 1,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "id" }
-      );
-    }
-
-    // ... continue with OpenAI generation
-
-    // ✅ PAYWALL CHECK ENDS HERE
-
-    
 
     if (!body?.subject || !body?.topic || !body?.grade) {
       return Response.json(
@@ -274,27 +235,39 @@ if (!creditData?.ok) {
 
     console.log("🎯 Generating lesson for:", body.topic);
 
-    const resp = await client.responses.create({
-      model: "gpt-4.1-mini",
-      input: [
-        {
-          role: "system",
-          content:
-            "You are a lesson planning engine. Output MUST be strictly valid JSON and must match the requested JSON shape. For MCQ questions, options must be full sentences, not just letters.",
-        },
-        { role: "user", content: buildUserInstructions(body) },
-      ],
-      temperature: 0.25,
-      max_output_tokens: 6500,
-      text: { format: { type: "json_object" } },
-    });
+   const resp = await client.responses.create({
+  model: "gpt-4.1-mini",
+  input: [
+    {
+      role: "system",
+      content:
+        "Return STRICT valid JSON only. No markdown. No backticks. No explanation text.",
+    },
+    { role: "user", content: buildUserInstructions(body) },
+  ],
+  temperature: 0.2,
+  max_output_tokens: 6500,
+
+  // ⭐⭐ THIS IS THE CRITICAL FIX ⭐⭐
+  text: { format: { type: "json_object" } },
+});
 
     const raw = resp.output_text ?? "";
-    if (!raw) {
-      return Response.json({ error: "Empty response from model" }, { status: 502 });
-    }
 
-    const data = JSON.parse(raw);
+let data: any;
+
+try {
+  data = JSON.parse(raw);
+} catch (e) {
+  console.error("❌ BAD JSON FROM MODEL:", raw);
+
+  return NextResponse.json(
+    { error: "Model returned invalid JSON" },
+    { status: 502 }
+  );
+}
+
+
 
     // ✅ Basic guardrails
     data.meta ??= {};
