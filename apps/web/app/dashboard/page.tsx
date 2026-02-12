@@ -6,6 +6,11 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "../lib/supabase/browser";
 import { track } from "@/lib/analytics";
 import SchoolCodeInput from "../components/SchoolCodeInput";
+import AccountMenu from "../components/AccountMenu";
+import { useProfile } from "@/app/lib/useProfile";
+
+
+
 
 
 type LessonRow = {
@@ -40,6 +45,11 @@ function relativeTime(iso: string) {
 export default function DashboardPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
+  const [name, setName] = useState("");
+  const [credits, setCredits] = useState(0);
+  const [open, setOpen] = useState(false)
+  const { profile, } = useProfile();
+
 
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
@@ -49,6 +59,49 @@ export default function DashboardPage() {
   const [q, setQ] = useState("");
    const [deletingId, setDeletingId] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+
+
+  useEffect(() => {
+  async function loadProfile() {
+    const { data: userData } = await supabase.auth.getUser();
+    const user = userData?.user;
+    if (!user) return;
+
+    const { data } = await supabase
+      .from("profiles")
+      .select("full_name, credits_balance")
+      .eq("id", user.id)
+      .single();
+
+    if (!data) return;
+
+    setName(data.full_name?.split(" ")[0] || "");
+    setCredits(data.credits_balance || 0);
+  }
+
+  loadProfile();
+}, [supabase]);
+
+  useEffect(() => {
+  async function loadProfile() {
+    const { data: userData } = await supabase.auth.getUser();
+    const user = userData?.user;
+    if (!user) return;
+
+    const { data } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", user.id)
+      .single();
+
+    if (data?.full_name) {
+      setName(data.full_name.split(" ")[0]);
+    }
+  }
+
+  loadProfile();
+}, [supabase]);
+
 
   // Auth + initial load
   useEffect(() => {
@@ -129,66 +182,115 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       {/* Header */}
-      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 shadow-md" />
-            <div className="leading-tight">
-              <div className="font-semibold text-slate-900">LessonForge</div>
-              <div className="text-[11px] text-slate-600">Teacher Dashboard</div>
-            </div>
-          </Link>
+<header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
+  <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
 
-        <div className="flex items-center gap-2">
+    {/* LEFT — Logo */}
+    <Link href="/" className="flex items-center gap-2">
+      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 shadow-md" />
+      <div>
+        <div className="font-semibold text-slate-900">LessonForge</div>
+        <div className="text-[11px] text-slate-600">Teacher Dashboard</div>
+      </div>
+    </Link>
 
-  {/* 🔥 UPGRADE BUTTON */}
+    {/* RIGHT — Actions */}
+    <div className="flex items-center gap-4 relative">
 
-  <button
-    onClick={async () => {
-      const { data } = await supabase.auth.getUser();
-      const user = data.user;
-      if (!user) return;
-      track("start_payment", { plan: "pro_monthly", currency: "NGN" });
-      const res = await fetch("/api/paystack/initialize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_id: user.id,
-          email: user.email,
-          currency: "NGN",
-        }),
-      });
+      {/* Greeting */}
+      <span className="text-sm font-semibold text-slate-700 hidden sm:block">
+        Welcome{ name ? `, ${name}` : "" } 👋
+      </span>
 
-      const json = await res.json();
+      {/* Credits */}
+      <span className="text-xs bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full font-medium">
+        ⚡ {credits}
+      </span>
 
-      if (res.ok) {
-        window.location.href = json.authorization_url;
-      } else {
-        alert(json.error || "Payment failed");
-      }
-    }}
-    className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700"
-  > upgrade
-  </button>
+      {/* Upgrade */}
+     <button
+  onClick={async () => {
+    const { data } = await supabase.auth.getUser();
+    const user = data.user;
+    if (!user) return;
 
+    const res = await fetch("/api/paystack/initialize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: user.id,
+        email: user.email,
+        currency: "NGN",
+        tier: "basic", // ✅ BASIC
+      }),
+    });
 
-  <Link
-    href="/"
-    className="px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-900"
-  >
-    + Generate New
-  </Link>
+    const json = await res.json();
+    if (!res.ok) {
+  console.log(json); // 👈 show real error
+  throw new Error(json?.error || "Paystack init failed");
+}
 
-  <button
-    onClick={logout}
-    className="px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-900"
-  >
-    Logout
-  </button>
-</div>
+    window.location.href = json.authorization_url;
+  }}
+  className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50"
+>
+  Basic ₦2,000/mo
+</button>
 
-        </div>
-      </header>
+<button
+  onClick={async () => {
+    const { data } = await supabase.auth.getUser();
+    const user = data.user;
+    if (!user) return;
+
+    const res = await fetch("/api/paystack/initialize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: user.id,
+        email: user.email,
+        currency: "NGN",
+        tier: "pro", // ✅ PRO
+      }),
+    });
+
+    const json = await res.json();
+    if (!res.ok) throw new Error(json?.error || "Paystack init failed");
+
+    window.location.href = json.authorization_url;
+  }}
+  className="rounded-xl bg-slate-900 text-white px-4 py-2 text-sm font-semibold hover:bg-slate-800"
+>
+  Pro ₦5,000/mo
+</button>
+
+     
+<AccountMenu />
+
+     
+      {/* Dropdown */}
+     {open && (
+  <div className="absolute right-0 top-12 w-44 bg-white border rounded-xl shadow-lg p-2 text-sm animate-in fade-in zoom-in-95">
+
+    <div className="px-3 py-2 text-slate-600 text-xs">
+      Signed in as
+      <div className="font-semibold text-slate-900">{name}</div>
+    </div>
+
+    <hr className="my-2" />
+
+    <button
+      onClick={logout}
+      className="w-full text-left px-3 py-2 hover:bg-red-50 text-red-600 rounded-lg"
+    >
+      Logout
+    </button>
+  </div>
+)}
+    </div>
+  </div>
+</header>
 
       <main className="max-w-6xl mx-auto px-6 py-8">
         <div className="flex flex-col lg:flex-row lg:items-start gap-6">

@@ -211,6 +211,15 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+    const { data: creditData, error: creditErr } = await supabase.rpc("consume_generation_credit");
+
+if (creditErr) {
+  return NextResponse.json({ error: creditErr.message }, { status: 500 });
+}
+
+if (!creditData?.ok) {
+  return NextResponse.json({ error: creditData?.error || "No credits" }, { status: 402 });
+}
 
     // ✅ PAYWALL CHECK (use authenticated user id)
     const userId = user.id;

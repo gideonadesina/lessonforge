@@ -4,39 +4,45 @@ import { createAdminClient } from "../../../lib/supabase/admin";
 
 export async function POST(req: Request) {
   try {
-    const { user_id, email, currency } = (await req.json()) as {
-      user_id: string;
-      email: string;
-      currency: "NGN" | "USD";
-    };
+   const { user_id, email, currency, tier } = (await req.json()) as {
+  user_id: string;
+  email: string;
+  currency: "NGN" | "USD";
+  tier: "basic" | "pro";
+};
+
 
     if (!user_id || !email) {
       return NextResponse.json({ error: "Missing user_id or email" }, { status: 400 });
     }
 
-    const plan =
-      currency === "USD"
-        ? process.env.PAYSTACK_PLAN_CODE_USD
-        : process.env.PAYSTACK_PLAN_CODE_NGN;
+   const isNGN = currency === "NGN";
 
-    if (!plan) {
-      return NextResponse.json({ error: "Missing PAYSTACK_PLAN_CODE" }, { status: 500 });
-    }
+const plan =
+  tier === "pro"
+    ? (isNGN ? process.env.PAYSTACK_PLAN_CODE_PRO_NGN : process.env.PAYSTACK_PLAN_CODE_PRO_USD)
+    : (isNGN ? process.env.PAYSTACK_PLAN_CODE_BASIC_NGN : process.env.PAYSTACK_PLAN_CODE_BASIC_USD);
+
+if (!plan) return NextResponse.json({ error: "Missing PAYSTACK_PLAN_CODE for tier" }, { status: 500 });
+
+const amount =
+  tier === "pro"
+    ? (isNGN ? 500000 : 500) // adjust USD later
+    : (isNGN ? 200000 : 200);
 
     // ensure profile exists
     const admin = createAdminClient();
     await admin.from("profiles").upsert(
-      {
-        id: user_id,
-        paystack_email: email,
-        plan: currency,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "id" }
-    );
+  {
+    id: user_id,
+    paystack_email: email,
+    plan: tier, // ✅ basic | pro
+    updated_at: new Date().toISOString(),
+  },
+  { onConflict: "id" }
+);
 
-    // Initialize transaction with plan => Paystack creates subscription after first payment
-   const amount = currency === "NGN" ? 200000 : 500; // NGN in kobo, USD in cents (if you later add USD)
+
 
 const res = await fetch("https://api.paystack.co/transaction/initialize", {
   method: "POST",
@@ -47,10 +53,11 @@ const res = await fetch("https://api.paystack.co/transaction/initialize", {
     plan,                // ✅ keep this for subscription
     currency,
     callback_url: appUrl("/billing/success"),
-    metadata: {
-      user_id,
-      plan_currency: currency,
-    },
+   metadata: {
+  user_id,
+  tier,        // ✅ "basic" or "pro"
+  currency,
+},
   }),
 });
 
