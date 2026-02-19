@@ -1,1 +1,43 @@
 @import "tailwindcss";
+@media print {
+  /* Hide the whole app */
+  body * {
+    display: none !important;
+  }
+
+  /* Show only the printable area */
+  #print-area {
+    display: block !important;
+  }
+
+  #print-area * {
+    display: revert !important; /* IMPORTANT: don't force block */
+  }
+
+  #print-area {
+    position: static !important;
+    padding: 18px !important;
+    margin: 0 !important;
+    width: 100% !important;
+    color: #000 !important;
+    background: #fff !important;
+    font-family: Arial, sans-serif !important;
+    font-size: 12pt !important;
+    line-height: 1.5 !important;
+  }
+
+  /* If you use cards */
+  .print-card {
+    border: 1px solid #ddd !important;
+    padding: 12px !important;
+    margin: 0 0 12px 0 !important;
+    border-radius: 10px !important;
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+
+  .page-break {
+    break-before: page;
+    page-break-before: always;
+  }
+}

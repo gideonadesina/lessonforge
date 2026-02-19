@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/app/lib/supabase/browser";
+import { createBrowserSupabase } from "@/lib/supabase/browser";
 
 type Profile = {
   full_name: string | null;
@@ -11,7 +11,7 @@ type Profile = {
 };
 
 export default function AccountMenu() {
-  const supabase = useMemo(() => createClient(), []);
+  const supabase = useMemo(() => createBrowserSupabase(), []);
   const [open, setOpen] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(false);

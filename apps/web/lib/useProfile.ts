@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createClient } from "@/app/lib/supabase/browser";
+import { createBrowserSupabase } from "@/lib/supabase/browser";
 
 export type Profile = {
   full_name: string | null;
@@ -10,7 +10,7 @@ export type Profile = {
 };
 
 export function useProfile() {
-  const supabase = useMemo(() => createClient(), []);
+  const supabase = useMemo(() => createBrowserSupabase(), []);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const alive = useRef(true);

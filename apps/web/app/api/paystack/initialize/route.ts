@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { paystackHeaders, appUrl } from "../../../lib/paystack";
-import { createAdminClient } from "../../../lib/supabase/admin";
+import { paystackHeaders, appUrl } from "@/lib/paystack";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(req: Request) {
   try {

@@ -2,17 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { createClient } from "./lib/supabase/browser";
-import { youtubeSearchUrl } from "./lib/media";
-import SlideImage from "./components/SlideImage";
-import { useRouter } from "next/navigation";
+import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { youtubeSearchUrl } from "@/lib/media";
+import SlideImage from "@/components/SlideImage";
 import { track } from "@/lib/analytics";
-
 
 type LessonResult = any;
 
 export default function Home() {
-  const supabase = useMemo(() => createClient(), []);
+  const supabase = useMemo(() => createBrowserSupabase(), []);
   const [user, setUser] = useState<any>(null);
   const [authChecked, setAuthChecked] = useState(false);
 

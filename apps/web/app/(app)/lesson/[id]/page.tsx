@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { createClient } from "../../lib/supabase/browser";
- import { youtubeSearchUrl } from "../../lib/media";
+import { createBrowserSupabase } from "@/lib/supabase/browser";
+ import { youtubeSearchUrl } from "@/lib/media";
 
 
 type LessonRow = {
@@ -19,7 +19,7 @@ type LessonRow = {
 export default function LessonPage() {
   const router = useRouter();
   const params = useParams();
-  const supabase = useMemo(() => createClient(), []);
+  const supabase = useMemo(() => createBrowserSupabase(), []);
 
   const lessonId = Array.isArray((params as any)?.id) ? (params as any).id[0] : (params as any)?.id;
 

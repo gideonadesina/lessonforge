@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "../../../lib/supabase/admin";
+import { createAdminClient } from "@/lib/supabase/admin";
 import crypto from "crypto";
 
 export const runtime = "nodejs"; // Paystack signature verification needs Node crypto
@@ -30,34 +30,42 @@ export async function POST(req: Request) {
 
     // Minimal: handle successful charges (good enough for launch)
     if (event?.event === "charge.success") {
-      const data = event?.data ?? {};
-      const email = data?.customer?.email ?? null;
-      const subscriptionCode = data?.subscription?.subscription_code ?? null;
-      const customerCode = data?.customer?.customer_code ?? null;
+  const data = event?.data ?? {};
 
-      // If you passed user_id in metadata during initialize, use it:
-      const userId = data?.metadata?.user_id ?? null;
+  const email = data?.customer?.email ?? null;
+  const subscriptionCode = data?.subscription?.subscription_code ?? null;
+  const customerCode = data?.customer?.customer_code ?? null;
 
-      const admin = createAdminClient();
+  // ✅ TRUST METADATA (YOU SET THIS IN INITIALIZE)
+  const userId = data?.metadata?.user_id ?? null;
+  const tier = (data?.metadata?.tier ?? "basic") as "basic" | "pro";
 
-      if (userId) {
-        await admin
-          .from("profiles")
-          .update({
-            is_pro: true,
-            plan: "pro_monthly",
-            paystack_email: email,
-            paystack_subscription_code: subscriptionCode,
-            paystack_customer_code: customerCode,
-          })
-          .eq("id", userId);
-      }
-    }
+  if (!userId) {
+    return NextResponse.json({ received: true, warning: "Missing user_id in metadata" }, { status: 200 });
+  }
 
-    // Paystack expects 200
-    return NextResponse.json({ received: true }, { status: 200 });
-  } catch (e: any) {
-    console.error("Paystack webhook error:", e);
-    return NextResponse.json({ error: "Webhook error" }, { status: 500 });
+  const allowance = tier === "pro" ? 60 : 20;
+
+  const admin = createAdminClient();
+
+  await admin
+    .from("profiles")
+    .update({
+      plan: tier,                                // "basic" | "pro"
+      is_pro: tier === "pro",                    // ✅ only pro=true
+      credits_monthly_allowance: allowance,      // ✅ 20 or 60
+      credits_balance: allowance,                // ✅ reset to allowance on payment
+      credits_reset_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      paystack_email: email,
+      paystack_subscription_code: subscriptionCode,
+      paystack_customer_code: customerCode,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", userId);
+  }
+
+  } catch (error) {
+    console.error("Webhook error:", error);
+    return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
   }
 }

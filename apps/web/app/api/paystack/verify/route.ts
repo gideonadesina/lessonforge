@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { paystackHeaders } from "../../../lib/paystack";
-import { createAdminClient } from "../../../lib/supabase/admin";
+import { paystackHeaders } from "@/lib/paystack";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -34,7 +34,7 @@ export async function GET(req: Request) {
         {
           id: user_id,
           is_pro: true,
-          free_credits: 999999, // optional (or leave credits as-is)
+          free_credits: 1, // optional (or leave credits as-is)
           pro_expires_at: new Date(Date.now() + 32 * 24 * 60 * 60 * 1000).toISOString(),
           plan: currency,
           paystack_subscription_code: subscription_code ?? null,
