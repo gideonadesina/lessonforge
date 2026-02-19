@@ -3,12 +3,25 @@
 import { useEffect, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 
+type Plan = "free" | "basic" | "pro";
+
 type Profile = {
   email: string | null;
-  plan: string | null;
-  free_credits: number;
-  is_pro: boolean;
+  plan: Plan;
+  credits_balance: number;
 };
+
+function normalizePlan(plan: string | null): Plan {
+  const p = (plan ?? "free").toLowerCase();
+  if (p === "basic" || p === "pro" || p === "free") return p;
+  return "free";
+}
+
+function getPlanDisplay(plan: Plan) {
+  if (plan === "basic") return { label: "Basic", colorClass: "text-slate-900" };
+  if (plan === "pro") return { label: "Pro", colorClass: "text-green-600" };
+  return { label: "Free Trial", colorClass: "text-slate-900" };
+}
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -32,17 +45,20 @@ export default function SettingsPage() {
         return;
       }
 
-      const { data } = await supabase
+      // ✅ Use the REAL fields that should tally everywhere:
+      // plan + credits_balance (NOT free_credits, NOT is_pro)
+      const { data, error } = await supabase
         .from("profiles")
-        .select("email, plan, free_credits, is_pro")
+        .select("email, plan, credits_balance")
         .eq("id", user.id)
         .single();
 
+      if (error) throw error;
+
       setProfile({
         email: data?.email ?? user.email ?? "",
-        plan: data?.plan ?? "free",
-        free_credits: data?.free_credits ?? 0,
-        is_pro: data?.is_pro ?? false,
+        plan: normalizePlan(data?.plan ?? "free"),
+        credits_balance: Number(data?.credits_balance ?? 0),
       });
     } catch (err) {
       console.error(err);
@@ -71,15 +87,15 @@ export default function SettingsPage() {
     );
   }
 
-  return (
-    <div className="space-y-6">
+  const planInfo = getPlanDisplay(profile?.plan ?? "free");
+  const isPro = profile?.plan === "pro";
 
+  return (
+     <div className="space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-slate-900">Settings</h1>
-        <p className="text-slate-600 mt-1">
-          Manage your account and plan.
-        </p>
+        <p className="text-slate-600 mt-1">Manage your account and plan.</p>
       </div>
 
       {/* Account Info */}
@@ -87,42 +103,32 @@ export default function SettingsPage() {
         <h2 className="font-semibold text-slate-900 mb-4">Account</h2>
 
         <div className="space-y-3 text-sm">
-
-          <div className="flex justify-between">
+           <div className="flex justify-between">
             <span className="text-slate-500">Email</span>
-            <span className="font-medium text-slate-900">
-              {profile?.email}
-            </span>
+            <span className="font-medium text-slate-900">{profile?.email}</span>
           </div>
 
           <div className="flex justify-between">
             <span className="text-slate-500">Plan</span>
-            <span
-              className={`font-medium ${
-                profile?.is_pro
-                  ? "text-green-600"
-                  : "text-slate-900"
-              }`}
-            >
-              {profile?.is_pro ? "Pro" : "Free"}
+            <span className={`font-medium ${planInfo.colorClass}`}>
+              {planInfo.label}
             </span>
           </div>
 
           <div className="flex justify-between">
             <span className="text-slate-500">Remaining Credits</span>
             <span className="font-medium text-slate-900">
-              {profile?.free_credits}
+              {profile?.credits_balance ?? 0}
             </span>
           </div>
-
-        </div>
+         </div>
       </div>
 
       {/* Billing */}
       <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
         <h2 className="font-semibold text-slate-900 mb-4">Billing</h2>
 
-        {profile?.is_pro ? (
+        {isPro ? (
           <div className="text-green-600 text-sm font-medium">
             You are on Pro plan.
           </div>
@@ -133,9 +139,7 @@ export default function SettingsPage() {
             </div>
 
             <button
-              onClick={() =>
-                (window.location.href = "/pricing")
-              }
+              onClick={() => (window.location.href = "/pricing")}
               className="bg-violet-600 text-white px-4 py-2 rounded-xl hover:bg-violet-700 text-sm font-semibold"
             >
               Upgrade to Pro
@@ -146,9 +150,7 @@ export default function SettingsPage() {
 
       {/* Logout */}
       <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-        <h2 className="font-semibold text-slate-900 mb-4">
-          Danger Zone
-        </h2>
+        <h2 className="font-semibold text-slate-900 mb-4">Danger Zone</h2>
 
         <button
           onClick={logout}
@@ -158,7 +160,6 @@ export default function SettingsPage() {
           {loggingOut ? "Logging out..." : "Logout"}
         </button>
       </div>
-
-    </div>
+      </div>
   );
 }

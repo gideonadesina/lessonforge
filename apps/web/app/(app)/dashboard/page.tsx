@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import SchoolCodeInput from "@/components/SchoolCodeInput";
-import AccountMenu from "@/components/AccountMenu";
 import { useProfile } from "@/lib/useProfile";
 
 type LessonRow = {
@@ -43,10 +42,9 @@ export default function DashboardPage() {
   const router = useRouter();
   const supabase = useMemo(() => createBrowserSupabase(), []);
 
-  const { profile } = useProfile();
+  // ✅ Single source of truth for plan + credits
+  const { profile, creditsRemaining, planLabel } = useProfile();
 
-  const [name, setName] = useState("");
-  const [credits, setCredits] = useState(0);
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
   const [lessons, setLessons] = useState<LessonRow[]>([]);
@@ -97,33 +95,6 @@ export default function DashboardPage() {
     };
   }, [router, supabase]);
 
-  // Load profile (name + credits) from profiles table
-  useEffect(() => {
-    let alive = true;
-
-    async function loadProfile() {
-      const { data: userData } = await supabase.auth.getUser();
-      const user = userData?.user;
-      if (!user || !alive) return;
-
-      const { data } = await supabase
-        .from("profiles")
-        .select("full_name, credits_balance")
-        .eq("id", user.id)
-        .single();
-
-      if (!data || !alive) return;
-
-      setName(data.full_name?.split(" ")[0] || "");
-      setCredits(data.credits_balance || 0);
-    }
-
-    loadProfile();
-    return () => {
-      alive = false;
-    };
-  }, [supabase]);
-
   async function logout() {
     setMsg(null);
     await supabase.auth.signOut();
@@ -153,10 +124,9 @@ export default function DashboardPage() {
   // ----- Dashboard metrics (simple but useful) -----
   const stats = useMemo(() => {
     const totalLessons = lessons.length;
-    const savedToLibrary = lessons.length; // you currently store lessons in lessons table (library-like)
-    const worksheetsCreated = 0; // wire later when worksheets table is ready
+    const savedToLibrary = lessons.length;
+    const worksheetsCreated = 0;
 
-    // estimate recent (last 7 days)
     const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const recent7d = lessons.filter((l) => {
       const t = new Date(l.created_at).getTime();
@@ -183,7 +153,9 @@ export default function DashboardPage() {
     for (const l of lessons) {
       const t = new Date(l.created_at);
       if (Number.isNaN(t.getTime())) continue;
-      const diffDays = Math.floor((t.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+      const diffDays = Math.floor(
+        (t.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)
+      );
       if (diffDays >= 0 && diffDays < days) buckets[diffDays] += 1;
     }
 
@@ -195,8 +167,6 @@ export default function DashboardPage() {
   }, [lessons]);
 
   const recent = useMemo(() => lessons.slice(0, 8), [lessons]);
-// Plan display (safe – no Profile fields needed)
-const planLabel = credits > 5 ? "Pro ₦5,000/mo" : "Basic ₦2,000/mo";
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -279,7 +249,7 @@ const planLabel = credits > 5 ? "Pro ₦5,000/mo" : "Basic ₦2,000/mo";
           />
           <KpiCard
             title="Credits Remaining"
-            value={loading ? "—" : String(credits)}
+            value={loading ? "—" : String(creditsRemaining)}
             sub="Used to generate content"
           />
         </div>
@@ -292,11 +262,16 @@ const planLabel = credits > 5 ? "Pro ₦5,000/mo" : "Basic ₦2,000/mo";
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm font-semibold text-slate-900">Generation Activity</div>
+                  <div className="text-sm font-semibold text-slate-900">
+                    Generation Activity
+                  </div>
                   <div className="text-xs text-slate-600 mt-1">Last 7 days</div>
                 </div>
                 <div className="text-xs text-slate-600">
-                  Total: <span className="font-semibold text-slate-900">{stats.recent7d}</span>
+                  Total:{" "}
+                  <span className="font-semibold text-slate-900">
+                    {stats.recent7d}
+                  </span>
                 </div>
               </div>
 
@@ -308,7 +283,9 @@ const planLabel = credits > 5 ? "Pro ₦5,000/mo" : "Basic ₦2,000/mo";
                       style={{ height: `${b.heightPct}%` }}
                       title={`${b.value} generated`}
                     />
-                    <div className="text-[10px] text-slate-500">{i === 6 ? "Today" : "•"}</div>
+                    <div className="text-[10px] text-slate-500">
+                      {i === 6 ? "Today" : "•"}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -318,7 +295,9 @@ const planLabel = credits > 5 ? "Pro ₦5,000/mo" : "Basic ₦2,000/mo";
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-semibold text-slate-900">Recent Lesson Packs</div>
+                  <div className="text-sm font-semibold text-slate-900">
+                    Recent Lesson Packs
+                  </div>
                   <div className="text-xs text-slate-600 mt-1">
                     Quick access to your latest saved lessons
                   </div>
@@ -366,7 +345,8 @@ const planLabel = credits > 5 ? "Pro ₦5,000/mo" : "Basic ₦2,000/mo";
                     ) : recent.length === 0 ? (
                       <tr>
                         <td colSpan={5} className="py-8 text-center text-slate-600">
-                          No lessons yet. Click <span className="font-semibold">Generate Lesson Pack</span>.
+                          No lessons yet. Click{" "}
+                          <span className="font-semibold">Generate Lesson Pack</span>.
                         </td>
                       </tr>
                     ) : (
@@ -417,7 +397,8 @@ const planLabel = credits > 5 ? "Pro ₦5,000/mo" : "Basic ₦2,000/mo";
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="font-bold text-slate-900">Plan & Billing</div>
               <p className="text-sm text-slate-700 mt-2">
-                Current plan: <span className="font-semibold text-slate-900">{planLabel}</span>
+                Current plan:{" "}
+                <span className="font-semibold text-slate-900">{planLabel}</span>
               </p>
               <div className="mt-3 grid grid-cols-1 gap-2">
                 <Link
