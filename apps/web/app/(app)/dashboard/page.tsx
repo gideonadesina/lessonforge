@@ -48,6 +48,7 @@ export default function DashboardPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
   const [lessons, setLessons] = useState<LessonRow[]>([]);
+  const [worksheetsCount, setWorksheetsCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const [msg, setMsg] = useState<string | null>(null);
@@ -83,6 +84,21 @@ export default function DashboardPage() {
         } else {
           setLessons((rows as LessonRow[]) ?? []);
         }
+        
+       
+        const { count: wsCount, error: wsErr } = await supabase
+  .from("worksheets")
+  .select("id", { count: "exact", head: true });
+
+if (!alive) return;
+
+if (wsErr) {
+  console.warn("Failed to load worksheets count:", wsErr.message);
+  setWorksheetsCount(0);
+} else {
+  setWorksheetsCount(wsCount ?? 0);
+}
+
       } catch (e: any) {
         setMsg(`Dashboard error: ${e?.message ?? String(e)}`);
       } finally {
@@ -125,7 +141,8 @@ export default function DashboardPage() {
   const stats = useMemo(() => {
     const totalLessons = lessons.length;
     const savedToLibrary = lessons.length;
-    const worksheetsCreated = 0;
+    const worksheetsCreated = worksheetsCount;
+
 
     const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const recent7d = lessons.filter((l) => {
@@ -139,7 +156,8 @@ export default function DashboardPage() {
       worksheetsCreated,
       recent7d,
     };
-  }, [lessons]);
+  }, [lessons, worksheetsCount]);
+
 
   // Chart-ish placeholder bars based on recent activity (last 7 days buckets)
   const activityBars = useMemo(() => {

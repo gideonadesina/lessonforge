@@ -207,17 +207,24 @@ if (authError || !user) {
         { status: 400 }
       );
     }
-    const { data: creditData, error: creditErr } = await supabase.rpc("consume_generation_credit");
+   const { data: creditData, error: creditErr } =
+  await supabase.rpc("consume_generation_credit");
 
 if (creditErr) {
-  return NextResponse.json({ error: creditErr.message }, { status: 500 });
+  // RPC error (rare)
+  return NextResponse.json({ error: "Credit check failed", detail: creditErr.message }, { status: 500 });
 }
 
 if (!creditData?.ok) {
   const msg = creditData?.error || "No credits";
-  const status = msg.toLowerCase().includes("not authenticated") ? 401 : 402;
+  const status =
+    msg.toLowerCase().includes("not authenticated") ? 401 : 402;
+
   return NextResponse.json({ error: msg }, { status });
 }
+
+// ✅ optional: you can use this to return to UI
+const newBalance = creditData.credits_balance as number;
 
 
     if (!body?.subject || !body?.topic || !body?.grade) {
