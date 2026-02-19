@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@/app/lib/supabase/browser";
+import { createBrowserSupabase } from "@/lib/supabase/browser";
 
 export default function UserGreeting() {
-  const supabase = useMemo(() => createClient(), []);
+  const supabase = useMemo(() => createBrowserSupabase(), []);
   const [name, setName] = useState("");
 
   useEffect(() => {

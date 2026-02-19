@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { createAdminClient } from "../../lib/supabase/admin";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
