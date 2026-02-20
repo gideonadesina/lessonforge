@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser"
+import { useEffect } from "react";
+
 
 type Mode = "login" | "signup";
 
@@ -19,6 +21,14 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+
+    useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        router.push("/dashboard");
+      }
+    });
+  }, [router, supabase]);
 
   async function ensureProfile() {
     const { data } = await supabase.auth.getUser();
@@ -90,7 +100,7 @@ export default function LoginPage() {
         }
         return;
       }
-
+        
       // After login, ensure profile exists (good for old users)
       await ensureProfile();
 
@@ -216,21 +226,17 @@ export default function LoginPage() {
                   <div className="mt-1 text-xs text-slate-500">Minimum 6 characters.</div>
                 </div>
 
-                {mode === "login" && (
-                  <div className="flex justify-end">
-                    <button
-                      type="button"
-                      className="text-sm text-indigo-600 hover:text-indigo-700"
-                      onClick={() =>
-                        setMsg("Forgot password flow coming soon. For now, reset in Supabase Auth or add password reset later.")
-                      }
-                    >
-                      Forgot password?
-                    </button>
-                  </div>
-                )}
-
-                <button
+               {mode === "login" && (
+  <div className="flex justify-end">
+    <Link
+      href="/forgot-password"
+      className="text-sm text-indigo-600 hover:text-indigo-700"
+    >
+      Forgot password?
+    </Link>
+  </div>
+)}
+            <button
                   type="submit"
                   disabled={loading}
                   className="w-full rounded-2xl bg-slate-900 text-white px-5 py-3 font-semibold shadow-sm hover:bg-slate-800 disabled:opacity-60"

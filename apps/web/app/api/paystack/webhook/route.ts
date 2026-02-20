@@ -44,7 +44,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ received: true, warning: "Missing user_id in metadata" }, { status: 200 });
   }
 
-  const allowance = tier === "pro" ? 60 : 20;
+  const allowance = tier === "pro" ? 50 : 20;
 
   const admin = createAdminClient();
 
@@ -53,7 +53,7 @@ export async function POST(req: Request) {
     .update({
       plan: tier,                                // "basic" | "pro"
       is_pro: tier === "pro",                    // ✅ only pro=true
-      credits_monthly_allowance: allowance,      // ✅ 20 or 60
+      credits_monthly_allowance: allowance,      // ✅ 20 or 50
       credits_balance: allowance,                // ✅ reset to allowance on payment
       credits_reset_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       paystack_email: email,

@@ -193,6 +193,7 @@ if (authError || !user) {
   );
 }
 
+
     // 4) Parse JSON body safely (no req.text)
     let body: GeneratePayload;
     try {
@@ -214,6 +215,14 @@ if (creditErr) {
   // RPC error (rare)
   return NextResponse.json({ error: "Credit check failed", detail: creditErr.message }, { status: 500 });
 }
+
+if (!user?.email_confirmed_at) {
+  return NextResponse.json(
+    { error: "Please confirm your email before generating lessons." },
+    { status: 403 }
+  );
+}
+
 
 if (!creditData?.ok) {
   const msg = creditData?.error || "No credits";
