@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import {
@@ -24,22 +24,26 @@ const nav = [
   { href: "/generate", label: "Generate", icon: Sparkles },
   { href: "/library", label: "Library", icon: Library },
   { href: "/worksheets", label: "Worksheets", icon: FileText },
-  // ✅ FIXED: remove space/caps so it matches your actual route
   { href: "/exam-builder", label: "Exam Builder", icon: ClipboardList },
   { href: "/school", label: "School", icon: School },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({
+  open,
+  setOpen,
+}: {
+  open: boolean;
+  setOpen: (v: boolean) => void;
+}) {
   const pathname = usePathname();
-  const supabase = createBrowserSupabase();
+
+  // ✅ create supabase client once
+  const supabase = useMemo(() => createBrowserSupabase(), []);
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [email, setEmail] = useState<string>("");
   const [uploading, setUploading] = useState(false);
-
-  // Drawer state (mobile/tablet)
-  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     loadUser();
@@ -97,10 +101,7 @@ export default function Sidebar() {
 
       const url = publicUrl.publicUrl;
 
-      await supabase
-        .from("profiles")
-        .update({ avatar_url: url })
-        .eq("id", user.id);
+      await supabase.from("profiles").update({ avatar_url: url }).eq("id", user.id);
 
       setProfile((p) => ({ ...(p ?? {}), avatar_url: url }));
     } catch (err) {
@@ -117,7 +118,6 @@ export default function Sidebar() {
       profile?.full_name || email || "User"
     )}&background=6366f1&color=fff`;
 
-  // ---- Your existing sidebar UI (UNCHANGED) ----
   const SidebarCard = ({ onNavigate }: { onNavigate?: () => void }) => (
     <aside className="h-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       {/* User */}
@@ -151,7 +151,8 @@ export default function Sidebar() {
       {/* Nav */}
       <nav className="mt-4 flex flex-col gap-1">
         {nav.map((item) => {
-          const active = pathname === item.href;
+          const active =
+            pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = item.icon;
 
           return (
@@ -185,22 +186,9 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile + Tablet top bar (shows below lg) */}
-      <div className="sticky top-0 z-40 flex items-center gap-3 border-b bg-white/90 backdrop-blur px-4 py-3 lg:hidden">
-        <button
-          aria-label="Open menu"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white"
-          onClick={() => setOpen(true)}
-        >
-          <span className="text-xl leading-none">☰</span>
-        </button>
-
-        <div className="font-semibold text-slate-900">LessonForge</div>
-      </div>
-
       {/* Desktop sidebar (lg+) fixed left */}
       <div className="hidden lg:block">
-        <div className="fixed inset-y-0 left-0 z-30 w-80 p-4">
+        <div className="fixed inset-y-0 left-0 z-30 w-72 p-4">
           <SidebarCard />
         </div>
       </div>
