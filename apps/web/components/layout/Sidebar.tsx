@@ -9,6 +9,7 @@ import {
   Sparkles,
   Library,
   FileText,
+  ClipboardList,
   School,
   Settings,
 } from "lucide-react";
@@ -23,6 +24,8 @@ const nav = [
   { href: "/generate", label: "Generate", icon: Sparkles },
   { href: "/library", label: "Library", icon: Library },
   { href: "/worksheets", label: "Worksheets", icon: FileText },
+  // ✅ FIXED: remove space/caps so it matches your actual route
+  { href: "/exam-builder", label: "Exam Builder", icon: ClipboardList },
   { href: "/school", label: "School", icon: School },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -35,10 +38,23 @@ export default function Sidebar() {
   const [email, setEmail] = useState<string>("");
   const [uploading, setUploading] = useState(false);
 
+  // Drawer state (mobile/tablet)
+  const [open, setOpen] = useState(false);
+
   useEffect(() => {
     loadUser();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Prevent body scroll when drawer is open
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
 
   async function loadUser() {
     const { data } = await supabase.auth.getUser();
@@ -81,7 +97,10 @@ export default function Sidebar() {
 
       const url = publicUrl.publicUrl;
 
-      await supabase.from("profiles").update({ avatar_url: url }).eq("id", user.id);
+      await supabase
+        .from("profiles")
+        .update({ avatar_url: url })
+        .eq("id", user.id);
 
       setProfile((p) => ({ ...(p ?? {}), avatar_url: url }));
     } catch (err) {
@@ -98,7 +117,8 @@ export default function Sidebar() {
       profile?.full_name || email || "User"
     )}&background=6366f1&color=fff`;
 
-  return (
+  // ---- Your existing sidebar UI (UNCHANGED) ----
+  const SidebarCard = ({ onNavigate }: { onNavigate?: () => void }) => (
     <aside className="h-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       {/* User */}
       <div className="flex items-center gap-3 pb-4 border-b border-slate-200">
@@ -138,6 +158,7 @@ export default function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
+              onClick={onNavigate}
               className={[
                 "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition",
                 active
@@ -160,5 +181,61 @@ export default function Sidebar() {
         </p>
       </div>
     </aside>
+  );
+
+  return (
+    <>
+      {/* Mobile + Tablet top bar (shows below lg) */}
+      <div className="sticky top-0 z-40 flex items-center gap-3 border-b bg-white/90 backdrop-blur px-4 py-3 lg:hidden">
+        <button
+          aria-label="Open menu"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white"
+          onClick={() => setOpen(true)}
+        >
+          <span className="text-xl leading-none">☰</span>
+        </button>
+
+        <div className="font-semibold text-slate-900">LessonForge</div>
+      </div>
+
+      {/* Desktop sidebar (lg+) fixed left */}
+      <div className="hidden lg:block">
+        <div className="fixed inset-y-0 left-0 z-30 w-80 p-4">
+          <SidebarCard />
+        </div>
+      </div>
+
+      {/* Mobile/Tablet overlay */}
+      {open && (
+        <button
+          aria-label="Close menu overlay"
+          className="fixed inset-0 z-40 bg-black/30 lg:hidden"
+          onClick={() => setOpen(false)}
+        />
+      )}
+
+      {/* Mobile/Tablet drawer */}
+      <div
+        className={[
+          "fixed inset-y-0 left-0 z-50 w-[86vw] max-w-[360px] p-4 lg:hidden",
+          "transition-transform duration-200 ease-out",
+          open ? "translate-x-0" : "-translate-x-full",
+        ].join(" ")}
+      >
+        {/* Drawer header */}
+        <div className="mb-3 flex items-center justify-between">
+          <div className="font-semibold text-slate-900">Menu</div>
+          <button
+            aria-label="Close menu"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white"
+            onClick={() => setOpen(false)}
+          >
+            ✕
+          </button>
+        </div>
+
+        <SidebarCard onNavigate={() => setOpen(false)} />
+      </div>
+    </>
   );
 }

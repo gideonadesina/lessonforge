@@ -5,8 +5,9 @@ import { createBrowserSupabase } from "@/lib/supabase/browser";
 
 export default function Topbar({ userEmail }: { userEmail: string }) {
   const [loading, setLoading] = useState(false);
+  const [showPlans, setShowPlans] = useState(false);
 
-  // ✅ FIX: create supabase client once
+  // ✅ create supabase client once
   const supabase = useMemo(() => createBrowserSupabase(), []);
 
   async function logout() {
@@ -51,12 +52,9 @@ export default function Topbar({ userEmail }: { userEmail: string }) {
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between">
-
       {/* LEFT */}
-      <div>
-        <div className="text-sm font-semibold text-slate-900">
-          Welcome 👋
-        </div>
+      <div className="min-w-0">
+        <div className="text-sm font-semibold text-slate-900">Welcome 👋</div>
         <div className="text-xs text-slate-500 truncate">
           {userEmail || "Signed in"}
         </div>
@@ -72,7 +70,42 @@ export default function Topbar({ userEmail }: { userEmail: string }) {
 
       {/* RIGHT */}
       <div className="flex items-center gap-2">
+        {/* ✅ MOBILE: single Upgrade button that reveals Basic/Pro */}
+        <div className="relative sm:hidden">
+          <button
+            onClick={() => setShowPlans((v) => !v)}
+            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+            aria-expanded={showPlans}
+            aria-label="Upgrade plan"
+          >
+            Upgrade
+          </button>
 
+          {showPlans && (
+            <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg z-50">
+              <button
+                onClick={() => {
+                  setShowPlans(false);
+                  upgradePlan("basic");
+                }}
+                className="w-full px-4 py-3 text-left text-sm font-semibold hover:bg-slate-50"
+              >
+                Basic ₦2,000/mo
+              </button>
+              <button
+                onClick={() => {
+                  setShowPlans(false);
+                  upgradePlan("pro");
+                }}
+                className="w-full px-4 py-3 text-left text-sm font-semibold hover:bg-slate-50"
+              >
+                Pro ₦5,000/mo
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* ✅ TABLET + DESKTOP: show both buttons */}
         <button
           onClick={() => upgradePlan("basic")}
           className="hidden sm:inline-flex rounded-xl border bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50"
@@ -94,8 +127,7 @@ export default function Topbar({ userEmail }: { userEmail: string }) {
         >
           {loading ? "Logging out..." : "Logout"}
         </button>
-
-      </div>
+       </div>
     </div>
   );
-}
+ }
