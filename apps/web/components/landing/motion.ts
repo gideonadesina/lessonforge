@@ -31,5 +31,5 @@ export const staggerParent: Variants = {
 
 export const cardHover = {
   y: -6,
-  transition: { duration: 0.2, ease: "easeOut" },
+  transition: { duration: 0.2 },
 };
