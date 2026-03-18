@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import SchoolCodeInput from "@/components/SchoolCodeInput";
 import { useProfile } from "@/lib/useProfile";
+import { getRoleHomePath, roleFromUserMetadata } from "@/lib/auth/roles";
 
 type LessonRow = {
   id: string;
@@ -65,6 +66,12 @@ export default function DashboardPage() {
 
         if (!data?.user) {
           router.push("/login");
+          return;
+        }
+
+        const userRole = roleFromUserMetadata(data.user.user_metadata);
+        if (userRole === "principal") {
+          router.push(getRoleHomePath(userRole));
           return;
         }
 

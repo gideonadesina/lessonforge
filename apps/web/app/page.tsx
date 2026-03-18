@@ -369,7 +369,7 @@ setResult(json.data);
         <div className="flex items-center gap-2">
           {!user ? (
             <Link
-              href="/login"
+              href="/select-role"
               className="flex items-center gap-2 group hover:bg-slate-50 text-xs font-medium text-slate-700 tracking-wide bg-white border border-slate-200 rounded-lg pt-2.5 pr-4 pb-2.5 pl-4 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
             >
               <span className="uppercase tracking-wide text-[10px] font-semibold">Login</span>
@@ -703,7 +703,7 @@ setResult(json.data);
 
       <div className="flex gap-2">
         {!user ? (
-          <Link className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-50" href="/login">
+          <Link className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-50" href="/select-role">
             Login to Save
           </Link>
         ) : (

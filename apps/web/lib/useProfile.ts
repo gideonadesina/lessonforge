@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { roleFromUserMetadata, type AppRole } from "@/lib/auth/roles";
 
 export type Plan = "free" | "basic" | "pro";
 
@@ -9,6 +10,7 @@ export type Profile = {
   full_name: string | null;
   avatar_url: string | null;
   email: string | null;
+  app_role: AppRole | null;
 
   // NEW: make UI tally everywhere
   plan: Plan;
@@ -74,6 +76,7 @@ export function useProfile() {
           full_name: prof?.full_name ?? null,
           avatar_url: prof?.avatar_url ?? null,
           email: prof?.email ?? null,
+          app_role: roleFromUserMetadata(user.user_metadata),
 
           plan: normalizedPlan,
           credits_balance: Number(prof?.credits_balance ?? 0),
@@ -99,6 +102,7 @@ export function useProfile() {
 
     // extra helpers: use these in Settings + Dashboard so they tally
     plan: profile?.plan ?? "free",
+    role: profile?.app_role ?? null,
     planLabel: planInfo.label,
     planPriceLabel: planInfo.priceLabel,
 
