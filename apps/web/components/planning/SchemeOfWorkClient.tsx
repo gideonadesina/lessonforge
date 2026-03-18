@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import {
   createSchemeEntry,
@@ -61,15 +61,23 @@ function validateSchemeForm(form: SchemeFormState) {
   return errors;
 }
 
-export default function SchemeOfWorkClient({ userId }: { userId: string }) {
+export default function SchemeOfWorkClient({
+  userId,
+  initialRows,
+  initialError,
+}: {
+  userId: string;
+  initialRows: SchemeOfWorkRow[];
+  initialError?: string | null;
+}) {
   const supabase = useMemo(() => createBrowserSupabase(), []);
 
   const [draftFilters, setDraftFilters] =
     useState<SchemeOfWorkFilters>(EMPTY_FILTERS);
   const [filters, setFilters] = useState<SchemeOfWorkFilters>(EMPTY_FILTERS);
 
-  const [rows, setRows] = useState<SchemeOfWorkRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [rows, setRows] = useState<SchemeOfWorkRow[]>(initialRows);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -79,17 +87,18 @@ export default function SchemeOfWorkClient({ userId }: { userId: string }) {
     Partial<Record<keyof SchemeFormState, string>>
   >({});
 
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError ?? null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const loadEntries = useCallback(async () => {
+  async function loadEntries(nextFilters?: SchemeOfWorkFilters) {
     setLoading(true);
     setError(null);
 
+    const activeFilters = nextFilters ?? filters;
     const normalizedFilters: SchemeOfWorkFilters = {
-      class_name: filters.class_name?.trim() || undefined,
-      subject: filters.subject?.trim() || undefined,
-      term: filters.term?.trim() || undefined,
+      class_name: activeFilters.class_name?.trim() || undefined,
+      subject: activeFilters.subject?.trim() || undefined,
+      term: activeFilters.term?.trim() || undefined,
     };
 
     const { data, error: queryError } = await listSchemeOfWork(
@@ -106,11 +115,7 @@ export default function SchemeOfWorkClient({ userId }: { userId: string }) {
     }
 
     setLoading(false);
-  }, [filters.class_name, filters.subject, filters.term, supabase, userId]);
-
-  useEffect(() => {
-    void loadEntries();
-  }, [loadEntries]);
+  }
 
   const groupedByWeek = useMemo(() => {
     const groups = new Map<number, SchemeOfWorkRow[]>();
@@ -206,16 +211,20 @@ export default function SchemeOfWorkClient({ userId }: { userId: string }) {
 
   function onFilterSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setFilters({
+    const nextFilters = {
       class_name: draftFilters.class_name ?? "",
       subject: draftFilters.subject ?? "",
       term: draftFilters.term ?? "",
-    });
+    };
+    setFilters(nextFilters);
+    void loadEntries(nextFilters);
   }
 
   function onClearFilters() {
-    setDraftFilters(EMPTY_FILTERS);
-    setFilters(EMPTY_FILTERS);
+    const cleared = { ...EMPTY_FILTERS };
+    setDraftFilters(cleared);
+    setFilters(cleared);
+    void loadEntries(cleared);
   }
 
   return (

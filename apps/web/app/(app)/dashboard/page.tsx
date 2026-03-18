@@ -50,6 +50,11 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const supabase = useMemo(() => createBrowserSupabase(), []);
@@ -123,8 +128,8 @@ export default function DashboardPage() {
           setAcademicEvents(eventsRes.data);
         }
 
-      } catch (e: any) {
-        setMsg(`Dashboard error: ${e?.message ?? String(e)}`);
+      } catch (e: unknown) {
+        setMsg(`Dashboard error: ${getErrorMessage(e)}`);
       } finally {
         if (alive) setLoading(false);
       }
@@ -154,8 +159,8 @@ export default function DashboardPage() {
 
       setLessons((prev) => prev.filter((x) => x.id !== id));
       setMsg("Deleted ✅");
-    } catch (e: any) {
-      setMsg(`Delete failed: ${e?.message ?? String(e)}`);
+    } catch (e: unknown) {
+      setMsg(`Delete failed: ${getErrorMessage(e)}`);
     } finally {
       setDeletingId(null);
     }

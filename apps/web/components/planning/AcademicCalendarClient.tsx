@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import {
   createAcademicEvent,
@@ -40,11 +40,19 @@ function validateAcademicForm(form: AcademicCalendarFormState) {
   return errors;
 }
 
-export default function AcademicCalendarClient({ userId }: { userId: string }) {
+export default function AcademicCalendarClient({
+  userId,
+  initialRows,
+  initialError,
+}: {
+  userId: string;
+  initialRows: AcademicCalendarRow[];
+  initialError?: string | null;
+}) {
   const supabase = useMemo(() => createBrowserSupabase(), []);
 
-  const [rows, setRows] = useState<AcademicCalendarRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [rows, setRows] = useState<AcademicCalendarRow[]>(initialRows);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -54,7 +62,7 @@ export default function AcademicCalendarClient({ userId }: { userId: string }) {
     Partial<Record<keyof AcademicCalendarFormState, string>>
   >({});
 
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError ?? null);
   const [success, setSuccess] = useState<string | null>(null);
 
   const loadEvents = useCallback(async () => {
@@ -71,10 +79,6 @@ export default function AcademicCalendarClient({ userId }: { userId: string }) {
 
     setLoading(false);
   }, [supabase, userId]);
-
-  useEffect(() => {
-    void loadEvents();
-  }, [loadEvents]);
 
   function resetForm() {
     setForm(DEFAULT_FORM);
