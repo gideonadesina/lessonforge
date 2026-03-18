@@ -11,6 +11,7 @@ import {
   FileText,
   ClipboardList,
   School,
+  ShieldCheck,
   Settings,
 } from "lucide-react";
 
@@ -26,6 +27,7 @@ const nav = [
   { href: "/worksheets", label: "Worksheets", icon: FileText },
   { href: "/exam-builder", label: "Exam Builder", icon: ClipboardList },
   { href: "/school", label: "School", icon: School },
+  { href: "/principal", label: "Principal", icon: ShieldCheck },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
