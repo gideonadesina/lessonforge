@@ -205,8 +205,8 @@ export default function RoleAuthPage() {
       setMsg("Logged in. Redirecting...");
       router.push(getRoleHomePath(role));
       router.refresh();
-    } catch (err: any) {
-      setMsg(String(err?.message ?? err));
+    } catch (err: unknown) {
+      setMsg(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
