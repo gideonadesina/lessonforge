@@ -1,4 +1,25 @@
 @import "tailwindcss";
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: #faf9f6;
+  color: #0f172a;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgba(126, 34, 206, 0.22);
+  color: #3b0764;
+}
+
 @media print {
   /* Hide the whole app */
   body * {
