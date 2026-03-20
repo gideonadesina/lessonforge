@@ -4,8 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
- import { youtubeSearchUrl } from "@/lib/media";
-
+import { youtubeSearchUrl } from "@/lib/media";
 
 type LessonRow = {
   id: string;
@@ -13,19 +12,29 @@ type LessonRow = {
   topic: string | null;
   grade: string | null;
   curriculum: string | null;
+  created_at?: string | null;
   result_json: any;
 };
+
+const FALLBACK_IMG =
+  "https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?w=1200";
 
 export default function LessonPage() {
   const router = useRouter();
   const params = useParams();
   const supabase = useMemo(() => createBrowserSupabase(), []);
 
-  const lessonId = Array.isArray((params as any)?.id) ? (params as any).id[0] : (params as any)?.id;
+  const lessonId = Array.isArray((params as any)?.id)
+    ? (params as any).id[0]
+    : (params as any)?.id;
 
   const [loading, setLoading] = useState(true);
-   const [row, setRow] = useState<LessonRow | null>(null);
+  const [row, setRow] = useState<LessonRow | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<{
+    src: string;
+    title: string;
+  } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -46,11 +55,11 @@ export default function LessonPage() {
           setMsg("Missing lesson id.");
           setLoading(false);
           return;
-       }
+        }
 
         const { data, error } = await supabase
           .from("lessons")
-          .select("id, subject, topic, grade, curriculum,created_at, result_json")
+          .select("id, subject, topic, grade, curriculum, created_at, result_json")
           .eq("id", lessonId)
           .single();
 
@@ -74,9 +83,283 @@ export default function LessonPage() {
     };
   }, [lessonId, router, supabase]);
 
+  useEffect(() => {
+  if (!row) return;
+
+  const result = row.result_json ?? {};
+  const meta = result?.meta ?? {};
+
+  (window as any).__FORGE_CONTEXT__ = {
+    page: "lesson",
+    lessonId: row.id,
+    currentLesson: {
+      id: row.id,
+      subject: meta?.subject ?? row.subject,
+      topic: meta?.topic ?? row.topic,
+      grade: meta?.grade ?? row.grade,
+      curriculum: meta?.curriculum ?? row.curriculum,
+      schoolLevel: meta?.schoolLevel ?? "",
+      numberOfSlides: meta?.numberOfSlides ?? "",
+      durationMins: meta?.durationMins ?? "",
+      lessonPlan: result?.lessonPlan ?? null,
+      lessonNotes: result?.lessonNotes ?? "",
+      references: result?.references ?? [],
+      slides: Array.isArray(result?.slides) ? result.slides : [],
+      quiz: result?.quiz ?? {},
+      liveApplications: result?.liveApplications ?? [],
+    },
+    hasLoadedLesson: true,
+  };
+
+  return () => {
+    const current = (window as any).__FORGE_CONTEXT__;
+    if (current?.page === "lesson") {
+      delete (window as any).__FORGE_CONTEXT__;
+    }
+  };
+}, [row]);
+
+  function downloadFile(
+    filename: string,
+    content: string,
+    type = "text/plain;charset=utf-8"
+  ) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    URL.revokeObjectURL(url);
+  }
+
+  function handleDownloadImage(src: string, title: string) {
+    const a = document.createElement("a");
+    a.href = src;
+    a.download = `${
+      title.replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_") || "slide-image"
+    }.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  function buildLessonStructureText() {
+    if (!row) return "";
+
+    const result = row.result_json ?? {};
+    const meta = result?.meta ?? {};
+    const lessonPlan = result?.lessonPlan ?? {};
+    const slides = Array.isArray(result?.slides) ? result.slides : [];
+    const mcq = Array.isArray(result?.quiz?.mcq) ? result.quiz.mcq : [];
+    const theory = Array.isArray(result?.quiz?.theory) ? result.quiz.theory : [];
+    const liveApps = Array.isArray(result?.liveApplications)
+      ? result.liveApplications
+      : [];
+
+    const lines: string[] = [];
+
+    lines.push("LESSONFORGE LESSON / CURRICULUM STRUCTURE REPORT");
+    lines.push("=".repeat(55));
+    lines.push("");
+    lines.push(`Subject: ${meta.subject ?? row.subject ?? ""}`);
+    lines.push(`Topic: ${meta.topic ?? row.topic ?? ""}`);
+    lines.push(`Class: ${meta.grade ?? row.grade ?? ""}`);
+    lines.push(`Curriculum: ${meta.curriculum ?? row.curriculum ?? ""}`);
+    lines.push(`School Level: ${meta.schoolLevel ?? ""}`);
+    lines.push(`Number of Slides: ${meta.numberOfSlides ?? slides.length ?? 0}`);
+    lines.push(`Duration: ${meta.durationMins ?? ""} minutes`);
+    lines.push("");
+
+    if (lessonPlan?.title) {
+      lines.push("LESSON PLAN TITLE");
+      lines.push("-".repeat(20));
+      lines.push(String(lessonPlan.title));
+      lines.push("");
+    }
+
+    if (
+      Array.isArray(lessonPlan?.performanceObjectives) &&
+      lessonPlan.performanceObjectives.length
+    ) {
+      lines.push("PERFORMANCE OBJECTIVES");
+      lines.push("-".repeat(24));
+      lessonPlan.performanceObjectives.forEach((item: string, i: number) => {
+        lines.push(`${i + 1}. ${item}`);
+      });
+      lines.push("");
+    }
+
+    if (
+      Array.isArray(lessonPlan?.instructionalMaterials) &&
+      lessonPlan.instructionalMaterials.length
+    ) {
+      lines.push("INSTRUCTIONAL MATERIALS");
+      lines.push("-".repeat(23));
+      lessonPlan.instructionalMaterials.forEach((item: string, i: number) => {
+        lines.push(`${i + 1}. ${item}`);
+      });
+      lines.push("");
+    }
+
+    if (lessonPlan?.previousKnowledge) {
+      lines.push("PREVIOUS KNOWLEDGE");
+      lines.push("-".repeat(18));
+      lines.push(String(lessonPlan.previousKnowledge));
+      lines.push("");
+    }
+
+    if (lessonPlan?.introduction) {
+      lines.push("INTRODUCTION");
+      lines.push("-".repeat(12));
+      lines.push(String(lessonPlan.introduction));
+      lines.push("");
+    }
+
+    if (Array.isArray(lessonPlan?.steps) && lessonPlan.steps.length) {
+      lines.push("LESSON DELIVERY STEPS");
+      lines.push("-".repeat(21));
+      lessonPlan.steps.forEach((step: any, i: number) => {
+        lines.push(`Step ${step?.step ?? i + 1}: ${step?.title ?? "Lesson Step"}`);
+        if (step?.teacherActivity) {
+          lines.push(`Teacher Activity: ${step.teacherActivity}`);
+        }
+        if (step?.learnerActivity) {
+          lines.push(`Learner Activity: ${step.learnerActivity}`);
+        }
+        if (step?.concretisedLearningPoint) {
+          lines.push(`Learning Point: ${step.concretisedLearningPoint}`);
+        }
+        lines.push("");
+      });
+    }
+
+    if (Array.isArray(lessonPlan?.evaluation) && lessonPlan.evaluation.length) {
+      lines.push("EVALUATION");
+      lines.push("-".repeat(10));
+      lessonPlan.evaluation.forEach((item: string, i: number) => {
+        lines.push(`${i + 1}. ${item}`);
+      });
+      lines.push("");
+    }
+
+    if (Array.isArray(lessonPlan?.assignment) && lessonPlan.assignment.length) {
+      lines.push("ASSIGNMENT");
+      lines.push("-".repeat(10));
+      lessonPlan.assignment.forEach((item: string, i: number) => {
+        lines.push(`${i + 1}. ${item}`);
+      });
+      lines.push("");
+    }
+
+    if (
+      Array.isArray(lessonPlan?.realLifeConnection) &&
+      lessonPlan.realLifeConnection.length
+    ) {
+      lines.push("REAL-LIFE CONNECTION");
+      lines.push("-".repeat(20));
+      lessonPlan.realLifeConnection.forEach((item: string, i: number) => {
+        lines.push(`${i + 1}. ${item}`);
+      });
+      lines.push("");
+    }
+
+    if (result?.lessonNotes) {
+      lines.push("LESSON NOTES");
+      lines.push("-".repeat(12));
+      lines.push(String(result.lessonNotes));
+      lines.push("");
+    }
+
+    if (slides.length) {
+      lines.push("SLIDE STRUCTURE");
+      lines.push("-".repeat(15));
+      slides.forEach((slide: any, i: number) => {
+        lines.push(`${i + 1}. ${slide?.title ?? `Slide ${i + 1}`}`);
+        const bullets = Array.isArray(slide?.bullets) ? slide.bullets : [];
+        bullets.forEach((b: string) => lines.push(`- ${b}`));
+        if (slide?.interactivePrompt) {
+          lines.push(`Activity: ${slide.interactivePrompt}`);
+        }
+        if (slide?.imageQuery) {
+          lines.push(`Image Focus: ${slide.imageQuery}`);
+        }
+        if (slide?.videoQuery) {
+          lines.push(`Video Search: ${slide.videoQuery}`);
+        }
+        lines.push("");
+      });
+    }
+
+    if (mcq.length) {
+      lines.push("MULTIPLE CHOICE QUESTIONS");
+      lines.push("-".repeat(25));
+      mcq.forEach((item: any, i: number) => {
+        lines.push(`${i + 1}. ${item?.q ?? "Question"}`);
+        const options = Array.isArray(item?.options) ? item.options : [];
+        options.forEach((opt: string, j: number) => {
+          lines.push(`   ${String.fromCharCode(65 + j)}. ${opt}`);
+        });
+        if (typeof item?.answerIndex === "number") {
+          lines.push(`   Answer: ${String.fromCharCode(65 + item.answerIndex)}`);
+        }
+        lines.push("");
+      });
+    }
+
+    if (theory.length) {
+      lines.push("THEORY QUESTIONS");
+      lines.push("-".repeat(16));
+      theory.forEach((item: any, i: number) => {
+        lines.push(`${i + 1}. ${item?.q ?? "Question"}`);
+        if (item?.markingGuide) {
+          lines.push(`Marking Guide: ${item.markingGuide}`);
+        }
+        lines.push("");
+      });
+      lines.push("");
+    }
+
+    if (liveApps.length) {
+      lines.push("LIVE / REAL-WORLD APPLICATIONS");
+      lines.push("-".repeat(30));
+      liveApps.forEach((item: string, i: number) => {
+        lines.push(`${i + 1}. ${item}`);
+      });
+      lines.push("");
+    }
+
+    lines.push("Generated with LessonForge");
+    return lines.join("\n");
+  }
+
+  function handleDownloadLessonStructure() {
+    if (!row) return;
+
+    const result = row.result_json ?? {};
+    const meta = result?.meta ?? {};
+
+    const safeSubject = String(meta?.subject ?? row.subject ?? "subject")
+      .replace(/[^\w\s-]/g, "")
+      .trim()
+      .replace(/\s+/g, "_");
+
+    const safeTopic = String(meta?.topic ?? row.topic ?? "topic")
+      .replace(/[^\w\s-]/g, "")
+      .trim()
+      .replace(/\s+/g, "_");
+
+    const content = buildLessonStructureText();
+    downloadFile(`LessonForge_${safeSubject}_${safeTopic}_Structure.txt`, content);
+  }
+
   if (loading) {
     return (
-      <div className="max-w-5xl mx-auto p-6 md:p-10 text-slate-900">
+      <div className="mx-auto max-w-5xl p-6 text-slate-900 md:p-10">
         <div className="rounded-2xl border bg-white p-6">Loading lesson…</div>
       </div>
     );
@@ -84,16 +367,24 @@ export default function LessonPage() {
 
   if (!row) {
     return (
-      <div className="max-w-5xl mx-auto p-6 md:p-10 text-slate-900 space-y-4">
+      <div className="mx-auto max-w-5xl space-y-4 p-6 text-slate-900 md:p-10">
         <div className="rounded-2xl border bg-white p-6">
-          <div className="font-bold text-lg">Couldn’t load lesson</div>
-          <div className="text-sm text-slate-700 mt-1">{msg ?? "Unknown error"}</div>
+          <div className="text-lg font-bold">Couldn’t load lesson</div>
+          <div className="mt-1 text-sm text-slate-700">
+            {msg ?? "Unknown error"}
+          </div>
 
           <div className="mt-4 flex gap-2">
-            <Link href="/dashboard" className="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 font-medium">
+            <Link
+              href="/dashboard"
+              className="rounded-xl border bg-white px-4 py-2 font-medium hover:bg-slate-50"
+            >
               Back to Dashboard
             </Link>
-            <Link href="/" className="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 font-medium">
+            <Link
+              href="/"
+              className="rounded-xl border bg-white px-4 py-2 font-medium hover:bg-slate-50"
+            >
               New Lesson
             </Link>
           </div>
@@ -103,216 +394,358 @@ export default function LessonPage() {
   }
 
   const result = row.result_json ?? {};
-  const objectives: string[] = Array.isArray(result?.objectives) ? result.objectives : [];
+  const meta = result?.meta ?? {};
+  const lessonPlan = result?.lessonPlan ?? null;
   const slides: any[] = Array.isArray(result?.slides) ? result.slides : [];
-
   const quiz = result?.quiz ?? {};
   const mcq: any[] = Array.isArray(quiz?.mcq) ? quiz.mcq : [];
   const theory: any[] = Array.isArray(quiz?.theory) ? quiz.theory : [];
-const chunk = <T,>(arr: T[], size: number) =>
-  Array.from({ length: Math.ceil(arr.length / size) }, (_, i) =>
-    arr.slice(i * size, i * size + size)
-  );
-
-// 4 MCQs per slide → 10 MCQs becomes 3 slides (Slides 10–12 if you have 9 normal slides)
-const mcqSlides = chunk(mcq, 4).map((group, idx) => ({
-  title: `📝 MULTIPLE CHOICE QUESTIONS (${idx + 1}/${Math.ceil(mcq.length / 4)})`,
-  bullets: [] as string[],
-  mcqGroup: group,
-}));
+  const liveApps: string[] = Array.isArray(result?.liveApplications)
+    ? result.liveApplications
+    : [];
 
   return (
-    <div className="max-w-5xl mx-auto p-6 md:p-10 space-y-6 text-slate-900">
-      {/* Header */}
+    <div className="mx-auto max-w-5xl space-y-6 p-6 text-slate-900 md:p-10">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">
-            {row.subject}
-            {row.topic ? ` • ${row.topic}` : ""}
+            {meta?.subject ?? row.subject}
+            {(meta?.topic ?? row.topic) ? ` • ${meta?.topic ?? row.topic}` : ""}
           </h1>
           <p className="mt-1 text-sm text-slate-700">
-            Grade: <span className="font-medium">{row.grade}</span>
-            {row.curriculum ? (
+            <span className="font-medium">{meta?.grade ?? row.grade}</span>
+            {meta?.curriculum ?? row.curriculum ? (
               <>
                 {" "}
-                • Curriculum: <span className="font-medium">{row.curriculum}</span>
+                • Curriculum:{" "}
+                <span className="font-medium">
+                  {meta?.curriculum ?? row.curriculum}
+                </span>
               </>
-             ) : null}
+            ) : null}
+            {meta?.schoolLevel ? (
+              <>
+                {" "}
+                • Level: <span className="font-medium">{meta.schoolLevel}</span>
+              </>
+            ) : null}
+            {meta?.numberOfSlides ? (
+              <>
+                {" "}
+                • Slides:{" "}
+                <span className="font-medium">{meta.numberOfSlides}</span>
+              </>
+            ) : null}
           </p>
         </div>
 
-        <div className="flex gap-2">
-          <Link href="/dashboard" className="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 font-medium">
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handleDownloadLessonStructure}
+            className="rounded-xl border bg-white px-4 py-2 font-medium hover:bg-slate-50"
+          >
+            Download Structure
+          </button>
+          <Link
+            href="/dashboard"
+            className="rounded-xl border bg-white px-4 py-2 font-medium hover:bg-slate-50"
+          >
             Back
           </Link>
-          <Link href="/" className="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 font-medium">
+          <Link
+            href="/"
+            className="rounded-xl border bg-white px-4 py-2 font-medium hover:bg-slate-50"
+          >
             New Lesson
           </Link>
         </div>
       </div>
 
-      {/* Objectives */}
-      <section className="rounded-2xl border bg-white p-5">
-        <h2 className="text-xl font-semibold mb-3">Objectives</h2>
-        {objectives.length ? (
-          <ul className="list-disc pl-6 space-y-1">
-            {objectives.map((o, i) => (
-              <li key={i} className="leading-relaxed">
-                {o}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-slate-700">No objectives found.</p>
-        )}
-      </section>
+      {lessonPlan ? (
+        <section className="rounded-2xl border bg-white p-5 space-y-5">
+          <h2 className="text-xl font-semibold">Lesson Plan</h2>
 
-      {/* Lesson Notes */}
+          {lessonPlan?.title ? (
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Title
+              </div>
+              <div className="mt-1 text-sm text-slate-800">{lessonPlan.title}</div>
+            </div>
+          ) : null}
+
+          {Array.isArray(lessonPlan?.performanceObjectives) &&
+          lessonPlan.performanceObjectives.length ? (
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Performance Objectives
+              </div>
+              <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
+                {lessonPlan.performanceObjectives.map((item: string, i: number) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {Array.isArray(lessonPlan?.instructionalMaterials) &&
+          lessonPlan.instructionalMaterials.length ? (
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Instructional Materials
+              </div>
+              <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
+                {lessonPlan.instructionalMaterials.map((item: string, i: number) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {lessonPlan?.previousKnowledge ? (
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Previous Knowledge
+              </div>
+              <div className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
+                {lessonPlan.previousKnowledge}
+              </div>
+            </div>
+          ) : null}
+
+          {lessonPlan?.introduction ? (
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Introduction
+              </div>
+              <div className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
+                {lessonPlan.introduction}
+              </div>
+            </div>
+          ) : null}
+
+          {Array.isArray(lessonPlan?.steps) && lessonPlan.steps.length ? (
+            <div className="space-y-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Lesson Delivery Steps
+              </div>
+
+              {lessonPlan.steps.map((step: any, i: number) => (
+                <div
+                  key={i}
+                  className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2"
+                >
+                  <div className="font-semibold text-slate-900">
+                    Step {step?.step ?? i + 1}: {step?.title || "Lesson Step"}
+                  </div>
+
+                  {step?.teacherActivity ? (
+                    <div className="text-sm text-slate-800">
+                      <span className="font-semibold">Teacher Activity:</span>{" "}
+                      {step.teacherActivity}
+                    </div>
+                  ) : null}
+
+                  {step?.learnerActivity ? (
+                    <div className="text-sm text-slate-800">
+                      <span className="font-semibold">Learner Activity:</span>{" "}
+                      {step.learnerActivity}
+                    </div>
+                  ) : null}
+
+                  {step?.concretisedLearningPoint ? (
+                    <div className="text-sm text-slate-800">
+                      <span className="font-semibold">Learning Point:</span>{" "}
+                      {step.concretisedLearningPoint}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {Array.isArray(lessonPlan?.evaluation) && lessonPlan.evaluation.length ? (
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Evaluation
+              </div>
+              <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
+                {lessonPlan.evaluation.map((item: string, i: number) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {Array.isArray(lessonPlan?.assignment) && lessonPlan.assignment.length ? (
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Assignment
+              </div>
+              <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
+                {lessonPlan.assignment.map((item: string, i: number) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {Array.isArray(lessonPlan?.realLifeConnection) &&
+          lessonPlan.realLifeConnection.length ? (
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Real-life Connection
+              </div>
+              <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
+                {lessonPlan.realLifeConnection.map((item: string, i: number) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       <section className="rounded-2xl border bg-white p-5">
-        <h2 className="text-xl font-semibold mb-3">Lesson Notes</h2>
+        <h2 className="mb-3 text-xl font-semibold">Lesson Notes</h2>
         <div className="whitespace-pre-wrap leading-relaxed text-slate-900">
           {result?.lessonNotes || "No lesson notes found."}
         </div>
       </section>
 
-      {/* Slides */}
+      {Array.isArray(result?.references) && result.references.length ? (
+  <section className="rounded-2xl border bg-white p-5">
+    <h2 className="mb-4 text-xl font-semibold">References</h2>
+
+    <ul className="list-disc pl-6 space-y-1 text-sm text-slate-800">
+      {result.references.map((ref: string, i: number) => (
+        <li key={i}>{ref}</li>
+      ))}
+    </ul>
+  </section>
+) : null}
+
       <section className="rounded-2xl border bg-white p-5">
-        <h2 className="text-xl font-semibold mb-4">Slides</h2>
+        <h2 className="mb-4 text-xl font-semibold">Slides</h2>
 
         {slides.length ? (
           <div className="grid gap-4">
-           {slides.map((s: any, i: number) => {
-  // ✅ MCQ slide rendering
-  if (s.kind === "mcq") {
-    return (
-      <div key={`mcq-${i}`} className="rounded-xl border p-4 bg-slate-50">
-        <div className="flex items-center justify-between gap-3 mb-3">
-          <div className="font-semibold text-slate-900">
-            {i + 1}. {s.title}
-          </div>
-          <span className="text-xs px-2 py-1 rounded-full border bg-white text-slate-700">
-            Slide {i + 1}
-          </span>
-        </div>
+            {slides.map((s: any, i: number) => {
+              const title = s?.title || `Slide ${i + 1}`;
+              const bullets: string[] = Array.isArray(s?.bullets) ? s.bullets : [];
+              const imgSrc = s?.image || FALLBACK_IMG;
+              const videoQuery = s?.videoQuery || title || row.topic || "";
 
-        <ol className="space-y-4">
-          {(s.mcqGroup ?? []).map((q: any, qi: number) => (
-            <li key={qi} className="text-slate-900">
-              <div className="font-medium">
-                {q?.q || "Question"}
-              </div>
-
-              <div className="mt-2 space-y-1">
-                {(Array.isArray(q?.options) ? q.options : []).map(
-                  (opt: string, oi: number) => (
-                    <div key={oi}>
-                      <span className="font-semibold">
-                        {String.fromCharCode(65 + oi)}.
-                      </span>{" "}
-                      {opt}
+              return (
+                <div key={i} className="rounded-xl border p-4 bg-slate-50">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="font-semibold text-slate-900">
+                      {i + 1}. {title}
                     </div>
-                  )
-                )}
-              </div>
-            </li>
-          ))}
-        </ol>
-      </div>
-    );
-  }
+                    <span className="rounded-full border bg-white px-2 py-1 text-xs text-slate-700">
+                      Slide {i + 1}
+                    </span>
+                  </div>
 
-  // ✅ Normal slide rendering (your existing UI)
-  const title = s?.title || `Slide ${i + 1}`;
-  const bullets: string[] = Array.isArray(s?.bullets) ? s.bullets : [];
-  const imgQuery = s?.imageQuery || title || row.topic || "education";
-  const videoQuery = s?.videoQuery || title || row.topic || "";
+                  <div className="rounded-xl overflow-hidden border bg-white mb-3">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewImage({ src: imgSrc, title })}
+                      className="block w-full text-left"
+                    >
+                      <img
+                        src={imgSrc}
+                        alt={title}
+                        className="h-48 w-full object-cover transition hover:scale-[1.01]"
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          e.currentTarget.src = FALLBACK_IMG;
+                        }}
+                      />
+                    </button>
+                  </div>
 
-  return (
-    <div key={i} className="rounded-xl border p-4 bg-slate-50">
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <div className="font-semibold text-slate-900">
-          {i + 1}. {title}
-        </div>
-        <span className="text-xs px-2 py-1 rounded-full border bg-white text-slate-700">
-          Slide {i + 1}
-        </span>
-      </div>
+                  <div className="mb-3 flex flex-wrap gap-3 text-sm">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewImage({ src: imgSrc, title })}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-800 hover:bg-slate-100"
+                    >
+                      View full image
+                    </button>
 
-      <div className="rounded-xl overflow-hidden border bg-white mb-3">
-  {s?.image ? (
-    <img
-      src={s.image}
-      alt={title}
-      className="w-full h-48 object-cover"
-      loading="lazy"
-      referrerPolicy="no-referrer"
-    />
-  ) : (
-    <div className="w-full h-48 flex items-center justify-center text-sm text-slate-600 bg-slate-100">
-      No image saved for this slide
-    </div>
-  )}
-</div>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadImage(imgSrc, title)}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-800 hover:bg-slate-100"
+                    >
+                      Download image
+                    </button>
+                  </div>
 
-      {bullets.length ? (
-        <ul className="list-disc pl-6 space-y-1">
-          {bullets.map((b: string, j: number) => (
-            <li key={j}>{b}</li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-sm text-slate-700">No bullet points.</p>
-      )}
+                  {bullets.length ? (
+                    <ul className="list-disc pl-6 space-y-1">
+                      {bullets.map((b: string, j: number) => (
+                        <li key={j}>{b}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-slate-700">No bullet points.</p>
+                  )}
 
-      <div className="mt-3 flex flex-wrap gap-3 text-sm">
-        {videoQuery ? (
-          <a
-            href={youtubeSearchUrl(videoQuery)}
-            target="_blank"
-            rel="noreferrer"
-            className="text-blue-600 underline font-semibold"
-          >
-            🎥 Watch video
-          </a>
-        ) : null}
-      </div>
+                  <div className="mt-3 flex flex-wrap gap-3 text-sm">
+                    {videoQuery ? (
+                      <a
+                        href={youtubeSearchUrl(videoQuery)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-semibold text-blue-600 underline"
+                      >
+                        🎥 Watch video
+                      </a>
+                    ) : null}
+                  </div>
 
-      {s?.interactivePrompt ? (
-        <div className="mt-3 p-3 rounded-xl border bg-yellow-50 text-sm">
-          <b>👩🏽‍🏫 Classroom Activity:</b> {s.interactivePrompt}
-        </div>
-      ) : null}
-    </div>
-  );
-})}
-
+                  {s?.interactivePrompt ? (
+                    <div className="mt-3 rounded-xl border bg-yellow-50 p-3 text-sm">
+                      <b>👩🏽‍🏫 Classroom Activity:</b> {s.interactivePrompt}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         ) : (
           <p className="text-sm text-slate-700">No slides found.</p>
         )}
       </section>
 
-      {/* Student Questions */}
       <section className="rounded-2xl border bg-white p-5">
-        <h2 className="text-xl font-semibold mb-4">Student Questions</h2>
+        <h2 className="mb-4 text-xl font-semibold">Student Questions</h2>
 
         {mcq.length ? (
           <div className="space-y-4">
             {mcq.map((q: any, i: number) => (
               <div key={i} className="rounded-xl border p-4 bg-slate-50">
-                <div className="font-semibold mb-2">
+                <div className="mb-2 font-semibold">
                   {i + 1}. {q?.q || "Question"}
                 </div>
                 <ul className="list-disc pl-6 space-y-1">
-                  {(Array.isArray(q?.options) ? q.options : []).map((opt: string, j: number) => (
-                    <li key={j}>{opt}</li>
-                  ))}
+                  {(Array.isArray(q?.options) ? q.options : []).map(
+                    (opt: string, j: number) => (
+                      <li key={j}>{opt}</li>
+                    )
+                  )}
                 </ul>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-sm text-slate-700">No multiple choice questions found.</p>
+          <p className="text-sm text-slate-700">
+            No multiple choice questions found.
+          </p>
         )}
 
         {theory.length ? (
@@ -320,17 +753,70 @@ const mcqSlides = chunk(mcq, 4).map((group, idx) => ({
             <h3 className="text-lg font-semibold">Theory</h3>
             {theory.map((t: any, i: number) => (
               <div key={i} className="rounded-xl border p-4 bg-slate-50">
-                <div className="font-semibold">{i + 1}. {t?.q || "Theory question"}</div>
-                {t?.answerGuide ? (
+                <div className="font-semibold">
+                  {i + 1}. {t?.q || "Theory question"}
+                </div>
+                {t?.markingGuide ? (
                   <div className="mt-2 text-sm text-slate-700">
-                    <b>Marking guide:</b> {t.answerGuide}
+                    <b>Marking guide:</b> {t.markingGuide}
                   </div>
                 ) : null}
               </div>
             ))}
           </div>
         ) : null}
+
+        {liveApps.length ? (
+          <div className="mt-6 space-y-2">
+            <h3 className="text-lg font-semibold">Real-life Applications</h3>
+            <ul className="list-disc pl-6 space-y-1">
+              {liveApps.map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </section>
+
+      {previewImage ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-5xl rounded-2xl bg-white p-4 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="text-base font-bold text-slate-900">
+                {previewImage.title}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleDownloadImage(previewImage.src, previewImage.title)
+                  }
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100"
+                >
+                  Download
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPreviewImage(null)}
+                  className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            <div className="max-h-[75vh] overflow-auto rounded-xl border bg-slate-50 p-2">
+              <img
+                src={previewImage.src}
+                alt={previewImage.title}
+                className="mx-auto h-auto max-w-full rounded-lg"
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

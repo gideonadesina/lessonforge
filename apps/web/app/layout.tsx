@@ -73,7 +73,7 @@ export default function RootLayout({
 
   return (
     <html lang="en">
-      <body className="antialiased min-h-screen bg-slate-50">
+           <body className="min-h-screen antialiased bg-[#FAF9F6]">
         {/* ✅ Google Analytics */}
         {GA_ID && (
           <>

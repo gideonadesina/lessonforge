@@ -38,6 +38,8 @@ export default function LibraryPage() {
   const [sort, setSort] = useState<SortMode>("newest");
 
   const [active, setActive] = useState<LessonRow | null>(null);
+  
+  const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
 
   async function load() {
     setLoading(true);
@@ -89,7 +91,7 @@ export default function LibraryPage() {
   const slides: any[] = Array.isArray(gen?.slides) ? gen.slides : [];
   const mcq: any[] = Array.isArray(gen?.quiz?.mcq) ? gen.quiz.mcq : [];
   const theory: any[] = Array.isArray(gen?.quiz?.theory) ? gen.quiz.theory : [];
-  const objectives: string[] = Array.isArray(gen?.objectives) ? gen.objectives : [];
+  const lessonPlan = gen?.lessonPlan ?? null;
   const liveApps: string[] = Array.isArray(gen?.liveApplications) ? gen.liveApplications : [];
 
   return (
@@ -100,24 +102,158 @@ export default function LibraryPage() {
         <div className="mt-1 text-xl font-extrabold text-slate-900">{topic || "Lesson"}</div>
         <div className="mt-1 text-sm text-slate-600">
           {subject ? <span className="font-semibold text-slate-800">{subject}</span> : null}
-          {meta?.grade ? <span> • Grade {meta.grade}</span> : null}
+          {meta?.grade ? <span> • {meta.grade}</span> : null}
           {meta?.curriculum ? <span> • {meta.curriculum}</span> : null}
           {meta?.durationMins ? <span> • {meta.durationMins} mins</span> : null}
         </div>
       </div>
 
-      {/* Objectives */}
-      {objectives.length ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-4">
-          <h3 className="text-sm font-bold text-slate-900">Objectives</h3>
-          <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
-            {objectives.map((o, i) => (
-              <li key={i}>{o}</li>
-            ))}
-          </ul>
+            {/* Lesson Plan */}
+      {lessonPlan ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-5">
+          <h3 className="text-sm font-bold text-slate-900">Lesson Plan</h3>
+
+          {lessonPlan?.title ? (
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Title
+              </div>
+              <div className="mt-1 text-sm text-slate-800">{lessonPlan.title}</div>
+            </div>
+          ) : null}
+
+          {Array.isArray(lessonPlan?.performanceObjectives) &&
+          lessonPlan.performanceObjectives.length ? (
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Performance Objectives
+              </div>
+              <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
+                {lessonPlan.performanceObjectives.map((item: string, i: number) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {Array.isArray(lessonPlan?.instructionalMaterials) &&
+          lessonPlan.instructionalMaterials.length ? (
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Instructional Materials
+              </div>
+              <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
+                {lessonPlan.instructionalMaterials.map((item: string, i: number) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {lessonPlan?.previousKnowledge ? (
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Previous Knowledge
+              </div>
+              <div className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
+                {lessonPlan.previousKnowledge}
+              </div>
+            </div>
+          ) : null}
+
+          {lessonPlan?.introduction ? (
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Introduction
+              </div>
+              <div className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
+                {lessonPlan.introduction}
+              </div>
+            </div>
+          ) : null}
+
+          {Array.isArray(lessonPlan?.steps) && lessonPlan.steps.length ? (
+            <div className="space-y-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Lesson Delivery Steps
+              </div>
+
+              {lessonPlan.steps.map((step: any, i: number) => (
+                <div
+                  key={i}
+                  className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2"
+                >
+                  <div className="font-semibold text-slate-900">
+                    Step {step?.step ?? i + 1}: {step?.title || "Lesson Step"}
+                  </div>
+
+                  {step?.teacherActivity ? (
+                    <div className="text-sm text-slate-800">
+                      <span className="font-semibold">Teacher Activity:</span>{" "}
+                      {step.teacherActivity}
+                    </div>
+                  ) : null}
+
+                  {step?.learnerActivity ? (
+                    <div className="text-sm text-slate-800">
+                      <span className="font-semibold">Learner Activity:</span>{" "}
+                      {step.learnerActivity}
+                    </div>
+                  ) : null}
+
+                  {step?.concretisedLearningPoint ? (
+                    <div className="text-sm text-slate-800">
+                      <span className="font-semibold">Learning Point:</span>{" "}
+                      {step.concretisedLearningPoint}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {Array.isArray(lessonPlan?.evaluation) && lessonPlan.evaluation.length ? (
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Evaluation
+              </div>
+              <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
+                {lessonPlan.evaluation.map((item: string, i: number) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {Array.isArray(lessonPlan?.assignment) && lessonPlan.assignment.length ? (
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Assignment
+              </div>
+              <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
+                {lessonPlan.assignment.map((item: string, i: number) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {Array.isArray(lessonPlan?.realLifeConnection) &&
+          lessonPlan.realLifeConnection.length ? (
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Real-life Connection
+              </div>
+              <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
+                {lessonPlan.realLifeConnection.map((item: string, i: number) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </section>
       ) : null}
-
+      
       {/* Lesson Notes */}
       {gen?.lessonNotes ? (
         <section className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -158,18 +294,40 @@ export default function LibraryPage() {
                   </div>
 
                   {/* Image */}
-                  <div className="rounded-xl overflow-hidden border bg-slate-100">
-                    <img
-                      src={img}
-                      alt={title}
-                      className="w-full h-48 object-cover"
-                      onError={(e) => {
-                        e.currentTarget.src =
-                          "https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?w=1200";
-                      }}
-                    />
-                  </div>
+                <div className="rounded-xl overflow-hidden border bg-slate-100">
+  <button
+    type="button"
+    onClick={() => setPreviewImage({ src: img, title })}
+    className="block w-full text-left"
+  >
+    <img
+      src={img}
+      alt={title}
+      className="w-full h-48 object-cover transition hover:scale-[1.01]"
+      onError={(e) => {
+        e.currentTarget.src =
+          "https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?w=1200";
+      }}
+    />
+  </button>
+</div>
+<div className="flex flex-wrap gap-3 text-sm">
+  <button
+    type="button"
+    onClick={() => setPreviewImage({ src: img, title })}
+    className="rounded-lg border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-800 hover:bg-slate-100"
+  >
+    View full image
+  </button>
 
+  <button
+    type="button"
+    onClick={() => handleDownloadImage(img, title)}
+    className="rounded-lg border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-800 hover:bg-slate-100"
+  >
+    Download image
+  </button>
+</div>
                   {/* Bullets */}
                   {bullets.length ? (
                     <ul className="list-disc pl-6 space-y-2 text-slate-800 font-medium">
@@ -347,6 +505,222 @@ export default function LibraryPage() {
     return raw; // json object
   }
 
+    function downloadFile(filename: string, content: string, type = "text/plain;charset=utf-8") {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    URL.revokeObjectURL(url);
+  }
+
+  function handleDownloadImage(src: string, title: string) {
+    const a = document.createElement("a");
+    a.href = src;
+    a.download = `${title.replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_") || "slide-image"}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  function buildLessonStructureTextFromRow(row: LessonRow | null) {
+    const gen = getGeneratedFromRow(row);
+    if (!gen || !row) return "";
+
+    const meta = gen?.meta ?? {};
+    const lessonPlan = gen?.lessonPlan ?? {};
+    const slides = Array.isArray(gen?.slides) ? gen.slides : [];
+    const mcq = Array.isArray(gen?.quiz?.mcq) ? gen.quiz.mcq : [];
+    const theory = Array.isArray(gen?.quiz?.theory) ? gen.quiz.theory : [];
+    const liveApps = Array.isArray(gen?.liveApplications) ? gen.liveApplications : [];
+
+    const subject = meta?.subject ?? row.subject ?? "";
+    const topic = meta?.topic ?? row.topic ?? "";
+    const grade = meta?.grade ?? row.grade ?? "";
+    const curriculum = meta?.curriculum ?? row.curriculum ?? "";
+    const schoolLevel = meta?.schoolLevel ?? "";
+    const numberOfSlides = meta?.numberOfSlides ?? slides.length ?? 0;
+    const durationMins = meta?.durationMins ?? "";
+
+    const lines: string[] = [];
+
+    lines.push("LESSONFORGE LESSON / CURRICULUM STRUCTURE REPORT");
+    lines.push("=".repeat(55));
+    lines.push("");
+    lines.push(`Subject: ${subject}`);
+    lines.push(`Topic: ${topic}`);
+    lines.push(`Class: ${grade}`);
+    lines.push(`Curriculum: ${curriculum}`);
+    lines.push(`School Level: ${schoolLevel}`);
+    lines.push(`Number of Slides: ${numberOfSlides}`);
+    lines.push(`Duration: ${durationMins} minutes`);
+    lines.push("");
+
+    if (lessonPlan?.title) {
+      lines.push("LESSON PLAN TITLE");
+      lines.push("-".repeat(20));
+      lines.push(String(lessonPlan.title));
+      lines.push("");
+    }
+
+    if (Array.isArray(lessonPlan?.performanceObjectives) && lessonPlan.performanceObjectives.length) {
+      lines.push("PERFORMANCE OBJECTIVES");
+      lines.push("-".repeat(24));
+      lessonPlan.performanceObjectives.forEach((item: string, i: number) => {
+        lines.push(`${i + 1}. ${item}`);
+      });
+      lines.push("");
+    }
+
+    if (Array.isArray(lessonPlan?.instructionalMaterials) && lessonPlan.instructionalMaterials.length) {
+      lines.push("INSTRUCTIONAL MATERIALS");
+      lines.push("-".repeat(23));
+      lessonPlan.instructionalMaterials.forEach((item: string, i: number) => {
+        lines.push(`${i + 1}. ${item}`);
+      });
+      lines.push("");
+    }
+
+    if (lessonPlan?.previousKnowledge) {
+      lines.push("PREVIOUS KNOWLEDGE");
+      lines.push("-".repeat(18));
+      lines.push(String(lessonPlan.previousKnowledge));
+      lines.push("");
+    }
+
+    if (lessonPlan?.introduction) {
+      lines.push("INTRODUCTION");
+      lines.push("-".repeat(12));
+      lines.push(String(lessonPlan.introduction));
+      lines.push("");
+    }
+
+    if (Array.isArray(lessonPlan?.steps) && lessonPlan.steps.length) {
+      lines.push("LESSON DELIVERY STEPS");
+      lines.push("-".repeat(21));
+      lessonPlan.steps.forEach((step: any, i: number) => {
+        lines.push(`Step ${step?.step ?? i + 1}: ${step?.title ?? "Lesson Step"}`);
+        if (step?.teacherActivity) lines.push(`Teacher Activity: ${step.teacherActivity}`);
+        if (step?.learnerActivity) lines.push(`Learner Activity: ${step.learnerActivity}`);
+        if (step?.concretisedLearningPoint) {
+          lines.push(`Learning Point: ${step.concretisedLearningPoint}`);
+        }
+        lines.push("");
+      });
+    }
+
+    if (Array.isArray(lessonPlan?.evaluation) && lessonPlan.evaluation.length) {
+      lines.push("EVALUATION");
+      lines.push("-".repeat(10));
+      lessonPlan.evaluation.forEach((item: string, i: number) => {
+        lines.push(`${i + 1}. ${item}`);
+      });
+      lines.push("");
+    }
+
+    if (Array.isArray(lessonPlan?.assignment) && lessonPlan.assignment.length) {
+      lines.push("ASSIGNMENT");
+      lines.push("-".repeat(10));
+      lessonPlan.assignment.forEach((item: string, i: number) => {
+        lines.push(`${i + 1}. ${item}`);
+      });
+      lines.push("");
+    }
+
+    if (Array.isArray(lessonPlan?.realLifeConnection) && lessonPlan.realLifeConnection.length) {
+      lines.push("REAL-LIFE CONNECTION");
+      lines.push("-".repeat(20));
+      lessonPlan.realLifeConnection.forEach((item: string, i: number) => {
+        lines.push(`${i + 1}. ${item}`);
+      });
+      lines.push("");
+    }
+
+    if (gen?.lessonNotes) {
+      lines.push("LESSON NOTES");
+      lines.push("-".repeat(12));
+      lines.push(String(gen.lessonNotes));
+      lines.push("");
+    }
+
+    if (slides.length) {
+      lines.push("SLIDE STRUCTURE");
+      lines.push("-".repeat(15));
+      slides.forEach((slide: any, i: number) => {
+        lines.push(`${i + 1}. ${slide?.title ?? `Slide ${i + 1}`}`);
+        const bullets = Array.isArray(slide?.bullets) ? slide.bullets : [];
+        bullets.forEach((b: string) => lines.push(`- ${b}`));
+        if (slide?.interactivePrompt) lines.push(`Activity: ${slide.interactivePrompt}`);
+        if (slide?.imageQuery) lines.push(`Image Focus: ${slide.imageQuery}`);
+        if (slide?.videoQuery) lines.push(`Video Search: ${slide.videoQuery}`);
+        lines.push("");
+      });
+    }
+
+    if (mcq.length) {
+      lines.push("MULTIPLE CHOICE QUESTIONS");
+      lines.push("-".repeat(25));
+      mcq.forEach((item: any, i: number) => {
+        lines.push(`${i + 1}. ${item?.q ?? "Question"}`);
+        const options = Array.isArray(item?.options) ? item.options : [];
+        options.forEach((opt: string, j: number) => {
+          lines.push(`   ${String.fromCharCode(65 + j)}. ${opt}`);
+        });
+        if (typeof item?.answerIndex === "number") {
+          lines.push(`   Answer: ${String.fromCharCode(65 + item.answerIndex)}`);
+        }
+        lines.push("");
+      });
+    }
+
+    if (theory.length) {
+      lines.push("THEORY QUESTIONS");
+      lines.push("-".repeat(16));
+      theory.forEach((item: any, i: number) => {
+        lines.push(`${i + 1}. ${item?.q ?? "Question"}`);
+        if (item?.markingGuide) lines.push(`Marking Guide: ${item.markingGuide}`);
+        lines.push("");
+      });
+    }
+
+    if (liveApps.length) {
+      lines.push("LIVE / REAL-WORLD APPLICATIONS");
+      lines.push("-".repeat(30));
+      liveApps.forEach((item: string, i: number) => {
+        lines.push(`${i + 1}. ${item}`);
+      });
+      lines.push("");
+    }
+
+    lines.push("Generated with LessonForge");
+    return lines.join("\n");
+  }
+
+  function handleDownloadLessonStructureFromRow(row: LessonRow | null) {
+    if (!row) return;
+
+    const gen = getGeneratedFromRow(row);
+    const meta = gen?.meta ?? {};
+
+    const safeSubject = String(meta?.subject ?? row.subject ?? "subject")
+      .replace(/[^\w\s-]/g, "")
+      .trim()
+      .replace(/\s+/g, "_");
+
+    const safeTopic = String(meta?.topic ?? row.topic ?? "topic")
+      .replace(/[^\w\s-]/g, "")
+      .trim()
+      .replace(/\s+/g, "_");
+
+    const content = buildLessonStructureTextFromRow(row);
+    downloadFile(`LessonForge_${safeSubject}_${safeTopic}_Structure.txt`, content);
+  }
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -520,22 +894,67 @@ export default function LibraryPage() {
       {active ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-xl">
-            <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-4">
-              <div>
-                <div className="text-lg font-bold text-slate-900">{active.topic || "Lesson"}</div>
-                <div className="mt-1 text-xs text-slate-500">
-                  {active.subject || "—"} • {active.grade || "—"} • {timeAgo(active.created_at)}
-                </div>
-              </div>
+           <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-4">
+  <div>
+    <div className="text-lg font-bold text-slate-900">{active.topic || "Lesson"}</div>
+    <div className="mt-1 text-xs text-slate-500">
+      {active.subject || "—"} • {active.grade || "—"} • {timeAgo(active.created_at)}
+    </div>
+  </div>
 
-              <button
-                onClick={() => setActive(null)}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100"
-              >
-                Close
-              </button>
-            </div>
+  <div className="flex items-center gap-2">
+    <button
+      onClick={() => handleDownloadLessonStructureFromRow(active)}
+      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100"
+    >
+      Download Structure
+    </button>
 
+    <button
+      onClick={() => setActive(null)}
+      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100"
+    >
+      Close
+    </button>
+  </div>
+  {previewImage ? (
+  <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
+    <div className="w-full max-w-5xl rounded-2xl bg-white p-4 shadow-2xl">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="text-base font-bold text-slate-900">
+          {previewImage.title}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => handleDownloadImage(previewImage.src, previewImage.title)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100"
+          >
+            Download
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setPreviewImage(null)}
+            className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+
+      <div className="max-h-[75vh] overflow-auto rounded-xl border bg-slate-50 p-2">
+        <img
+          src={previewImage.src}
+          alt={previewImage.title}
+          className="mx-auto h-auto max-w-full rounded-lg"
+        />
+      </div>
+    </div>
+  </div>
+) : null}
+</div>
             <div className="max-h-[70vh] overflow-auto p-4">
             {(() => {
   const gen = getGeneratedFromRow(active);

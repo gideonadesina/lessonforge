@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { usePathname } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import {
@@ -9,7 +9,7 @@ import {
   Sparkles,
   Library,
   FileText,
-  ClipboardList,
+  CalendarDays,
   School,
   Settings,
 } from "lucide-react";
@@ -19,12 +19,21 @@ type Profile = {
   avatar_url?: string | null;
 };
 
-const nav = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+  children?: Array<{ href: string; label: string }>;
+};
+
+const nav: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/generate", label: "Generate", icon: Sparkles },
   { href: "/library", label: "Library", icon: Library },
+   {
+    href: "/planning", label: "Planning", icon: CalendarDays,
+  },
   { href: "/worksheets", label: "Worksheets", icon: FileText },
-  { href: "/exam-builder", label: "Exam Builder", icon: ClipboardList },
   { href: "/school", label: "School", icon: School },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -156,31 +165,48 @@ export default function Sidebar({
           const Icon = item.icon;
 
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onNavigate}
-              className={[
-                "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition",
-                active
-                  ? "bg-violet-50 text-violet-700 border border-violet-100"
-                  : "text-slate-700 hover:bg-slate-50",
-              ].join(" ")}
-            >
-              <Icon className="h-4 w-4" />
-              {item.label}
-            </Link>
+                      <div key={item.href}>
+              <Link
+                href={item.href}
+                onClick={onNavigate}
+                className={[
+                  "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition",
+                  active
+                    ? "bg-violet-50 text-violet-700 border border-violet-100"
+                    : "text-slate-700 hover:bg-slate-50",
+                ].join(" ")}
+              >
+                <Icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+
+              {item.children ? (
+                <div className="ml-6 mt-1 flex flex-col gap-1">
+                  {item.children.map((child) => {
+                    const childActive =
+                      pathname === child.href || pathname.startsWith(child.href + "/");
+                    return (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        onClick={onNavigate}
+                        className={[
+                          "rounded-lg px-3 py-1.5 text-xs font-medium transition",
+                          childActive
+                            ? "bg-violet-100 text-violet-700"
+                            : "text-slate-600 hover:bg-slate-50",
+                        ].join(" ")}
+                      >
+                        {child.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
           );
         })}
       </nav>
-
-      {/* Tip box */}
-      <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-        <div className="text-xs font-semibold text-slate-900">Tip</div>
-        <p className="mt-1 text-xs text-slate-600 leading-relaxed">
-          Use keywords like <b>WAEC / NECO / Cambridge</b> when generating.
-        </p>
-      </div>
     </aside>
   );
 

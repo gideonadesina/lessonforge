@@ -1,49 +1,96 @@
 import OpenAI from "openai";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-
 
 type GeneratePayload = {
   subject: string;
   topic: string;
   grade: string;
   curriculum?: string;
+  schoolLevel?: string;
+  numberOfSlides?: number;
   durationMins?: number;
   user_id?: string;
 };
+const FALLBACK_IMG =
+  "https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?w=1200";
 
 function buildUserInstructions(input: GeneratePayload) {
   const curriculum = input.curriculum ?? "General (Nigeria-friendly)";
   const durationMins = input.durationMins ?? 40;
+  const schoolLevel = input.schoolLevel ?? "Secondary";
+  const numberOfSlides = Math.max(1, Math.min(20, input.numberOfSlides ?? 8));
 
   return `
 Return STRICT JSON only. No markdown. No backticks. No extra text.
 
-Audience: Grade ${input.grade}
-Subject: ${input.subject}
-Topic: ${input.topic}
-Curriculum: ${curriculum}
-Duration: ${durationMins} minutes
+Audience:
+- School Level: ${schoolLevel}
+- Class / Grade: ${input.grade}
+- Subject: ${input.subject}
+- Topic: ${input.topic}
+- Curriculum: ${curriculum}
+- Duration: ${durationMins} minutes
+- Number of Slides: ${numberOfSlides}
 
 You MUST output JSON with exactly this shape:
 {
-  "meta": { "subject": "", "topic": "", "grade": "", "curriculum": "", "durationMins": 40 },
+  "meta": {
+    "subject": "",
+    "topic": "",
+    "grade": "",
+    "curriculum": "",
+    "schoolLevel": "",
+    "numberOfSlides": 8,
+    "durationMins": 40
+  },
+  "lessonPlan": {
+    "title": "",
+    "performanceObjectives": ["..."],
+    "instructionalMaterials": ["..."],
+    "previousKnowledge": "",
+    "introduction": "",
+    "steps": [
+      {
+        "step": 1,
+        "title": "",
+        "teacherActivity": "",
+        "learnerActivity": "",
+        "concretisedLearningPoint": ""
+      }
+    ],
+    "evaluation": ["..."],
+    "assignment": ["..."],
+    "realLifeConnection": ["..."]
+  },
   "objectives": ["..."],
   "lessonNotes": "....",
+  "references": ["...", "...", "..."]
   "slides": [
-    { "title": "", "bullets": ["","","",""], "imageQuery": "", "videoQuery": "", "interactivePrompt": "" }
+    {
+      "title": "",
+      "bullets": ["", "", "", ""],
+      "imageQuery": "",
+      "videoQuery": "",
+      "interactivePrompt": ""
+    }
   ],
   "quiz": {
     "mcq": [
-      { "q": "What is photosynthesis?", "options": ["Process plants use to make food", "Animal respiration", "Water absorption", "Soil formation"], "answerIndex": 0 }
+      {
+        "q": "What is photosynthesis?",
+        "options": [
+          "Process plants use to make food",
+          "Animal respiration",
+          "Water absorption",
+          "Soil formation"
+        ],
+        "answerIndex": 0
+      }
     ],
     "theory": [
       { "q": "Explain ...", "markingGuide": "..." }
@@ -53,148 +100,218 @@ You MUST output JSON with exactly this shape:
 }
 
 Hard requirements:
-- objectives: 6–10 items.
-- slides: 8–12 slides (content slides).
-- each slide bullets: 4–8 bullets, short & learner-friendly.
-- each slide MUST include:
-  * imageQuery: 2-3 words for finding educational images (e.g., "photosynthesis diagram", "cell structure", "math fractions")
-  * videoQuery: search terms for educational videos
-  * interactivePrompt: engaging question or activity
-- quiz.mcq: exactly 10 multiple choice questions
-  * Each question MUST have:
-    - q: the question text
-    - options: array of EXACTLY 4 option strings (full sentences, not just "A", "B", "C", "D")
-    - answerIndex: number 0-3 indicating correct answer (0=first option, 1=second, etc.)
-  * Example: {"q": "What is the powerhouse of the cell?", "options": ["Mitochondria", "Nucleus", "Ribosome", "Chloroplast"], "answerIndex": 0}
-- quiz.theory: exactly 2 questions, each with a markingGuide.
-- liveApplications: 3–6 items.
 
-LessonNotes requirements (VERY IMPORTANT):
-- 900–1400 words (do NOT write less).
+META
+- Fill all meta fields correctly.
+
+LESSON PLAN (VERY IMPORTANT)
+- lessonPlan MUST come first in the educational flow and must be practical, systematic, classroom-ready, and concretised.
+- performanceObjectives: exactly 5 to 7 objectives.
+- Each objective MUST start with a strong action verb such as:
+  identify, mention, explain, demonstrate, dramatise, construct, classify, compare, present, observe, draw, solve, describe, create.
+- Objectives must be learner-centred and measurable.
+- instructionalMaterials: 5 to 10 relevant materials, including concrete/local materials where possible.
+- previousKnowledge: 1 short paragraph linking to what learners already know.
+- introduction: 1 short paragraph that hooks learners using familiar, real-life, local, or classroom situations.
+- steps: exactly 4 to 6 steps.
+- Every step MUST include:
+  * step number
+  * title
+  * teacherActivity
+  * learnerActivity
+  * concretisedLearningPoint
+- teacherActivity MUST show practical teaching: demonstration, questioning, guided discovery, use of real objects, role play/dramatisation, drawing/sketching, construction, presentation, observation, or outdoor/environment connection where relevant.
+- learnerActivity MUST be active, not passive.
+- concretisedLearningPoint must be simple and direct, showing what learners should grasp from that step.
+- evaluation: exactly 5 items.
+- assignment: exactly 3 items.
+- realLifeConnection: 3 to 5 items that connect learning to life outside the classroom, home, market, farm, road, health, environment, church/mosque, or community where relevant.
+
+OBJECTIVES
+- objectives: 6 to 10 items.
+- Keep them aligned with the lesson plan and measurable.
+- Use action verbs and classroom outcomes.
+
+LESSON NOTES (VERY IMPORTANT)
+- 900 to 1400 words.
+- Must be highly concretised, interesting, and student-friendly so learners can copy it into their notebooks.
+- Use simple but intelligent classroom language.
+- Avoid dry textbook style.
+- Use examples learners can picture easily.
+- Include familiar Nigeria-friendly or locally relevant illustrations where appropriate.
+- The lesson note must feel like a real teacher wrote it for actual students.
 - Use these plain-text headings exactly:
   1) Introduction
   2) Key Concepts
-  3) Teacher Script (what teacher says + what learners do)
-  4) Worked Examples (at least 2, step-by-step)
-  5) Common Misconceptions (at least 3) + corrections
-  6) Real-life Applications (at least 3, Nigeria-friendly where possible)
-  7) Differentiation (Support / Core / Stretch)
-  8) Summary (5–8 bullet points)
-  9) Exit Ticket (3 short questions)
-  10) Homework/Practice (10 questions)
-  11) Key Vocabulary (at least 8 terms with meanings)
+  3) Worked Examples (at least 2, step-by-step)
+  4) Common Misconceptions (at least 3) + corrections
+  5) Real-life Applications (at least 3, Nigeria-friendly where possible)
+  6) Summary (5–8 bullet points)
+  7) Exit Ticket (3 short questions)
+  8) Key Vocabulary (at least 8 terms with meanings)
 
-Keep it classroom-ready, Cambridge/WAEC friendly, and Nigeria-relevant.
+  REFERENCES
+- references: 3 to 6 items.
+- Include recommended textbooks, curriculum documents, or recognized school resources relevant to the subject and level.
+- Use familiar school textbook names where appropriate.
+- Do not invent page numbers, edition details, or publisher data unless certain.
+- Keep references practical and teacher-friendly.
+
+SLIDES
+- slides: EXACTLY ${numberOfSlides} slides.
+- Each slide bullets: 4 to 6 bullets only.
+- Bullets must be short, clear, learner-friendly, and presentation-ready.
+- Slides should not look like copied paragraphs from lesson notes.
+- Slides MUST be interactive and engaging.
+- Across the slide deck, include a healthy mix of:
+  * warm-up / starter question
+  * observation task
+  * think-pair-share
+  * mini class discussion
+  * quick checkpoint
+  * demonstration cue
+  * role play / dramatization cue where relevant
+  * practical / real-life connection
+  * short recap
+- each slide MUST include:
+  * imageQuery: a short descriptive search phrase for an educational image or illustration
+  * videoQuery: search terms for educational videos
+  * interactivePrompt: a specific engaging learner task, question, or mini activity
+
+QUIZ
+- quiz.mcq: exactly 10 multiple choice questions.
+- Each MCQ MUST have:
+  * q
+  * options: EXACTLY 4 option strings
+  * answerIndex: number 0 to 3
+- Questions should range from easy to moderate, suitable for ${schoolLevel} / ${input.grade}.
+- quiz.theory: exactly 2 questions, each with a markingGuide.
+
+LIVE APPLICATIONS
+- liveApplications: 3 to 6 items.
+- Must show practical, real-world use of the concept.
+
+LEVEL ADAPTATION
+- If School Level is EYFS / Nursery:
+  * use playful, concrete, very simple language
+  * use songs, objects, pictures, movement, imitation, tracing, matching, colouring, naming
+  * avoid abstract explanations
+- If School Level is Primary:
+  * keep language simple and vivid
+  * use familiar examples from home, class, playground, market, family, weather, animals, food, transport
+  * encourage observation, drawing, discussion, and guided practice
+- If School Level is Secondary:
+  * use more mature language and deeper explanation
+  * keep it clear, structured, exam-aware, and still practical
+  * include stronger reasoning, comparison, examples, and application
+
+CURRICULUM ADAPTATION
+- If curriculum is WAEC or NECO:
+  * make it exam-conscious, clear, structured, and syllabus-friendly
+- If curriculum is Cambridge:
+  * make it inquiry-based, skill-focused, and conceptually clear
+- If curriculum is Nigerian Curriculum:
+  * make it teacher-friendly, practical, and classroom-usable
+
+Keep the whole output classroom-ready, curriculum-aware, and Nigeria-relevant.
 
 Return JSON only.
 `.trim();
 }
 
-async function fetchUnsplashImage(
-  query: string,
-  subject: string,
-  topic: string,
-  slideIndex: number = 0
-): Promise<string> {
-  const key = process.env.UNSPLASH_ACCESS_KEY;
-
-  const fallbackImages = [
-    "https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=1200",
-    "https://images.unsplash.com/photo-1628595351029-c2bf17511435?w=1200",
-    "https://images.unsplash.com/photo-1576086213369-97a306d36557?w=1200",
-    "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=1200",
-    "https://images.unsplash.com/photo-1530026405186-ed1f139313f8?w=1200",
-    "https://images.unsplash.com/photo-1579154204601-01588f351e67?w=1200",
-    "https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=1200",
-    "https://images.unsplash.com/photo-1582719471137-c3967ffb1c42?w=1200",
-    "https://images.unsplash.com/photo-1581595220892-b0739db3ba8c?w=1200",
-    "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=1200",
-  ];
-
-  const fallback = fallbackImages[slideIndex % fallbackImages.length];
-
-  if (!key) {
-    console.warn("⚠️  UNSPLASH_ACCESS_KEY missing, using fallback");
-    return fallback;
+async function generateSlideImage(
+  client: OpenAI,
+  params: {
+    subject: string;
+    topic: string;
+    schoolLevel?: string;
+    curriculum?: string;
+    slideTitle?: string;
+    imageQuery?: string;
   }
-
+): Promise<string | null> {
   try {
-    // Build query: subject + slide-specific hint + extra bias words
-    const raw = `${subject} ${query || topic} classroom education`.trim();
+    const prompt = `
+Create a clean educational illustration for a lesson slide.
 
-    const cleaned = raw
-      .toLowerCase()
-      .replace(/\b(with|of|the|a|an|in|on|at)\b/gi, "")
-      .replace(/[^a-z0-9\s]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .split(/\s+/)
-      .slice(0, 7)
-      .join(" ");
+Subject: ${params.subject}
+Topic: ${params.topic}
+School Level: ${params.schoolLevel ?? "Secondary"}
+Curriculum: ${params.curriculum ?? "Nigerian Curriculum"}
+Slide Title: ${params.slideTitle ?? ""}
+Image Focus: ${params.imageQuery ?? params.topic}
 
-    console.log(`🔍 Slide ${slideIndex + 1}: Unsplash query="${cleaned}"`);
+Requirements:
+- classroom safe
+- education-focused
+- mature academic style
+- realistic educational illustration or textbook-style diagram
+- visually clear and presentation-ready
+- relevant to the exact lesson concept
+- suitable for teachers and school presentations
+- avoid cartoon style
+- avoid childish design
+- avoid random people
+- avoid stock photo look unless truly necessary
+- no watermarks
+- minimal text inside the image (only if it adds educational value, e.g., labels in a diagram) 
+Additional style guidance:
+- If School Level is EYFS / Nursery, use simple, bright, child-friendly educational visuals.
+- If School Level is Primary, use clear educational visuals that are friendly but not cartoonish.
+- If School Level is Secondary, use mature, realistic, textbook-style diagrams or academic illustrations. 
+`;
 
-    const url =
-      `https://api.unsplash.com/search/photos?query=${encodeURIComponent(cleaned)}` +
-      `&per_page=1&page=${slideIndex + 1}&orientation=landscape&content_filter=high&order_by=relevant`;
-
-    const res = await fetch(url, {
-      headers: { Authorization: `Client-ID ${key}` },
-      cache: "no-store",
+    const imageResp = await client.images.generate({
+      model: "gpt-image-1",
+      prompt,
+      size: "1536x1024",
+      quality: "medium",
     });
 
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      console.error(`❌ Unsplash error ${res.status}: ${text}`);
-      return fallback;
-    }
+    const b64 = imageResp?.data?.[0]?.b64_json;
 
-    const data = await res.json();
-    const imageUrl: string | undefined = data?.results?.[0]?.urls?.regular;
+    if (!b64 || typeof b64 !== "string") return null;
 
-    if (!imageUrl) {
-      console.warn(`⚠️  Slide ${slideIndex + 1}: No image URL, using fallback`);
-      return fallback;
-    }
-
-    return imageUrl;
-  } catch (e) {
-    console.error(`❌ Slide ${slideIndex + 1}: Unsplash fetch failed`, e);
-    return fallback;
+    return `data:image/png;base64,${b64}`;
+  } catch (error) {
+    console.error("❌ OpenAI image generation failed:", error);
+    return null;
   }
 }
-
-
 export async function POST(req: NextRequest) {
   try {
-    // 1) Auth header
     const auth = req.headers.get("authorization") ?? "";
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
 
     if (!token) {
       return NextResponse.json({ error: "Unauthorized (no token)" }, { status: 401 });
     }
-// 2) Supabase client that carries the JWT (so rpc/auth.uid works)
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  }
-);
 
-// 3) Verify token (now uses header)
-const { data: { user }, error: authError } = await supabase.auth.getUser();
-if (authError || !user) {
-  return NextResponse.json(
-    { error: "Unauthorized (invalid token)", message: authError?.message },
-    { status: 401 }
-  );
-}
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+        },
+        global: { headers: { Authorization: `Bearer ${token}` } },
+      }
+    );
 
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-    // 4) Parse JSON body safely (no req.text)
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: "Unauthorized (invalid token)", message: authError?.message },
+        { status: 401 }
+      );
+    }
+
     let body: GeneratePayload;
     try {
       body = (await req.json()) as GeneratePayload;
@@ -208,100 +325,109 @@ if (authError || !user) {
         { status: 400 }
       );
     }
-   const { data: creditData, error: creditErr } =
-  await supabase.rpc("consume_generation_credit");
 
-if (creditErr) {
-  // RPC error (rare)
-  return NextResponse.json({ error: "Credit check failed", detail: creditErr.message }, { status: 500 });
-}
+    const { data: creditData, error: creditErr } =
+      await supabase.rpc("consume_generation_credit");
 
-if (!user?.email_confirmed_at) {
-  return NextResponse.json(
-    { error: "Please confirm your email before generating lessons." },
-    { status: 403 }
-  );
-}
-
-
-if (!creditData?.ok) {
-  const msg = creditData?.error || "No credits";
-  const status =
-    msg.toLowerCase().includes("not authenticated") ? 401 : 402;
-
-  return NextResponse.json({ error: msg }, { status });
-}
-
-// ✅ optional: you can use this to return to UI
-const newBalance = creditData.credits_balance as number;
-
-
-    if (!body?.subject || !body?.topic || !body?.grade) {
-      return Response.json(
-        { error: "Missing required fields: subject, topic, grade" },
-        { status: 400 }
+    if (creditErr) {
+      return NextResponse.json(
+        { error: "Credit check failed", detail: creditErr.message },
+        { status: 500 }
       );
     }
 
+    if (!user?.email_confirmed_at) {
+      return NextResponse.json(
+        { error: "Please confirm your email before generating lessons." },
+        { status: 403 }
+      );
+    }
+
+    if (!creditData?.ok) {
+      const msg = creditData?.error || "No credits";
+      const status =
+        msg.toLowerCase().includes("not authenticated") ? 401 : 402;
+
+      return NextResponse.json({ error: msg }, { status });
+    }
+
     if (!process.env.OPENAI_API_KEY) {
-      return Response.json({ error: "OPENAI_API_KEY missing" }, { status: 500 });
+      return NextResponse.json(
+        { error: "OPENAI_API_KEY missing" },
+        { status: 500 }
+      );
     }
 
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
     console.log("🎯 Generating lesson for:", body.topic);
 
-   const resp = await client.responses.create({
-  model: "gpt-4.1-mini",
-  input: [
-    {
-      role: "system",
-      content:
-        "Return STRICT valid JSON only. No markdown. No backticks. No explanation text.",
-    },
-    { role: "user", content: buildUserInstructions(body) },
-  ],
-  temperature: 0.2,
-  max_output_tokens: 6500,
-
-  // ⭐⭐ THIS IS THE CRITICAL FIX ⭐⭐
-  text: { format: { type: "json_object" } },
-});
+    const resp = await client.responses.create({
+      model: "gpt-4.1-mini",
+      input: [
+        {
+          role: "system",
+          content:
+            "Return STRICT valid JSON only. No markdown. No backticks. No explanation text.",
+        },
+        {
+          role: "user",
+          content: buildUserInstructions(body),
+        },
+      ],
+      temperature: 0.2,
+      max_output_tokens: 7000,
+      text: { format: { type: "json_object" } },
+    });
 
     const raw = resp.output_text ?? "";
 
-let data: any;
+    let data: any;
 
-try {
-  data = JSON.parse(raw);
-} catch (e) {
-  console.error("❌ BAD JSON FROM MODEL:", raw);
+    try {
+      data = JSON.parse(raw);
+    } catch (e) {
+      console.error("❌ BAD JSON FROM MODEL:", raw);
 
-  return NextResponse.json(
-    { error: "Model returned invalid JSON" },
-    { status: 502 }
-  );
-}
+      return NextResponse.json(
+        { error: "Model returned invalid JSON" },
+        { status: 502 }
+      );
+    }
 
-
-
-    // ✅ Basic guardrails
     data.meta ??= {};
     data.meta.subject ??= body.subject;
     data.meta.topic ??= body.topic;
     data.meta.grade ??= body.grade;
     data.meta.curriculum ??= body.curriculum ?? "General (Nigeria-friendly)";
+    data.meta.schoolLevel ??= body.schoolLevel ?? "Secondary";
+    data.meta.numberOfSlides ??= body.numberOfSlides ?? 8;
     data.meta.durationMins ??= body.durationMins ?? 40;
 
-    // ✅ Ensure slides exists
-    data.slides ??= [];
+    data.lessonPlan ??= {
+      title: `${body.subject} - ${body.topic}`,
+      performanceObjectives: data.objectives ?? [],
+      instructionalMaterials: [],
+      previousKnowledge: "",
+      introduction: "",
+      steps: [],
+      evaluation: [],
+      assignment: [],
+      realLifeConnection: [],
+    };
 
-    // ✅ Assign per-slide image
+    data.objectives ??= [];
+    data.lessonNotes ??= "";
+    data.slides ??= [];
+    data.quiz ??= {};
+    data.quiz.mcq ??= [];
+    data.quiz.theory ??= [];
+    data.liveApplications ??= [];
+
     if (Array.isArray(data.slides) && data.slides.length > 0) {
       for (let i = 0; i < data.slides.length; i++) {
         const slide = data.slides[i];
 
-        // Best available text to guide the image search
         const q =
           slide.imageQuery ||
           slide.image_prompt ||
@@ -310,15 +436,23 @@ try {
           slide.subtitle ||
           slide.topic ||
           body.topic;
+const generatedImage = await generateSlideImage(client, {
+  subject: body.subject,
+  topic: body.topic,
+  schoolLevel: body.schoolLevel,
+  curriculum: body.curriculum,
+  slideTitle: slide.title,
+  imageQuery: String(q),
+});
 
-        slide.image = await fetchUnsplashImage(String(q), body.subject, body.topic, i);
+slide.image = generatedImage || FALLBACK_IMG;
       }
     }
 
-    return Response.json({ data }, { status: 200 });
+    return NextResponse.json({ data }, { status: 200 });
   } catch (err: any) {
     console.error("❌ Generation error:", err);
-    return Response.json(
+    return NextResponse.json(
       { error: "Generation failed", message: err?.message ?? String(err) },
       { status: 500 }
     );

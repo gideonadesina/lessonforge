@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 
 import AppFrame from "@/components/layout/AppFrame";
+import ForgeGuideLauncher from "@/components/ForgeGuideLauncher";
 import "../globals.css";
 
 async function createServerSupabase() {
@@ -35,9 +36,21 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const supabase = await createServerSupabase();
   const { data } = await supabase.auth.getUser();
 
+  const userEmail = data?.user?.email ?? "";
+  const teacherName =
+    (data?.user?.user_metadata as any)?.full_name ||
+    (data?.user?.user_metadata as any)?.name ||
+    userEmail.split("@")[0] ||
+    "Teacher";
+
   return (
-    <AppFrame userEmail={data?.user?.email ?? ""}>
+    <AppFrame userEmail={userEmail}>
       {children}
+
+      <ForgeGuideLauncher
+        teacherName={teacherName}
+        userEmail={userEmail}
+      />
     </AppFrame>
   );
 }
