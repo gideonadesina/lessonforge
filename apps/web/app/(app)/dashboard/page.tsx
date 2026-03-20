@@ -107,11 +107,6 @@ export default function DashboardPage() {
           error: authError,
         } = await supabase.auth.getUser();
 
-        if (user?.user_metadata?.app_role === "principal") {
-  router.replace("/principal");
-  return;
-}
-
         if (!alive) return;
 
         if (authError) {
