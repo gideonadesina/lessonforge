@@ -4,15 +4,22 @@ export default function SectionCard({
   title,
   subtitle,
   action,
+  className,
   children,
 }: {
   title: string;
   subtitle?: string;
   action?: React.ReactNode;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-violet-100/80 bg-white p-5 shadow-[0_6px_24px_rgba(88,28,135,0.08)]">
+    <section
+      className={[
+        "rounded-2xl border border-violet-100/80 bg-white p-5 shadow-[0_6px_24px_rgba(88,28,135,0.08)]",
+        className ?? "",
+      ].join(" ")}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-bold uppercase tracking-wide text-slate-900">{title}</h2>

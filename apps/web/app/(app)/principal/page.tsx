@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import MetricCard from "@/components/principal/MetricCard";
 import SectionCard from "@/components/principal/SectionCard";
@@ -49,8 +51,25 @@ function getErrorMessage(err: unknown, fallback: string) {
   return err instanceof Error ? err.message : fallback;
 }
 
+function isSameDay(dateA: Date, dateB: Date) {
+  return (
+    dateA.getFullYear() === dateB.getFullYear() &&
+    dateA.getMonth() === dateB.getMonth() &&
+    dateA.getDate() === dateB.getDate()
+  );
+}
+
+function formatShortDate(iso: string | null | undefined) {
+  if (!iso) return "No date";
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return "No date";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 export default function PrincipalPage() {
   const supabase = useMemo(() => createBrowserSupabase(), []);
+  const searchParams = useSearchParams();
+  const selectedView = searchParams.get("view") ?? "dashboard";
 
   const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
@@ -257,6 +276,145 @@ export default function PrincipalPage() {
     }
   }
 
+  const signals = useMemo(() => {
+    if (!dashboard) {
+      return {
+        principalDisplayName: "Principal",
+        todayActivityCount: 0,
+        pendingActions: 0,
+        inactiveTeachers: 0,
+        slotsRemaining: 0,
+        utilizationPercent: 0,
+        recentTeacherActions: [] as TeacherListItem[],
+        focusCard: {
+          title: "Command center is ready",
+          message: "Invite teachers and start school-wide planning to unlock daily leadership insights.",
+          ctaLabel: "Invite teachers",
+          ctaHref: "/principal?view=teachers",
+          tone: "slate" as const,
+        },
+      };
+    }
+
+    const today = new Date();
+    const todayActivityCount = dashboard.teachers.filter((teacher) => {
+      if (!teacher.lastActiveAt) return false;
+      const activeDate = new Date(teacher.lastActiveAt);
+      return Number.isFinite(activeDate.getTime()) && isSameDay(activeDate, today);
+    }).length;
+
+    const inactiveTeachers = dashboard.teachers.filter(
+      (teacher) => teacher.status === "disabled" || teacher.status === "pending"
+    ).length;
+
+    const slotsRemaining = Math.max(dashboard.subscription.slotLimit - dashboard.overview.totalTeachers, 0);
+    const pendingActions =
+      inactiveTeachers +
+      (slotsRemaining <= 2 ? 1 : 0) +
+      (dashboard.overview.weeklyActivityCount < Math.max(dashboard.overview.activeTeachers, 1) ? 1 : 0);
+
+    const utilizationPercent = Math.round(
+      (dashboard.overview.totalTeachers / Math.max(dashboard.subscription.slotLimit, 1)) * 100
+    );
+
+    const recentTeacherActions = [...dashboard.teachers]
+      .sort((a, b) => {
+        const aTime = a.lastActiveAt ? new Date(a.lastActiveAt).getTime() : 0;
+        const bTime = b.lastActiveAt ? new Date(b.lastActiveAt).getTime() : 0;
+        return bTime - aTime;
+      })
+      .slice(0, 5);
+
+    const principalDisplayName = dashboard.school.principalName || "Principal";
+
+    if (inactiveTeachers >= 3) {
+      return {
+        principalDisplayName,
+        todayActivityCount,
+        pendingActions,
+        inactiveTeachers,
+        slotsRemaining,
+        utilizationPercent,
+        recentTeacherActions,
+        focusCard: {
+          title: `${inactiveTeachers} teachers inactive this week`,
+          message: "Re-engage your team now to keep lesson generation and planning on track.",
+          ctaLabel: "Review teachers",
+          ctaHref: "/principal?view=teachers",
+          tone: "amber" as const,
+        },
+      };
+    }
+
+    if (slotsRemaining <= 2) {
+      return {
+        principalDisplayName,
+        todayActivityCount,
+        pendingActions,
+        inactiveTeachers,
+        slotsRemaining,
+        utilizationPercent,
+        recentTeacherActions,
+        focusCard: {
+          title: "Your slots are almost full",
+          message: "Add more teacher slots now so new staff can onboard without delays.",
+          ctaLabel: "Upgrade slots",
+          ctaHref: "/principal?view=slots",
+          tone: "violet" as const,
+        },
+      };
+    }
+
+    if (dashboard.overview.weeklyActivityCount < Math.max(dashboard.overview.totalTeachers, 1) * 2) {
+      return {
+        principalDisplayName,
+        todayActivityCount,
+        pendingActions,
+        inactiveTeachers,
+        slotsRemaining,
+        utilizationPercent,
+        recentTeacherActions,
+        focusCard: {
+          title: "Lesson generation is down this week",
+          message: "Prompt departments to generate this week’s lessons and close planning gaps.",
+          ctaLabel: "Generate overview",
+          ctaHref: "/principal?view=generate",
+          tone: "blue" as const,
+        },
+      };
+    }
+
+    return {
+      principalDisplayName,
+      todayActivityCount,
+      pendingActions,
+      inactiveTeachers,
+      slotsRemaining,
+      utilizationPercent,
+      recentTeacherActions,
+      focusCard: {
+        title: "Your school is in a healthy rhythm",
+        message: "Keep momentum by reviewing teacher actions and pushing weekly priorities.",
+        ctaLabel: "View analytics",
+        ctaHref: "/principal?view=analytics",
+        tone: "emerald" as const,
+      },
+    };
+  }, [dashboard]);
+
+  const highlightedSection = (viewName: string) =>
+    selectedView === viewName
+      ? "border-violet-200 shadow-[0_8px_28px_rgba(109,40,217,0.12)]"
+      : "border-violet-100/80";
+
+  const focusToneClass = {
+    slate: "border-slate-200 bg-slate-50",
+    amber: "border-amber-200 bg-amber-50",
+    violet: "border-violet-200 bg-violet-50",
+    blue: "border-blue-200 bg-blue-50",
+    emerald: "border-emerald-200 bg-emerald-50",
+  }[signals.focusCard.tone];
+
   if (loading) {
     return (
       <div className="rounded-3xl border border-violet-100 bg-amber-50/70 p-8 text-sm text-slate-700 shadow-sm">
@@ -419,6 +577,55 @@ export default function PrincipalPage() {
 
       {!onboardingRequired && dashboard ? (
         <div className="space-y-4">
+          <section
+            className={[
+              "rounded-2xl border bg-white p-5 shadow-[0_6px_24px_rgba(88,28,135,0.08)]",
+              highlightedSection("dashboard"),
+            ].join(" ")}
+            id="dashboard-overview"
+          >
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+              <div className="space-y-3 lg:col-span-8">
+                <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Principal command center</p>
+                <h2 className="text-2xl font-black tracking-tight text-slate-900">
+                  {signals.principalDisplayName}, your school needs your leadership today.
+                </h2>
+                <p className="text-sm text-slate-600">
+                  {dashboard.school.name} • Daily summary for {formatShortDate(new Date().toISOString())}
+                </p>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Active teachers</div>
+                    <div className="mt-1 text-2xl font-bold text-slate-900">{dashboard.overview.activeTeachers}</div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Today activity</div>
+                    <div className="mt-1 text-2xl font-bold text-slate-900">{signals.todayActivityCount}</div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Pending actions</div>
+                    <div className="mt-1 text-2xl font-bold text-slate-900">{signals.pendingActions}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="lg:col-span-4">
+                <div className={["rounded-xl border p-4", focusToneClass].join(" ")}>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Focus card</div>
+                  <h3 className="mt-2 text-lg font-bold text-slate-900">{signals.focusCard.title}</h3>
+                  <p className="mt-2 text-sm text-slate-700">{signals.focusCard.message}</p>
+                  <Link
+                    href={signals.focusCard.ctaHref}
+                    className="mt-4 inline-flex rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
+                  >
+                    {signals.focusCard.ctaLabel}
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <MetricCard title="Total Teachers" value={dashboard.overview.totalTeachers} subtitle={`Slots: ${dashboard.subscription.slotLimit}`} />
             <MetricCard title="Active Teachers" value={dashboard.overview.activeTeachers} subtitle="Engaged this cycle" />
@@ -426,11 +633,86 @@ export default function PrincipalPage() {
             <MetricCard title="Weekly Activity" value={dashboard.overview.weeklyActivityCount} subtitle="Last 7 days events" />
           </div>
 
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <SectionCard
+              title="Generation oversight"
+              subtitle="School-wide generation signal so you can nudge the right teams quickly."
+              className={highlightedSection("generate")}
+            >
+              <div className="space-y-3 text-sm text-slate-700">
+                <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                  <span>Lessons generated</span>
+                  <span className="font-bold text-slate-900">{dashboard.overview.totalLessonsGenerated}</span>
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                  <span>Weekly activity</span>
+                  <span className="font-bold text-slate-900">{dashboard.overview.weeklyActivityCount}</span>
+                </div>
+                <Link
+                  href="/principal?view=generate"
+                  className="inline-flex rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100"
+                >
+                  Generate this week&apos;s lessons
+                </Link>
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              title="Library oversight"
+              subtitle="Track reusable content and open school-wide resources in one click."
+              className={highlightedSection("library")}
+            >
+              <div className="space-y-3 text-sm text-slate-700">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Estimated resources</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">
+                    {dashboard.overview.totalLessonsGenerated + dashboard.teachers.reduce((sum, teacher) => sum + teacher.worksheetsCreated, 0)}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">Lessons + worksheets across all teachers</p>
+                </div>
+                <Link
+                  href="/principal?view=library"
+                  className="inline-flex rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  View all generated content
+                </Link>
+              </div>
+            </SectionCard>
+          </div>
+
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
             <div className="space-y-4 xl:col-span-8">
               <SectionCard
+                title="Recent teacher actions"
+                subtitle="Today’s movement across your team."
+                className={highlightedSection("analytics")}
+              >
+                <div className="space-y-2">
+                  {signals.recentTeacherActions.length ? (
+                    signals.recentTeacherActions.map((teacher) => (
+                      <div key={`recent-${teacher.userId}`} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">{teacher.name}</p>
+                          <p className="text-xs text-slate-500">{teacher.email || "No email"}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs font-semibold text-slate-700">{timeAgo(teacher.lastActiveAt)}</p>
+                          <p className="text-[11px] text-slate-500">Last active</p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                      Teacher actions will appear here as your school starts using LessonForge.
+                    </div>
+                  )}
+                </div>
+              </SectionCard>
+
+              <SectionCard
                 title="Teacher management"
                 subtitle="Track teacher health and manage access."
+                className={highlightedSection("teachers")}
                 action={
                   <button
                     onClick={() => {
@@ -516,6 +798,7 @@ export default function PrincipalPage() {
               <SectionCard
                 title="Activity monitoring"
                 subtitle="Teacher usage snapshot for lesson and worksheet production."
+                className={highlightedSection("analytics")}
               >
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   {dashboard.teachers.slice(0, 6).map((teacher) => (
@@ -551,7 +834,11 @@ export default function PrincipalPage() {
                 </div>
               </SectionCard>
 
-              <SectionCard title="Planning overview" subtitle="Scheme progress and upcoming academic events.">
+              <SectionCard
+                title="Planning overview"
+                subtitle="Scheme progress and upcoming academic events."
+                className={highlightedSection("planning")}
+              >
                 <div className="space-y-4">
                   <div>
                     <div className="mb-2 flex items-center justify-between text-sm">
@@ -585,7 +872,32 @@ export default function PrincipalPage() {
             </div>
 
             <aside className="space-y-4 xl:col-span-4">
-              <SectionCard title="School code" subtitle="Share this code with teachers to join your workspace.">
+              <SectionCard
+                title="Daily leadership summary"
+                subtitle="Signals that matter for today’s decisions."
+                className={highlightedSection("dashboard")}
+              >
+                <div className="space-y-3 text-sm text-slate-700">
+                  <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                    <span>Slot utilization</span>
+                    <span className="font-bold text-slate-900">{signals.utilizationPercent}%</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                    <span>Inactive teachers</span>
+                    <span className="font-bold text-slate-900">{signals.inactiveTeachers}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                    <span>Slots remaining</span>
+                    <span className="font-bold text-slate-900">{signals.slotsRemaining}</span>
+                  </div>
+                </div>
+              </SectionCard>
+
+              <SectionCard
+                title="School workspace"
+                subtitle="Share this code with teachers to join your workspace."
+                className={highlightedSection("workspace")}
+              >
                 <div className="space-y-3">
                   <div className="rounded-xl border border-violet-200 bg-violet-50 p-3">
                     <div className="text-xs uppercase tracking-wide text-violet-700">School code</div>
@@ -611,7 +923,11 @@ export default function PrincipalPage() {
                 </div>
               </SectionCard>
 
-              <SectionCard title="Subscription & billing" subtitle="Teacher seat capacity and billing history.">
+              <SectionCard
+                title="Subscription & billing"
+                subtitle="Teacher seat capacity and billing history."
+                className={highlightedSection("billing")}
+              >
                 <div className="space-y-3">
                   <div className="rounded-xl border border-slate-200 bg-amber-50/60 p-3 text-sm">
                     <div className="flex items-center justify-between">
@@ -628,21 +944,29 @@ export default function PrincipalPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min={1}
-                      value={addSlots}
-                      onChange={(e) => setAddSlots(Math.max(1, Number(e.target.value || 1)))}
-                      className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm outline-none focus:border-violet-500"
-                    />
-                    <button
-                      onClick={upgradeSlots}
-                      disabled={slotUpgradeBusy}
-                      className="flex-1 rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
-                    >
-                      {slotUpgradeBusy ? "Updating..." : "Upgrade slots"}
-                    </button>
+                  <div
+                    className={[
+                      "rounded-xl border p-2",
+                      selectedView === "slots" ? "border-violet-200 bg-violet-50/60" : "border-transparent bg-transparent",
+                    ].join(" ")}
+                  >
+                    <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Slot management</div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        value={addSlots}
+                        onChange={(e) => setAddSlots(Math.max(1, Number(e.target.value || 1)))}
+                        className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm outline-none focus:border-violet-500"
+                      />
+                      <button
+                        onClick={upgradeSlots}
+                        disabled={slotUpgradeBusy}
+                        className="flex-1 rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
+                      >
+                        {slotUpgradeBusy ? "Updating..." : "Upgrade slots"}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
@@ -656,6 +980,81 @@ export default function PrincipalPage() {
                       ))}
                     </div>
                   </div>
+                </div>
+              </SectionCard>
+
+              <SectionCard
+                title="Notifications & actions"
+                subtitle="Important alerts only, with clear next steps."
+                className={highlightedSection("notifications")}
+              >
+                <div className="space-y-2">
+                  {signals.inactiveTeachers > 0 ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                      {signals.inactiveTeachers} teachers need attention this week.
+                    </div>
+                  ) : null}
+                  {signals.slotsRemaining <= 2 ? (
+                    <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-900">
+                      Your school has only {signals.slotsRemaining} slot(s) remaining.
+                    </div>
+                  ) : null}
+                  {dashboard.overview.weeklyActivityCount < Math.max(1, dashboard.overview.activeTeachers) ? (
+                    <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                      Weekly generation is below your active teacher baseline.
+                    </div>
+                  ) : null}
+                  {signals.inactiveTeachers === 0 &&
+                  signals.slotsRemaining > 2 &&
+                  dashboard.overview.weeklyActivityCount >= Math.max(1, dashboard.overview.activeTeachers) ? (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+                      No urgent alerts. Your school workflow is stable.
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Link
+                    href="/principal?view=teachers"
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Invite teachers
+                  </Link>
+                  <Link
+                    href="/principal?view=generate"
+                    className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100"
+                  >
+                    Generate this week&apos;s lessons
+                  </Link>
+                  <Link
+                    href="/principal?view=slots"
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Upgrade slots
+                  </Link>
+                </div>
+              </SectionCard>
+
+              <SectionCard
+                title="System settings"
+                subtitle="Account and school controls."
+                className={highlightedSection("settings")}
+              >
+                <div className="space-y-2">
+                  <Link
+                    href="/principal?view=settings"
+                    className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                  >
+                    <span>Account settings</span>
+                    <span>→</span>
+                  </Link>
+                  <Link
+                    href="/principal?view=workspace"
+                    className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                  >
+                    <span>School settings</span>
+                    <span>→</span>
+                  </Link>
                 </div>
               </SectionCard>
             </aside>
