@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getBearerTokenFromHeaders, resolvePrincipalContext } from "@/lib/principal/server";
+import { ensurePrincipalBillingActive } from "@/lib/principal/billing";
 import { isMissingTableOrColumnError } from "@/lib/principal/utils";
 
 export const runtime = "nodejs";
@@ -36,6 +37,10 @@ export async function PATCH(req: NextRequest) {
     }
 
     const admin = createAdminClient();
+    const billingGuard = await ensurePrincipalBillingActive(admin, context.school.id);
+    if (!billingGuard.ok) {
+      return NextResponse.json({ ok: false, error: billingGuard.error, billing: billingGuard.billing }, { status: billingGuard.status });
+    }
 
     if (action === "remove") {
       const delRes = await admin

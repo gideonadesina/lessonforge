@@ -320,6 +320,8 @@ export default function DashboardPage() {
     schemeRows.map((row) => row.class_name).filter(Boolean)
   ).size;
   const pendingItems = planningReminders.pendingTopicsCount;
+  const isOutOfCredits = creditsRemaining <= 0;
+  const isLowCredits = creditsRemaining > 0 && creditsRemaining <= 5;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -337,6 +339,24 @@ export default function DashboardPage() {
         {msg ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-800 shadow-sm">
             {msg}
+          </div>
+        ) : null}
+
+        {isOutOfCredits ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900 shadow-sm">
+            <p className="font-semibold">You are out of credits.</p>
+            <p className="mt-1">
+              New generation actions are blocked, but your dashboard and saved content remain available.
+            </p>
+            <Link href="/settings" className="mt-3 inline-flex rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-semibold text-rose-900">
+              Recharge / Upgrade
+            </Link>
+          </div>
+        ) : null}
+
+        {isLowCredits ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
+            Credits are running low ({creditsRemaining} left). Plan a manual recharge soon to avoid interruptions.
           </div>
         ) : null}
 

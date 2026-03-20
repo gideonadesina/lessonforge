@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { track } from "@/lib/analytics";
+import { createBrowserSupabase } from "@/lib/supabase/browser";
 
 function SuccessInner() {
   const sp = useSearchParams();
@@ -21,19 +22,31 @@ function SuccessInner() {
           return;
         }
 
-        const res = await fetch(`/api/paystack/verify?reference=${encodeURIComponent(reference)}`);
+        const supabase = createBrowserSupabase();
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        if (!token) {
+          setState("bad");
+          setMsg("Your session expired. Please log in and verify from your dashboard.");
+          return;
+        }
+
+        const res = await fetch(`/api/paystack/verify?reference=${encodeURIComponent(reference)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         const json = await res.json().catch(() => ({}));
 
         if (res.ok) {
           setState("ok");
-          setMsg("✅ Subscription activated! You can now continue.");
+          setMsg("Payment verified successfully. Your plan and credits have been updated.");
         } else {
           setState("bad");
-          setMsg(json?.error || "⚠️ Could not confirm payment yet. Refresh in a minute.");
+          setMsg(json?.error || "Could not confirm payment yet. Refresh in a minute.");
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : "Verification failed.";
         setState("bad");
-        setMsg(e?.message || "⚠️ Verification failed.");
+        setMsg(message);
       }
     })();
   }, [reference]);
@@ -44,7 +57,7 @@ function SuccessInner() {
         <h1 className="text-2xl font-bold">Payment Status</h1>
 
         <p className="mt-3 text-slate-700">
-          {state === "loading" ? "Confirming your subscription…" : msg}
+          {state === "loading" ? "Confirming your payment…" : msg}
         </p>
 
         <div className="mt-6 flex gap-3">
@@ -67,7 +80,7 @@ function SuccessInner() {
 }
 
 export default function BillingSuccessPage() {
-  track("payment_success", { plan: "pro_monthly" });
+  track("payment_success", { flow: "manual_prepaid" });
   return (
     <Suspense
       fallback={

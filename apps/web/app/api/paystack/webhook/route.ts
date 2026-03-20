@@ -28,42 +28,84 @@ export async function POST(req: Request) {
 
     const event = JSON.parse(rawBody);
 
-    // Minimal: handle successful charges (good enough for launch)
-    if (event?.event === "charge.success") {
-  const data = event?.data ?? {};
+    if (event?.event !== "charge.success") {
+      return NextResponse.json({ received: true }, { status: 200 });
+    }
 
-  const email = data?.customer?.email ?? null;
-  const subscriptionCode = data?.subscription?.subscription_code ?? null;
-  const customerCode = data?.customer?.customer_code ?? null;
+    const data = event?.data ?? {};
+    const metadata = (data?.metadata ?? {}) as Record<string, unknown>;
+    const purpose = String(metadata?.purpose ?? "");
 
-  // ✅ TRUST METADATA (YOU SET THIS IN INITIALIZE)
-  const userId = data?.metadata?.user_id ?? null;
-  const tier = (data?.metadata?.tier ?? "basic") as "basic" | "pro";
+    // Webhook currently finalizes only teacher one-off/manual payments.
+    if (purpose !== "teacher_plan_purchase") {
+      return NextResponse.json({ received: true }, { status: 200 });
+    }
 
-  if (!userId) {
-    return NextResponse.json({ received: true, warning: "Missing user_id in metadata" }, { status: 200 });
-  }
+    const userId = String(metadata?.user_id ?? "");
+    if (!userId) {
+      return NextResponse.json({ received: true, warning: "Missing user_id in metadata" }, { status: 200 });
+    }
 
-  const allowance = tier === "pro" ? 50 : 20;
+    const reference = String(data?.reference ?? "");
+    const tier = String(metadata?.tier ?? "").toLowerCase() === "pro" ? "pro" : "basic";
+    const currency = (String(data?.currency ?? "NGN").toUpperCase() === "USD" ? "USD" : "NGN") as "NGN" | "USD";
+    const configuredAmountMajor =
+      tier === "pro"
+        ? Number(currency === "NGN" ? process.env.TEACHER_PLAN_PRICE_PRO_NGN ?? 5000 : process.env.TEACHER_PLAN_PRICE_PRO_USD ?? 50)
+        : Number(currency === "NGN" ? process.env.TEACHER_PLAN_PRICE_BASIC_NGN ?? 2000 : process.env.TEACHER_PLAN_PRICE_BASIC_USD ?? 20);
+    const expectedAmountMajorRaw = Number(metadata?.expected_amount_major ?? configuredAmountMajor);
+    const expectedAmountMajor = Number.isFinite(expectedAmountMajorRaw) && expectedAmountMajorRaw > 0
+      ? expectedAmountMajorRaw
+      : configuredAmountMajor;
+    const paidAmountMajor = Math.round(Number(data?.amount ?? 0)) / 100;
 
-  const admin = createAdminClient();
+    if (!Number.isFinite(paidAmountMajor) || paidAmountMajor !== expectedAmountMajor) {
+      return NextResponse.json({ received: true, warning: "Amount mismatch; skipped profile activation" }, { status: 200 });
+    }
 
-  await admin
-    .from("profiles")
-    .update({
-      plan: tier,                                // "basic" | "pro"
-      is_pro: tier === "pro",                    // ✅ only pro=true
-      credits_monthly_allowance: allowance,      // ✅ 20 or 50
-      credits_balance: allowance,                // ✅ reset to allowance on payment
-      credits_reset_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      paystack_email: email,
-      paystack_subscription_code: subscriptionCode,
-      paystack_customer_code: customerCode,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", userId);
-  }
+    const allowanceRaw =
+      Number(metadata?.credits_allowance) ||
+      Number(tier === "pro" ? process.env.TEACHER_PLAN_CREDITS_PRO ?? 50 : process.env.TEACHER_PLAN_CREDITS_BASIC ?? 20);
+    const allowance = Number.isFinite(allowanceRaw) && allowanceRaw > 0 ? Math.trunc(allowanceRaw) : (tier === "pro" ? 50 : 20);
 
+    const admin = createAdminClient();
+    const profileRes = await admin
+      .from("profiles")
+      .select("id, paystack_subscription_code")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (profileRes.error) {
+      return NextResponse.json({ error: profileRes.error.message }, { status: 500 });
+    }
+
+    const existingReference = String(profileRes.data?.paystack_subscription_code ?? "");
+    if (existingReference && existingReference === reference) {
+      return NextResponse.json({ received: true, idempotent: true }, { status: 200 });
+    }
+
+    const email = data?.customer?.email ?? null;
+    const customerCode = data?.customer?.customer_code ?? null;
+
+    const updateRes = await admin
+      .from("profiles")
+      .update({
+        plan: tier,
+        is_pro: tier === "pro",
+        credits_monthly_allowance: allowance,
+        credits_balance: allowance,
+        paystack_email: email,
+        paystack_subscription_code: reference,
+        paystack_customer_code: customerCode,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", userId);
+
+    if (updateRes.error) {
+      return NextResponse.json({ error: updateRes.error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ received: true }, { status: 200 });
   } catch (error) {
     console.error("Webhook error:", error);
     return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });

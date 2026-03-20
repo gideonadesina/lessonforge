@@ -173,11 +173,11 @@ export default function SchoolPage() {
             <ul className="mt-3 space-y-2 text-sm text-slate-700 list-disc pl-5">
               <li>Headteacher buys a license (seats = number of teachers).</li>
               <li>Teachers enter the shared code to activate.</li>
-              <li>Access is monthly and managed by the school.</li>
+              <li>Access is managed by the school and renewed manually by the principal.</li>
             </ul>
 
             <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
-              Tip: If you don’t have a code, ask your admin or continue with individual subscriptions.
+              Tip: If you don’t have a code, ask your admin or continue with an individual manual recharge.
             </div>
           </div>
         </div>

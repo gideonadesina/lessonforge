@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveActiveSchoolCode, resolvePrincipalContext, getBearerTokenFromHeaders } from "@/lib/principal/server";
+import { resolvePrincipalBillingState } from "@/lib/principal/billing";
 import {
   DEFAULT_BILLING_CYCLE,
   DEFAULT_CURRENCY,
@@ -317,9 +318,8 @@ export async function GET(req: NextRequest) {
     const billingHistory = await getBillingHistory(admin, schoolId);
 
     const latestPaid = billingHistory.find((x) => x.status === "paid");
-    const nextBillingDate = latestPaid?.paidAt
-      ? new Date(new Date(latestPaid.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString()
-      : null;
+    const billingState = await resolvePrincipalBillingState(admin, schoolId);
+    const nextBillingDate = billingState.entitlementEndsAt;
 
     const progressBase = Math.max(slotLimit * 8, 1);
     const schemeProgressPercent = Math.max(5, Math.min(100, Math.round((totalLessonsGenerated / progressBase) * 100)));
@@ -359,8 +359,14 @@ export async function GET(req: NextRequest) {
         amountPerCycle: slotLimit * DEFAULT_SLOT_PRICE,
         currency: DEFAULT_CURRENCY,
         billingCycle: DEFAULT_BILLING_CYCLE,
-        status: latestPaid ? "active" : "trialing",
+        renewalMode: "manual",
+        status: latestPaid && !billingState.renewalRequired ? "active" : "past_due",
         nextBillingDate,
+        entitlementEndsAt: billingState.entitlementEndsAt,
+        daysUntilExpiry: billingState.daysUntilExpiry,
+        renewalRequired: billingState.renewalRequired,
+        reminderLevel: billingState.reminderLevel,
+        reminderMessage: billingState.reminderMessage,
       },
       billingHistory,
     };

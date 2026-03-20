@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { useProfile } from "@/lib/useProfile";
 
 type Generated = {
   lessonPlan?: {
@@ -81,6 +83,7 @@ function shuffleArray<T>(arr: T[]) {
 export default function GeneratePage() {
   const router = useRouter();
   const supabase = useMemo(() => createBrowserSupabase(), []);
+  const { creditsRemaining, planLabel, loading: profileLoading } = useProfile();
 
   const [curriculum, setCurriculum] = useState("Nigerian Curriculum");
   const [schoolLevel, setSchoolLevel] = useState("Secondary");
@@ -100,6 +103,7 @@ export default function GeneratePage() {
 
   const [result, setResult] = useState<Generated | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
+  const outOfCredits = !profileLoading && creditsRemaining <= 0;
   
    useEffect(() => {
   (window as any).__FORGE_CONTEXT__ = {
@@ -136,6 +140,11 @@ export default function GeneratePage() {
 ]);
   
   async function onGenerate() {
+    if (outOfCredits) {
+      setError("No credits remaining. Recharge to continue generating new content.");
+      return;
+    }
+
     setLoading(true);
     setSaving(false);
     setError(null);
@@ -434,6 +443,18 @@ function handleDownloadImage(src: string, title: string) {
         </p>
       </div>
 
+      {outOfCredits ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
+          <p className="font-semibold">Credits exhausted on {planLabel} plan.</p>
+          <p className="mt-1">
+            New generation is blocked, but your saved content stays accessible in Library and Dashboard.
+          </p>
+          <Link href="/settings" className="mt-3 inline-flex rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-semibold text-rose-900">
+            Recharge / Upgrade
+          </Link>
+        </div>
+      ) : null}
+
       {/* Form */}
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -515,6 +536,7 @@ function handleDownloadImage(src: string, title: string) {
             onClick={onGenerate}
             disabled={
               loading ||
+              outOfCredits ||
               !curriculum.trim() ||
               !schoolLevel.trim() ||
               !subject.trim() ||

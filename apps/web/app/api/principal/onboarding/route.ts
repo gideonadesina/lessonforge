@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getBearerTokenFromHeaders, resolvePrincipalContext } from "@/lib/principal/server";
+import { paystackHeaders } from "@/lib/paystack";
 import {
   DEFAULT_CURRENCY,
   DEFAULT_SLOT_PRICE,
@@ -15,12 +16,11 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type OnboardingPayload = {
-  principalName: string;
-  schoolName: string;
-  teacherSlots: number;
+  principalName?: string;
+  schoolName?: string;
+  teacherSlots?: number;
   payment?: {
-    provider?: "placeholder" | "paystack";
-    status?: "success" | "pending" | "failed";
+    provider?: "paystack";
     reference?: string | null;
   };
 };
@@ -32,6 +32,15 @@ type SchoolInsertRecord = {
   created_at: string | null;
   created_by: string | null;
   principal_name?: string | null;
+};
+
+type PaystackVerifyData = {
+  status: string;
+  amount: number;
+  currency: string;
+  reference: string;
+  paid_at?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 async function insertSchool(
@@ -74,6 +83,27 @@ async function insertSchool(
   return fallbackRes.data as SchoolInsertRecord;
 }
 
+function parsePositiveNumber(value: unknown) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+async function verifyPaystackReference(reference: string) {
+  const verifyRes = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+    headers: paystackHeaders(),
+  });
+  const verifyJson = await verifyRes.json();
+
+  if (!verifyRes.ok || !verifyJson?.status) {
+    throw new Error("Could not verify payment with Paystack.");
+  }
+  if (verifyJson?.data?.status !== "success") {
+    throw new Error("Payment has not been completed successfully.");
+  }
+
+  return verifyJson.data as PaystackVerifyData;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const token = getBearerTokenFromHeaders(req.headers);
@@ -91,37 +121,78 @@ export async function POST(req: NextRequest) {
     }
 
     const body = (await req.json().catch(() => null)) as OnboardingPayload | null;
-    const principalName = String(body?.principalName ?? "").trim();
-    const schoolName = String(body?.schoolName ?? "").trim();
-    const teacherSlots = sanitizeSlotCount(body?.teacherSlots ?? 1);
-    const paymentStatus = body?.payment?.status ?? "pending";
-
-    if (!principalName || !schoolName) {
-      return NextResponse.json(
-        { ok: false, error: "Principal name and school name are required." },
-        { status: 400 }
-      );
+    const paymentReference = String(body?.payment?.reference ?? "").trim();
+    if (!paymentReference) {
+      return NextResponse.json({ ok: false, error: "Payment reference is required." }, { status: 400 });
     }
 
-    if (paymentStatus !== "success") {
+    const verified = await verifyPaystackReference(paymentReference);
+    const metadata = (verified.metadata ?? {}) as Record<string, unknown>;
+    const purpose = String(metadata?.purpose ?? "");
+    if (purpose !== "principal_onboarding") {
+      return NextResponse.json({ ok: false, error: "Payment purpose mismatch for principal onboarding." }, { status: 400 });
+    }
+
+    const ownerId = String(metadata?.user_id ?? "");
+    if (!ownerId || ownerId !== context.user.id) {
+      return NextResponse.json({ ok: false, error: "Payment ownership mismatch." }, { status: 403 });
+    }
+
+    const principalName = String(metadata?.principal_name ?? body?.principalName ?? "").trim();
+    const schoolName = String(metadata?.school_name ?? body?.schoolName ?? context.school?.name ?? "").trim();
+    const teacherSlots = sanitizeSlotCount(metadata?.teacher_slots ?? body?.teacherSlots ?? 1);
+    if (!principalName || !schoolName) {
+      return NextResponse.json({ ok: false, error: "Principal name and school name are required." }, { status: 400 });
+    }
+
+    const expectedAmount = computeSubscriptionAmount(teacherSlots, DEFAULT_SLOT_PRICE);
+    const expectedAmountFromMeta = parsePositiveNumber(metadata?.expected_amount_major);
+    const expectedMajorAmount = expectedAmountFromMeta ?? expectedAmount;
+    const paidAmountMajor = Math.round(Number(verified.amount ?? 0)) / 100;
+    if (!Number.isFinite(paidAmountMajor) || paidAmountMajor !== expectedMajorAmount) {
       return NextResponse.json(
-        { ok: false, error: "Payment is not confirmed. Complete payment before onboarding." },
+        {
+          ok: false,
+          error: "Paid amount did not match expected amount.",
+          expected: expectedMajorAmount,
+          paid: paidAmountMajor,
+        },
         { status: 400 }
       );
     }
 
     const admin = createAdminClient();
+    const existingByReference = await admin
+      .from("subscriptions")
+      .select("school_id, amount, currency, teacher_slots, paid_at")
+      .eq("provider", "paystack")
+      .eq("reference", paymentReference)
+      .maybeSingle();
+    if (existingByReference.error && !isMissingTableOrColumnError(existingByReference.error)) {
+      return NextResponse.json({ ok: false, error: existingByReference.error.message }, { status: 500 });
+    }
 
-    // Idempotency: if user already has a school they created, return it.
-    if (context.school?.id) {
+    if (existingByReference.data?.school_id) {
+      const schoolRes = await admin
+        .from("schools")
+        .select("id, name, code, created_at")
+        .eq("id", existingByReference.data.school_id)
+        .maybeSingle();
+      if (schoolRes.error && !isMissingTableOrColumnError(schoolRes.error)) {
+        return NextResponse.json({ ok: false, error: schoolRes.error.message }, { status: 500 });
+      }
+
+      const existingSchool = schoolRes.data;
       return NextResponse.json(
         {
           ok: true,
           data: {
-            schoolId: context.school.id,
-            schoolName: context.school.name,
-            schoolCode: context.school.code,
-            teacherSlots,
+            schoolId: existingSchool?.id ?? existingByReference.data.school_id,
+            schoolName: existingSchool?.name ?? context.school?.name ?? schoolName,
+            schoolCode: existingSchool?.code ?? context.school?.code ?? null,
+            teacherSlots: Number(existingByReference.data.teacher_slots ?? teacherSlots),
+            amount: Number(existingByReference.data.amount ?? expectedMajorAmount),
+            currency: (existingByReference.data.currency ?? DEFAULT_CURRENCY) as typeof DEFAULT_CURRENCY,
             redirectTo: "/principal",
             alreadyExists: true,
           },
@@ -130,13 +201,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const schoolCode = generateSchoolCode(schoolName);
-    const school = await insertSchool(admin, {
-      schoolName,
-      principalName,
-      userId: context.user.id,
-      code: schoolCode,
-    });
+    let schoolCode = context.school?.code ?? null;
+    const school =
+      context.school?.id
+        ? ({
+            id: context.school.id,
+            name: context.school.name,
+            code: context.school.code,
+            created_at: context.school.created_at,
+            created_by: context.user.id,
+            principal_name: context.school.principal_name ?? principalName,
+          } as SchoolInsertRecord)
+        : await insertSchool(admin, {
+            schoolName,
+            principalName,
+            userId: context.user.id,
+            code: generateSchoolCode(schoolName),
+          });
 
     const memberRes = await admin.from("school_members").insert({
       school_id: school.id,
@@ -159,32 +240,53 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: slotRes.error.message }, { status: 500 });
     }
 
-    const codeRes = await admin.from("school_codes").insert({
-      school_id: school.id,
-      code: schoolCode,
-      is_active: true,
-      generated_by: context.user.id,
-    });
-    if (codeRes.error && !isMissingTableOrColumnError(codeRes.error)) {
-      return NextResponse.json({ ok: false, error: codeRes.error.message }, { status: 500 });
+    if (!schoolCode) {
+      schoolCode = generateSchoolCode(schoolName);
+      const codeRes = await admin.from("school_codes").insert({
+        school_id: school.id,
+        code: schoolCode,
+        is_active: true,
+        generated_by: context.user.id,
+      });
+      if (codeRes.error && !isMissingTableOrColumnError(codeRes.error)) {
+        return NextResponse.json({ ok: false, error: codeRes.error.message }, { status: 500 });
+      }
     }
 
     // Keep schools.code in sync for backwards compatibility.
-    await admin.from("schools").update({ code: schoolCode }).eq("id", school.id);
+    if (schoolCode) {
+      await admin.from("schools").update({ code: schoolCode }).eq("id", school.id);
+    }
 
-    const amount = computeSubscriptionAmount(teacherSlots, DEFAULT_SLOT_PRICE);
-    const subRes = await admin.from("subscriptions").insert({
+    const amount = expectedMajorAmount;
+    const subscriptionBase = {
       school_id: school.id,
       amount,
       currency: DEFAULT_CURRENCY,
       status: "paid",
-      provider: body?.payment?.provider ?? "placeholder",
-      reference: body?.payment?.reference ?? null,
+      provider: "paystack",
+      reference: paymentReference,
       teacher_slots: teacherSlots,
       billing_cycle: "monthly",
-      paid_at: new Date().toISOString(),
+      paid_at: verified.paid_at ?? new Date().toISOString(),
+    };
+
+    let subRes = await admin.from("subscriptions").insert({
+      ...subscriptionBase,
+      provider_metadata: {
+        paystack_reference: paymentReference,
+        paystack_status: verified.status,
+        paystack_amount_minor: verified.amount,
+        expected_amount_major: expectedMajorAmount,
+        teacher_slots: teacherSlots,
+      },
     });
-    if (subRes.error && !isMissingTableOrColumnError(subRes.error)) {
+    if (subRes.error && String(subRes.error.code ?? "") !== "23505") {
+      subRes = await admin.from("subscriptions").insert(subscriptionBase);
+    }
+
+    const subCode = String(subRes.error?.code ?? "");
+    if (subRes.error && subCode !== "23505" && !isMissingTableOrColumnError(subRes.error)) {
       return NextResponse.json({ ok: false, error: subRes.error.message }, { status: 500 });
     }
 
