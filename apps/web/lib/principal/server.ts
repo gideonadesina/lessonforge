@@ -19,6 +19,8 @@ export type PrincipalContext = {
     principal_name?: string | null;
   } | null;
   membershipRole?: string | null;
+  appRole?: string | null;
+  hasPrincipalAppRole?: boolean;
   isPrincipal?: boolean;
   isTeacherOnly?: boolean;
 };
@@ -61,6 +63,10 @@ export async function resolvePrincipalContext(token: string): Promise<PrincipalC
   const user = authData?.user;
 
   if (authErr || !user) return { ok: false, error: "Unauthorized", status: 401 };
+
+  const rawAppRole = (user.user_metadata as Record<string, unknown> | null)?.app_role;
+  const appRole = typeof rawAppRole === "string" ? rawAppRole.toLowerCase() : null;
+  const hasPrincipalAppRole = Boolean(appRole && isPrincipalRole(appRole));
 
   let membershipRows: Array<{ school_id: string; role: string | null }> = [];
   const memRes = await admin
@@ -106,7 +112,9 @@ export async function resolvePrincipalContext(token: string): Promise<PrincipalC
     school = (byCreatorRes.data as SchoolRecord | null) ?? null;
   }
 
-  const isPrincipal = Boolean(principalMembership || (school && school.created_by === user.id));
+  const isPrincipal = Boolean(
+    principalMembership || (school && school.created_by === user.id) || hasPrincipalAppRole
+  );
   const isTeacherOnly = Boolean(teacherMembership && !isPrincipal);
 
   return {
@@ -114,6 +122,8 @@ export async function resolvePrincipalContext(token: string): Promise<PrincipalC
     user: { id: user.id, email: user.email ?? null },
     school,
     membershipRole: principalMembership?.role ?? null,
+    appRole,
+    hasPrincipalAppRole,
     isPrincipal,
     isTeacherOnly,
   };
