@@ -5,6 +5,7 @@ import {
   DEFAULT_CURRENCY,
   DEFAULT_SLOT_PRICE,
   computeSubscriptionAmount,
+  generateLicenseCode,
   generateSchoolCode,
   isMissingTableOrColumnError,
   sanitizeSlotCount,
@@ -36,7 +37,7 @@ type SchoolInsertRecord = {
 
 async function insertSchool(
   admin: ReturnType<typeof createAdminClient>,
-  input: { schoolName: string; principalName: string; userId: string; code: string }
+  input: { schoolName: string; principalName: string; userId: string; code: string; licenseCode: string }
 ): Promise<SchoolInsertRecord> {
   const withPrincipalRes = await admin
     .from("schools")
@@ -44,6 +45,7 @@ async function insertSchool(
       name: input.schoolName,
       created_by: input.userId,
       code: input.code,
+      license_code: input.licenseCode,
       principal_name: input.principalName,
     })
     .select("id, name, code, created_at, created_by, principal_name")
@@ -63,6 +65,7 @@ async function insertSchool(
       name: input.schoolName,
       created_by: input.userId,
       code: input.code,
+      license_code: input.licenseCode,
     })
     .select("id, name, code, created_at, created_by")
     .single();
@@ -131,11 +134,13 @@ export async function POST(req: NextRequest) {
     }
 
     const schoolCode = generateSchoolCode(schoolName);
+    const licenseCode = generateLicenseCode(schoolName);
     const school = await insertSchool(admin, {
       schoolName,
       principalName,
       userId: context.user.id,
       code: schoolCode,
+      licenseCode,
     });
 
     const memberRes = await admin.from("school_members").insert({

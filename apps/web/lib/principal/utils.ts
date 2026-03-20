@@ -55,6 +55,23 @@ export function generateSchoolCode(schoolName: string) {
   return `${initials}-${rand}`;
 }
 
+export function generateLicenseCode(schoolName: string) {
+  const cleaned = (schoolName || "LessonForge School")
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const initials = (cleaned.map((w) => w[0]).join("").slice(0, 3) || "LFS").padEnd(3, "X");
+  const randomSource =
+    typeof globalThis.crypto !== "undefined" && typeof globalThis.crypto.randomUUID === "function"
+      ? globalThis.crypto.randomUUID().replace(/-/g, "")
+      : Math.random().toString(36).slice(2, 14);
+  const randomSuffix = randomSource.slice(0, 10).toUpperCase().padEnd(10, "0");
+  return `LIC-${initials}-${randomSuffix}`;
+}
+
 export function isMissingTableOrColumnError(error: unknown) {
   const err = error as { code?: string; message?: string } | null;
   const code = String(err?.code ?? "");
