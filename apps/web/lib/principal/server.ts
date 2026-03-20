@@ -21,6 +21,7 @@ export type PrincipalContext = {
   membershipRole?: string | null;
   isPrincipal?: boolean;
   isTeacherOnly?: boolean;
+  appRole?: string | null;
 };
 
 type SchoolRecord = {
@@ -76,6 +77,8 @@ export async function resolvePrincipalContext(token: string): Promise<PrincipalC
 
   const principalMembership = membershipRows.find((m) => isPrincipalRole(m.role));
   const teacherMembership = membershipRows.find((m) => !isPrincipalRole(m.role));
+  const appRole = String((user.user_metadata as { app_role?: unknown } | null)?.app_role ?? "").toLowerCase() || null;
+  const selectedPrincipalRole = appRole === "principal";
 
   let school: PrincipalContext["school"] = null;
   if (principalMembership?.school_id) {
@@ -106,7 +109,7 @@ export async function resolvePrincipalContext(token: string): Promise<PrincipalC
     school = (byCreatorRes.data as SchoolRecord | null) ?? null;
   }
 
-  const isPrincipal = Boolean(principalMembership || (school && school.created_by === user.id));
+  const isPrincipal = Boolean(selectedPrincipalRole || principalMembership || (school && school.created_by === user.id));
   const isTeacherOnly = Boolean(teacherMembership && !isPrincipal);
 
   return {
@@ -116,6 +119,7 @@ export async function resolvePrincipalContext(token: string): Promise<PrincipalC
     membershipRole: principalMembership?.role ?? null,
     isPrincipal,
     isTeacherOnly,
+    appRole,
   };
 }
 

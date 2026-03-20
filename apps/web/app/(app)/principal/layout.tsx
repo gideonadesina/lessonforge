@@ -30,6 +30,8 @@ export default async function PrincipalLayout({ children }: { children: ReactNod
   const memberships = (membershipRes.data ?? []) as Array<{ role: string | null }>;
   const hasAnyMembership = memberships.length > 0;
   const hasPrincipalMembership = memberships.some((m) => isPrincipalRole(m.role));
+  const selectedPrincipalRole =
+    String((user.user_metadata as { app_role?: unknown } | null)?.app_role ?? "").toLowerCase() === "principal";
 
   const schoolRes = await admin
     .from("schools")
@@ -48,7 +50,7 @@ export default async function PrincipalLayout({ children }: { children: ReactNod
   // 1. principals/admins/owners/headteachers
   // 2. users who already created a school
   // 3. users with no school yet, so they can start onboarding
-  const shouldBlockPrincipalArea = hasAnyMembership && !hasPrincipalMembership && !createdSchool;
+  const shouldBlockPrincipalArea = hasAnyMembership && !hasPrincipalMembership && !createdSchool && !selectedPrincipalRole;
 
   if (shouldBlockPrincipalArea) {
     redirect("/dashboard");
