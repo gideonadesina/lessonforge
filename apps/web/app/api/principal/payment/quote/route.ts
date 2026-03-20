@@ -30,8 +30,7 @@ export async function POST(req: NextRequest) {
           amount,
           currency: DEFAULT_CURRENCY,
           billingCycle: "monthly",
-          provider: "placeholder",
-          reference: `placeholder_${Date.now()}`,
+          provider: "paystack",
         },
       },
       { status: 200 }

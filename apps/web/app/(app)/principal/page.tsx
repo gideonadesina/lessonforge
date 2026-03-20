@@ -13,8 +13,7 @@ type PaymentQuote = {
   amount: number;
   currency: "NGN" | "USD";
   billingCycle: "monthly";
-  provider: "placeholder" | "paystack";
-  reference: string;
+  provider: "paystack";
 };
 
 type DashboardApiResponse = {
@@ -22,6 +21,14 @@ type DashboardApiResponse = {
   onboardingRequired?: boolean;
   data?: PrincipalDashboardPayload;
   error?: string;
+};
+
+type ApiEnvelope<T> = {
+  ok?: boolean;
+  error?: string;
+  data?: T;
+  onboardingRequired?: boolean;
+  [key: string]: unknown;
 };
 
 function toNaira(amount: number) {
@@ -78,31 +85,42 @@ export default function PrincipalPage() {
     return data.session?.access_token ?? "";
   }
 
+  async function requestWithAuth<T>(url: string, init: RequestInit = {}) {
+    const token = await getToken();
+    if (!token) {
+      throw new Error("Session expired.");
+    }
+
+    const headers = new Headers(init.headers ?? {});
+    headers.set("Authorization", `Bearer ${token}`);
+    if (init.body && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+
+    const res = await fetch(url, { ...init, headers });
+    const json = (await res.json().catch(() => ({}))) as ApiEnvelope<T>;
+    return { status: res.status, ok: res.ok, json };
+  }
+
   async function loadDashboard() {
     setLoading(true);
     setError(null);
     setForbidden(false);
     try {
-      const token = await getToken();
-      if (!token) throw new Error("Please login to continue.");
-
-      const res = await fetch("/api/principal/dashboard", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const json = (await res.json()) as DashboardApiResponse;
-
-      if (res.status === 403) {
+      const { status, ok, json } = await requestWithAuth<PrincipalDashboardPayload>("/api/principal/dashboard");
+      const typed = json as DashboardApiResponse;
+      if (status === 403) {
         setForbidden(true);
         setDashboard(null);
         setOnboardingRequired(false);
         return;
       }
-      if (!res.ok || !json.ok) {
-        throw new Error(json.error || "Failed to load principal workspace.");
+      if (!ok || !typed.ok) {
+        throw new Error(typed.error || "Failed to load principal workspace.");
       }
 
-      setOnboardingRequired(Boolean(json.onboardingRequired));
-      setDashboard(json.data ?? null);
+      setOnboardingRequired(Boolean(typed.onboardingRequired));
+      setDashboard(typed.data ?? null);
     } catch (e: unknown) {
       setError(getErrorMessage(e, "Failed to load principal workspace."));
     } finally {
@@ -116,58 +134,53 @@ export default function PrincipalPage() {
   }, []);
 
   async function getQuote() {
-    const token = await getToken();
-    if (!token) throw new Error("Session expired.");
-
-    const res = await fetch("/api/principal/payment/quote", {
+    const { ok, json } = await requestWithAuth<PaymentQuote>("/api/principal/payment/quote", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
       body: JSON.stringify({ teacherSlots }),
     });
-    const json = await res.json();
-    if (!res.ok || !json?.ok) throw new Error(json?.error || "Failed to get payment quote.");
-    return json.data as PaymentQuote;
+
+    if (!ok || !json?.ok || !json?.data) {
+      throw new Error(String(json?.error ?? "Failed to get payment quote."));
+    }
+    return json.data;
   }
 
-  async function completeOnboarding() {
+  async function startPrincipalCheckout() {
     setOnboardingBusy(true);
     setError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error("Session expired.");
-
       const paymentQuote = quote ?? (await getQuote());
-      const res = await fetch("/api/principal/onboarding", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          principalName,
-          schoolName,
-          teacherSlots,
-          payment: {
-            provider: paymentQuote.provider,
-            reference: paymentQuote.reference,
-            status: "success",
-          },
-        }),
-      });
-      const json = await res.json();
+      const { ok, json } = await requestWithAuth<{ alreadyActivated?: boolean; authorizationUrl?: string }>(
+        "/api/principal/payment/init",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            principalName,
+            schoolName,
+            teacherSlots: paymentQuote.teacherSlots,
+          }),
+        }
+      );
 
-      if (!res.ok || !json?.ok) {
-        throw new Error(json?.error || "Failed to create principal workspace.");
+      if (!ok || !json?.ok) {
+        throw new Error(String(json?.error ?? "Failed to initialize checkout."));
       }
 
-      setOnboardingRequired(false);
-      setStep(1);
-      await loadDashboard();
+      if (json?.data?.alreadyActivated) {
+        setOnboardingRequired(false);
+        setStep(1);
+        await loadDashboard();
+        return;
+      }
+
+      const authorizationUrl = String(json?.data?.authorizationUrl ?? "");
+      if (!authorizationUrl) {
+        throw new Error("Missing Paystack checkout URL.");
+      }
+
+      window.location.href = authorizationUrl;
     } catch (e: unknown) {
-      setError(getErrorMessage(e, "Onboarding failed."));
+      setError(getErrorMessage(e, "Failed to start checkout."));
     } finally {
       setOnboardingBusy(false);
     }
@@ -178,22 +191,14 @@ export default function PrincipalPage() {
     setBusyTeacherAction(action);
     setError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error("Session expired.");
-
-      const res = await fetch("/api/principal/teachers", {
+      const { ok, json } = await requestWithAuth("/api/principal/teachers", {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify({
           teacherUserId: teacher.userId,
           action,
         }),
       });
-      const json = await res.json();
-      if (!res.ok || !json?.ok) throw new Error(json?.error || "Failed to update teacher.");
+      if (!ok || !json?.ok) throw new Error(String(json?.error ?? "Failed to update teacher."));
       await loadDashboard();
     } catch (e: unknown) {
       setError(getErrorMessage(e, "Failed to update teacher."));
@@ -207,15 +212,10 @@ export default function PrincipalPage() {
     setCodeBusy(true);
     setError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error("Session expired.");
-
-      const res = await fetch("/api/principal/school-code", {
+      const { ok, json } = await requestWithAuth("/api/principal/school-code", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
       });
-      const json = await res.json();
-      if (!res.ok || !json?.ok) throw new Error(json?.error || "Failed to regenerate school code.");
+      if (!ok || !json?.ok) throw new Error(String(json?.error ?? "Failed to regenerate school code."));
       await loadDashboard();
     } catch (e: unknown) {
       setError(getErrorMessage(e, "Failed to regenerate code."));
@@ -228,19 +228,11 @@ export default function PrincipalPage() {
     setSlotUpgradeBusy(true);
     setError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error("Session expired.");
-
-      const res = await fetch("/api/principal/slots", {
+      const { ok, json } = await requestWithAuth("/api/principal/slots", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify({ addSlots }),
       });
-      const json = await res.json();
-      if (!res.ok || !json?.ok) throw new Error(json?.error || "Failed to add slots.");
+      if (!ok || !json?.ok) throw new Error(String(json?.error ?? "Failed to add slots."));
       await loadDashboard();
     } catch (e: unknown) {
       setError(getErrorMessage(e, "Failed to add slots."));
@@ -363,9 +355,6 @@ export default function PrincipalPage() {
                       </span>
                     </div>
                   </div>
-                  <p className="mt-3 text-xs text-slate-500">
-                    Placeholder payment mode is active. This is ready to swap with real gateway checkout.
-                  </p>
                 </div>
               </div>
             ) : null}
@@ -405,11 +394,11 @@ export default function PrincipalPage() {
                 </button>
               ) : (
                 <button
-                  onClick={completeOnboarding}
+                  onClick={startPrincipalCheckout}
                   disabled={onboardingBusy}
                   className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
                 >
-                  {onboardingBusy ? "Processing..." : "Complete payment & create workspace"}
+                  {onboardingBusy ? "Redirecting..." : "Proceed to secure checkout"}
                 </button>
               )}
             </div>
