@@ -171,7 +171,10 @@ export default function RoleAuthPage() {
         await syncRole(data.user, cleanName);
 
         if (data.session) {
-          router.push(getRoleHomePath(role));
+          const { data: latestUserData } = await supabase.auth.getUser();
+          const resolvedRole =
+            roleFromUserMetadata(latestUserData.user?.user_metadata, role) ?? role;
+          router.push(getRoleHomePath(resolvedRole));
           router.refresh();
           return;
         }
@@ -203,7 +206,9 @@ export default function RoleAuthPage() {
       await syncRole(data.user, cleanName);
 
       setMsg("Logged in. Redirecting...");
-      router.push(getRoleHomePath(role));
+      const { data: latestUserData } = await supabase.auth.getUser();
+      const resolvedRole = roleFromUserMetadata(latestUserData.user?.user_metadata, role) ?? role;
+      router.push(getRoleHomePath(resolvedRole));
       router.refresh();
     } catch (err: unknown) {
       setMsg(err instanceof Error ? err.message : String(err));
