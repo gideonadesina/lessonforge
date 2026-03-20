@@ -13,8 +13,7 @@ type PaymentQuote = {
   amount: number;
   currency: "NGN" | "USD";
   billingCycle: "monthly";
-  provider: "placeholder" | "paystack";
-  reference: string;
+  provider: "paystack";
 };
 
 type DashboardApiResponse = {
@@ -132,7 +131,7 @@ export default function PrincipalPage() {
     return json.data as PaymentQuote;
   }
 
-  async function completeOnboarding() {
+  async function startPrincipalCheckout() {
     setOnboardingBusy(true);
     setError(null);
     try {
@@ -140,7 +139,7 @@ export default function PrincipalPage() {
       if (!token) throw new Error("Session expired.");
 
       const paymentQuote = quote ?? (await getQuote());
-      const res = await fetch("/api/principal/onboarding", {
+      const res = await fetch("/api/principal/payment/init", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -149,25 +148,30 @@ export default function PrincipalPage() {
         body: JSON.stringify({
           principalName,
           schoolName,
-          teacherSlots,
-          payment: {
-            provider: paymentQuote.provider,
-            reference: paymentQuote.reference,
-            status: "success",
-          },
+          teacherSlots: paymentQuote.teacherSlots,
         }),
       });
       const json = await res.json();
 
       if (!res.ok || !json?.ok) {
-        throw new Error(json?.error || "Failed to create principal workspace.");
+        throw new Error(json?.error || "Failed to initialize checkout.");
       }
 
-      setOnboardingRequired(false);
-      setStep(1);
-      await loadDashboard();
+      if (json?.data?.alreadyActivated) {
+        setOnboardingRequired(false);
+        setStep(1);
+        await loadDashboard();
+        return;
+      }
+
+      const authorizationUrl = String(json?.data?.authorizationUrl ?? "");
+      if (!authorizationUrl) {
+        throw new Error("Missing Paystack checkout URL.");
+      }
+
+      window.location.href = authorizationUrl;
     } catch (e: unknown) {
-      setError(getErrorMessage(e, "Onboarding failed."));
+      setError(getErrorMessage(e, "Failed to start checkout."));
     } finally {
       setOnboardingBusy(false);
     }
@@ -363,9 +367,6 @@ export default function PrincipalPage() {
                       </span>
                     </div>
                   </div>
-                  <p className="mt-3 text-xs text-slate-500">
-                    Placeholder payment mode is active. This is ready to swap with real gateway checkout.
-                  </p>
                 </div>
               </div>
             ) : null}
@@ -405,11 +406,11 @@ export default function PrincipalPage() {
                 </button>
               ) : (
                 <button
-                  onClick={completeOnboarding}
+                  onClick={startPrincipalCheckout}
                   disabled={onboardingBusy}
                   className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
                 >
-                  {onboardingBusy ? "Processing..." : "Complete payment & create workspace"}
+                  {onboardingBusy ? "Redirecting..." : "Proceed to secure checkout"}
                 </button>
               )}
             </div>

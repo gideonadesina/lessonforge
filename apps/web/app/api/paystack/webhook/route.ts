@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import crypto from "crypto";
+import { verifyPaystackTransaction } from "@/lib/paystack";
+import { finalizePrincipalActivationFromPaystackData, getPrincipalPaystackFlow } from "@/lib/principal/payment";
 
 export const runtime = "nodejs"; // Paystack signature verification needs Node crypto
 
@@ -16,6 +18,42 @@ function verifyPaystackSignature(rawBody: string, signature: string | null) {
   return hash === signature;
 }
 
+type LegacyPaystackData = {
+  metadata?: { user_id?: string | null; tier?: "basic" | "pro" | null; flow?: string | null } | null;
+  customer?: { email?: string | null; customer_code?: string | null } | null;
+  subscription?: { subscription_code?: string | null } | null;
+};
+
+async function applyLegacyProfileUpgrade(data: LegacyPaystackData) {
+  const email = data?.customer?.email ?? null;
+  const subscriptionCode = data?.subscription?.subscription_code ?? null;
+  const customerCode = data?.customer?.customer_code ?? null;
+  const userId = data?.metadata?.user_id ?? null;
+  const tier = (data?.metadata?.tier ?? "basic") as "basic" | "pro";
+
+  if (!userId) {
+    return;
+  }
+
+  const allowance = tier === "pro" ? 50 : 20;
+  const admin = createAdminClient();
+
+  await admin
+    .from("profiles")
+    .update({
+      plan: tier,
+      is_pro: tier === "pro",
+      credits_monthly_allowance: allowance,
+      credits_balance: allowance,
+      credits_reset_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      paystack_email: email,
+      paystack_subscription_code: subscriptionCode,
+      paystack_customer_code: customerCode,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", userId);
+}
+
 export async function POST(req: Request) {
   try {
     const rawBody = await req.text();
@@ -28,42 +66,24 @@ export async function POST(req: Request) {
 
     const event = JSON.parse(rawBody);
 
-    // Minimal: handle successful charges (good enough for launch)
     if (event?.event === "charge.success") {
-  const data = event?.data ?? {};
+      const reference = String(event?.data?.reference ?? "").trim();
+      if (!reference) {
+        return NextResponse.json({ received: true, warning: "Missing payment reference" }, { status: 200 });
+      }
 
-  const email = data?.customer?.email ?? null;
-  const subscriptionCode = data?.subscription?.subscription_code ?? null;
-  const customerCode = data?.customer?.customer_code ?? null;
+      // Use reference verification as source of truth, even for webhook events.
+      const verifiedData = await verifyPaystackTransaction(reference);
+      const flow = String(verifiedData?.metadata?.flow ?? "");
 
-  // ✅ TRUST METADATA (YOU SET THIS IN INITIALIZE)
-  const userId = data?.metadata?.user_id ?? null;
-  const tier = (data?.metadata?.tier ?? "basic") as "basic" | "pro";
+      if (flow === getPrincipalPaystackFlow()) {
+        await finalizePrincipalActivationFromPaystackData(verifiedData);
+      } else {
+        await applyLegacyProfileUpgrade(verifiedData);
+      }
+    }
 
-  if (!userId) {
-    return NextResponse.json({ received: true, warning: "Missing user_id in metadata" }, { status: 200 });
-  }
-
-  const allowance = tier === "pro" ? 50 : 20;
-
-  const admin = createAdminClient();
-
-  await admin
-    .from("profiles")
-    .update({
-      plan: tier,                                // "basic" | "pro"
-      is_pro: tier === "pro",                    // ✅ only pro=true
-      credits_monthly_allowance: allowance,      // ✅ 20 or 50
-      credits_balance: allowance,                // ✅ reset to allowance on payment
-      credits_reset_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      paystack_email: email,
-      paystack_subscription_code: subscriptionCode,
-      paystack_customer_code: customerCode,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", userId);
-  }
-
+    return NextResponse.json({ received: true }, { status: 200 });
   } catch (error) {
     console.error("Webhook error:", error);
     return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });

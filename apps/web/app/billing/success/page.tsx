@@ -8,6 +8,7 @@ import { track } from "@/lib/analytics";
 function SuccessInner() {
   const sp = useSearchParams();
   const reference = sp.get("reference");
+  const flow = sp.get("flow");
 
   const [state, setState] = useState<"loading" | "ok" | "bad">("loading");
   const [msg, setMsg] = useState<string>("");
@@ -21,22 +22,26 @@ function SuccessInner() {
           return;
         }
 
-        const res = await fetch(`/api/paystack/verify?reference=${encodeURIComponent(reference)}`);
+        const endpoint =
+          flow === "principal_onboarding"
+            ? `/api/principal/payment/verify?reference=${encodeURIComponent(reference)}`
+            : `/api/paystack/verify?reference=${encodeURIComponent(reference)}`;
+        const res = await fetch(endpoint);
         const json = await res.json().catch(() => ({}));
 
-        if (res.ok) {
+        if (res.ok && json?.ok !== false) {
           setState("ok");
-          setMsg("✅ Subscription activated! You can now continue.");
+          setMsg("✅ Payment confirmed and activation complete.");
         } else {
           setState("bad");
           setMsg(json?.error || "⚠️ Could not confirm payment yet. Refresh in a minute.");
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
         setState("bad");
-        setMsg(e?.message || "⚠️ Verification failed.");
+        setMsg(e instanceof Error ? e.message : "⚠️ Verification failed.");
       }
     })();
-  }, [reference]);
+  }, [flow, reference]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center p-6">
@@ -48,11 +53,11 @@ function SuccessInner() {
         </p>
 
         <div className="mt-6 flex gap-3">
-          <Link href="/dashboard" className="px-4 py-2 rounded-xl bg-slate-900 text-white font-semibold">
-            Go to Dashboard
+          <Link href="/principal" className="px-4 py-2 rounded-xl bg-slate-900 text-white font-semibold">
+            Go to Principal Dashboard
           </Link>
           <Link href="/" className="px-4 py-2 rounded-xl border border-slate-300 bg-white font-semibold">
-            Generate Lesson
+            Back to Home
           </Link>
         </div>
 
