@@ -26,17 +26,22 @@ export default function Topbar({
   }
 
   async function upgradePlan(tier: "basic" | "pro") {
-    const { data } = await supabase.auth.getUser();
-    const user = data.user;
+    const [{ data: userData }, { data: sessionData }] = await Promise.all([
+      supabase.auth.getUser(),
+      supabase.auth.getSession(),
+    ]);
+    const user = userData.user;
+    const token = sessionData.session?.access_token;
 
-    if (!user) return;
+    if (!user || !token) return;
 
     const res = await fetch("/api/paystack/initialize", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify({
-        user_id: user.id,
-        email: user.email,
         currency: "NGN",
         tier,
       }),
@@ -98,14 +103,14 @@ export default function Topbar({
             onClick={() => upgradePlan("basic")}
             className="hidden sm:inline-flex rounded-xl border bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50"
           >
-            Basic ₦2,000/mo
+            Basic ₦2,000
           </button>
 
           <button
             onClick={() => upgradePlan("pro")}
             className="hidden sm:inline-flex rounded-xl bg-slate-900 text-white px-4 py-2 text-sm font-semibold hover:bg-slate-800"
           >
-            Pro ₦5,000/mo
+            Pro ₦5,000
           </button>
 
           <button
@@ -143,13 +148,13 @@ export default function Topbar({
                 onClick={() => upgradePlan("basic")}
                 className="w-full rounded-xl border bg-white px-4 py-3 text-sm font-semibold hover:bg-slate-50"
               >
-                Basic ₦2,000/mo
+                Basic ₦2,000
               </button>
               <button
                 onClick={() => upgradePlan("pro")}
                 className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800"
               >
-                Pro ₦5,000/mo
+                Pro ₦5,000
               </button>
             </div>
           </div>

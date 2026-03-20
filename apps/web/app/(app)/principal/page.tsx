@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import MetricCard from "@/components/principal/MetricCard";
 import SectionCard from "@/components/principal/SectionCard";
@@ -13,8 +14,9 @@ type PaymentQuote = {
   amount: number;
   currency: "NGN" | "USD";
   billingCycle: "monthly";
-  provider: "placeholder" | "paystack";
-  reference: string;
+  renewalMode: "manual";
+  provider: "paystack";
+  reference: string | null;
 };
 
 type DashboardApiResponse = {
@@ -51,6 +53,9 @@ function getErrorMessage(err: unknown, fallback: string) {
 
 export default function PrincipalPage() {
   const supabase = useMemo(() => createBrowserSupabase(), []);
+  const searchParams = useSearchParams();
+  const paymentFlow = searchParams.get("principalPaymentFlow");
+  const paymentReference = searchParams.get("reference");
 
   const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
@@ -115,6 +120,51 @@ export default function PrincipalPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (paymentFlow !== "onboarding" || !paymentReference) return;
+
+    let active = true;
+    (async () => {
+      setOnboardingBusy(true);
+      setError(null);
+      try {
+        const token = await getToken();
+        if (!token) throw new Error("Session expired.");
+
+        const res = await fetch("/api/principal/onboarding", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            payment: { reference: paymentReference },
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok || !json?.ok) {
+          throw new Error(json?.error || "Payment verification failed.");
+        }
+
+        if (!active) return;
+        setOnboardingRequired(false);
+        setStep(1);
+        await loadDashboard();
+        window.history.replaceState({}, "", "/principal");
+      } catch (e: unknown) {
+        if (!active) return;
+        setError(getErrorMessage(e, "Payment verification failed."));
+      } finally {
+        if (active) setOnboardingBusy(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentFlow, paymentReference]);
+
   async function getQuote() {
     const token = await getToken();
     if (!token) throw new Error("Session expired.");
@@ -132,40 +182,35 @@ export default function PrincipalPage() {
     return json.data as PaymentQuote;
   }
 
-  async function completeOnboarding() {
+  async function initializePrincipalPayment(input: { principalName: string; schoolName: string; teacherSlots: number }) {
+    const token = await getToken();
+    if (!token) throw new Error("Session expired.");
+
+    const res = await fetch("/api/principal/payment/initialize", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(input),
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.ok) throw new Error(json?.error || "Failed to initialize payment.");
+    return json.data as { authorization_url: string };
+  }
+
+  async function startOnboardingPayment() {
     setOnboardingBusy(true);
     setError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error("Session expired.");
-
       const paymentQuote = quote ?? (await getQuote());
-      const res = await fetch("/api/principal/onboarding", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          principalName,
-          schoolName,
-          teacherSlots,
-          payment: {
-            provider: paymentQuote.provider,
-            reference: paymentQuote.reference,
-            status: "success",
-          },
-        }),
+      setQuote(paymentQuote);
+      const initialized = await initializePrincipalPayment({
+        principalName: principalName.trim(),
+        schoolName: schoolName.trim(),
+        teacherSlots,
       });
-      const json = await res.json();
-
-      if (!res.ok || !json?.ok) {
-        throw new Error(json?.error || "Failed to create principal workspace.");
-      }
-
-      setOnboardingRequired(false);
-      setStep(1);
-      await loadDashboard();
+      window.location.href = initialized.authorization_url;
     } catch (e: unknown) {
       setError(getErrorMessage(e, "Onboarding failed."));
     } finally {
@@ -228,22 +273,35 @@ export default function PrincipalPage() {
     setSlotUpgradeBusy(true);
     setError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error("Session expired.");
-
-      const res = await fetch("/api/principal/slots", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ addSlots }),
+      if (!dashboard) throw new Error("Dashboard not ready.");
+      const targetSlotCount = Math.max(1, Number(dashboard.subscription.slotLimit || 1) + addSlots);
+      const principalFromDashboard = dashboard.school.principalName || "Principal";
+      const initialized = await initializePrincipalPayment({
+        principalName: principalFromDashboard,
+        schoolName: dashboard.school.name,
+        teacherSlots: targetSlotCount,
       });
-      const json = await res.json();
-      if (!res.ok || !json?.ok) throw new Error(json?.error || "Failed to add slots.");
-      await loadDashboard();
+      window.location.href = initialized.authorization_url;
     } catch (e: unknown) {
-      setError(getErrorMessage(e, "Failed to add slots."));
+      setError(getErrorMessage(e, "Failed to initialize slot payment."));
+    } finally {
+      setSlotUpgradeBusy(false);
+    }
+  }
+
+  async function renewCurrentSubscription() {
+    setSlotUpgradeBusy(true);
+    setError(null);
+    try {
+      if (!dashboard) throw new Error("Dashboard not ready.");
+      const initialized = await initializePrincipalPayment({
+        principalName: dashboard.school.principalName || "Principal",
+        schoolName: dashboard.school.name,
+        teacherSlots: Math.max(1, dashboard.subscription.slotLimit),
+      });
+      window.location.href = initialized.authorization_url;
+    } catch (e: unknown) {
+      setError(getErrorMessage(e, "Failed to initialize renewal payment."));
     } finally {
       setSlotUpgradeBusy(false);
     }
@@ -282,7 +340,7 @@ export default function PrincipalPage() {
         <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">LessonForge School Workspace</p>
         <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-900">Principal Dashboard</h1>
         <p className="mt-1 text-sm text-slate-600">
-          Manage teachers, subscriptions, activity, and planning oversight in one controlled workspace.
+          Manage teachers, manual billing, activity, and planning oversight in one controlled workspace.
         </p>
       </header>
 
@@ -330,7 +388,7 @@ export default function PrincipalPage() {
               <div className="space-y-3">
                 <div className="rounded-xl border border-slate-200 bg-amber-50/60 p-4">
                   <p className="text-sm font-semibold text-slate-900">Choose teacher slots</p>
-                  <p className="mt-1 text-sm text-slate-600">You are billed per teacher seat, monthly.</p>
+                  <p className="mt-1 text-sm text-slate-600">Pay manually per teacher slot for each entitlement cycle.</p>
                   <div className="mt-4 flex items-center gap-3">
                     <input
                       type="range"
@@ -357,14 +415,14 @@ export default function PrincipalPage() {
                     <div>Principal: <span className="font-semibold text-slate-900">{principalName || "—"}</span></div>
                     <div>Teacher slots: <span className="font-semibold text-slate-900">{teacherSlots}</span></div>
                     <div>
-                      Monthly total:{" "}
+                      Total payable now:{" "}
                       <span className="font-semibold text-violet-700">
                         {quote ? toNaira(quote.amount) : "Fetching..."}
                       </span>
                     </div>
                   </div>
                   <p className="mt-3 text-xs text-slate-500">
-                    Placeholder payment mode is active. This is ready to swap with real gateway checkout.
+                    Paystack will only charge when you click the payment button below. No auto-debit is enabled.
                   </p>
                 </div>
               </div>
@@ -405,11 +463,11 @@ export default function PrincipalPage() {
                 </button>
               ) : (
                 <button
-                  onClick={completeOnboarding}
+                  onClick={startOnboardingPayment}
                   disabled={onboardingBusy}
                   className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
                 >
-                  {onboardingBusy ? "Processing..." : "Complete payment & create workspace"}
+                  {onboardingBusy ? "Redirecting..." : "Pay with Paystack"}
                 </button>
               )}
             </div>
@@ -419,6 +477,18 @@ export default function PrincipalPage() {
 
       {!onboardingRequired && dashboard ? (
         <div className="space-y-4">
+          {dashboard.subscription.reminderMessage ? (
+            <div
+              className={`rounded-xl border px-4 py-3 text-sm ${
+                dashboard.subscription.renewalRequired
+                  ? "border-amber-300 bg-amber-50 text-amber-900"
+                  : "border-violet-200 bg-violet-50 text-violet-900"
+              }`}
+            >
+              {dashboard.subscription.reminderMessage}
+            </div>
+          ) : null}
+
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <MetricCard title="Total Teachers" value={dashboard.overview.totalTeachers} subtitle={`Slots: ${dashboard.subscription.slotLimit}`} />
             <MetricCard title="Active Teachers" value={dashboard.overview.activeTeachers} subtitle="Engaged this cycle" />
@@ -440,7 +510,7 @@ export default function PrincipalPage() {
                     disabled={slotUpgradeBusy}
                     className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-60"
                   >
-                    {slotUpgradeBusy ? "Updating..." : "Add teacher slot"}
+                    {slotUpgradeBusy ? "Redirecting..." : "Pay for +1 slot"}
                   </button>
                 }
               >
@@ -475,7 +545,7 @@ export default function PrincipalPage() {
                                   {teacher.status === "disabled" ? (
                                     <button
                                       onClick={() => handleTeacherAction(teacher, "activate")}
-                                      disabled={isBusy}
+                                      disabled={isBusy || dashboard.subscription.renewalRequired}
                                       className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
                                     >
                                       {isBusy && busyTeacherAction === "activate" ? "..." : "Activate"}
@@ -483,7 +553,7 @@ export default function PrincipalPage() {
                                   ) : (
                                     <button
                                       onClick={() => handleTeacherAction(teacher, "disable")}
-                                      disabled={isBusy}
+                                      disabled={isBusy || dashboard.subscription.renewalRequired}
                                       className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                                     >
                                       {isBusy && busyTeacherAction === "disable" ? "..." : "Disable"}
@@ -491,7 +561,7 @@ export default function PrincipalPage() {
                                   )}
                                   <button
                                     onClick={() => handleTeacherAction(teacher, "remove")}
-                                    disabled={isBusy}
+                                    disabled={isBusy || dashboard.subscription.renewalRequired}
                                     className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-60"
                                   >
                                     {isBusy && busyTeacherAction === "remove" ? "..." : "Remove"}
@@ -602,7 +672,7 @@ export default function PrincipalPage() {
                     </button>
                     <button
                       onClick={regenerateCode}
-                      disabled={codeBusy}
+                      disabled={codeBusy || dashboard.subscription.renewalRequired}
                       className="flex-1 rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
                     >
                       {codeBusy ? "Regenerating..." : "Regenerate"}
@@ -623,10 +693,20 @@ export default function PrincipalPage() {
                       <span className="font-semibold text-slate-900">{dashboard.subscription.slotLimit}</span>
                     </div>
                     <div className="mt-1 flex items-center justify-between">
-                      <span className="text-slate-600">Monthly amount</span>
+                      <span className="text-slate-600">Manual payment total</span>
                       <span className="font-semibold text-violet-700">{toNaira(dashboard.subscription.amountPerCycle)}</span>
                     </div>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="text-slate-600">Renewal mode</span>
+                      <span className="font-semibold text-slate-900 capitalize">{dashboard.subscription.renewalMode}</span>
+                    </div>
                   </div>
+
+                  {dashboard.subscription.reminderMessage ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                      {dashboard.subscription.reminderMessage}
+                    </div>
+                  ) : null}
 
                   <div className="flex items-center gap-2">
                     <input
@@ -641,9 +721,17 @@ export default function PrincipalPage() {
                       disabled={slotUpgradeBusy}
                       className="flex-1 rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
                     >
-                      {slotUpgradeBusy ? "Updating..." : "Upgrade slots"}
+                      {slotUpgradeBusy ? "Redirecting..." : "Pay to update slots"}
                     </button>
                   </div>
+
+                  <button
+                    onClick={renewCurrentSubscription}
+                    disabled={slotUpgradeBusy}
+                    className="w-full rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-800 hover:bg-violet-100 disabled:opacity-60"
+                  >
+                    {slotUpgradeBusy ? "Redirecting..." : "Pay to renew current slot plan"}
+                  </button>
 
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
                     <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Billing history</div>

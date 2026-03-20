@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ensurePrincipalBillingActive } from "@/lib/principal/billing";
 import { isMissingTableOrColumnError, isPrincipalRole } from "@/lib/principal/utils";
 
 export const runtime = "nodejs";
@@ -88,6 +89,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Invalid school code" }, { status: 404 });
     }
     const typedSchool = school as SchoolRow;
+    const billingGuard = await ensurePrincipalBillingActive(admin, typedSchool.id);
+    if (!billingGuard.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "This school workspace needs manual renewal before new teachers can join.",
+          detail: billingGuard.error,
+        },
+        { status: billingGuard.status }
+      );
+    }
       // if already a member of this school, return success immediately
     const existingMembership = await admin
       .from("school_members")

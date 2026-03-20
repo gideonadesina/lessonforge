@@ -170,6 +170,15 @@ export async function POST(req: NextRequest) {
       return jsonErr("Missing required fields: subject, topic, grade", 400);
     }
 
+    const { data: creditData, error: creditErr } = await supabase.rpc("consume_generation_credit");
+    if (creditErr) {
+      return jsonErr(`Credit check failed: ${creditErr.message}`, 500);
+    }
+    if (!creditData?.ok) {
+      const msg = String(creditData?.error ?? "No credits");
+      return jsonErr(msg, msg.toLowerCase().includes("not authenticated") ? 401 : 402);
+    }
+
     if (!process.env.OPENAI_API_KEY) return jsonErr("OPENAI_API_KEY missing", 500);
 
     const count = clampInt(body.numQuestions, 5, 50, 10);

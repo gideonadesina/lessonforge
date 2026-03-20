@@ -42,8 +42,14 @@ export type SubscriptionSnapshot = {
   amountPerCycle: number;
   currency: "NGN" | "USD";
   billingCycle: "monthly" | "yearly";
+  renewalMode: "manual";
   status: "active" | "past_due" | "canceled" | "trialing";
   nextBillingDate: string | null;
+  entitlementEndsAt: string | null;
+  daysUntilExpiry: number | null;
+  renewalRequired: boolean;
+  reminderLevel: "none" | "upcoming" | "due" | "expired";
+  reminderMessage: string | null;
 };
 
 export type BillingHistoryItem = {
