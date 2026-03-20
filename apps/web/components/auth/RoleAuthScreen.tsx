@@ -33,13 +33,11 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
 
   const roleConfig = ROLE_CONTENT[role];
 
-  const redirectAfterLogin = useCallback(
-    (targetRole: AppRole = role) => {
-      router.replace(ROLE_CONTENT[targetRole].postAuthPath);
-      router.refresh();
-    },
-    [role, router]
-  );
+  const redirectAfterLogin = useCallback(() => {
+    // Temporary debug behavior: bypass role-based post-auth routing.
+    router.replace("/dashboard");
+    router.refresh();
+  }, [router]);
 
   const syncUserRoleAndRedirect = useCallback(
     async (userId?: string) => {
@@ -49,37 +47,24 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
       setMessage(null);
 
       try {
-        const storedRole = localStorage.getItem(ROLE_STORAGE_KEY);
-        const effectiveRole: AppRole =
-          storedRole === "principal" || storedRole === "teacher" ? storedRole : role;
-
-        const {
-          data: { user },
+        const { data, error: userError } = await supabase.auth.getUser();
+        console.info("[Auth][session] supabase.auth.getUser response", {
+          data,
           error: userError,
-        } = await supabase.auth.getUser();
+        });
 
         if (userError) throw userError;
+        const user = data.user;
         if (!user || (userId && user.id !== userId)) {
           hasHandledSessionRef.current = false;
           return;
         }
 
-        const currentRole = user.user_metadata?.app_role;
-        if (currentRole !== effectiveRole) {
-          const { error: updateError } = await supabase.auth.updateUser({
-            data: {
-              ...user.user_metadata,
-              app_role: effectiveRole,
-            },
-          });
-
-          if (updateError) throw updateError;
-        }
-
-        localStorage.setItem(ROLE_STORAGE_KEY, effectiveRole);
-        redirectAfterLogin(effectiveRole);
+        localStorage.setItem(ROLE_STORAGE_KEY, role);
+        redirectAfterLogin();
       } catch (error: unknown) {
         hasHandledSessionRef.current = false;
+        console.error("[Auth][session] Unable to finish sign in", error);
         setMessage(error instanceof Error ? error.message : "Unable to finish sign in.");
       } finally {
         setSyncingRole(false);
@@ -159,30 +144,54 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
     try {
       localStorage.setItem(ROLE_STORAGE_KEY, role);
 
-      const { error } = await supabase.auth.signInWithPassword({
+      const signInTimeoutMs = 15000;
+      const signInPromise = supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
       });
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        window.setTimeout(() => {
+          reject(
+            new Error(`Sign in timed out after ${Math.floor(signInTimeoutMs / 1000)} seconds.`)
+          );
+        }, signInTimeoutMs);
+      });
+      const signInResult = (await Promise.race([
+        signInPromise,
+        timeoutPromise,
+      ])) as Awaited<ReturnType<typeof supabase.auth.signInWithPassword>>;
 
-      if (error) {
-        setMessage(error.message);
-        return;
-      }
-
-      const { error: updateError } = await supabase.auth.updateUser({
-        data: {
-          app_role: role,
-        },
+      const { data, error } = signInResult;
+      console.info("[Auth][email] supabase.auth.signInWithPassword response", {
+        data,
+        error,
       });
 
-      if (updateError) {
-        setMessage(updateError.message);
+      if (error) {
+        const messageText = String(error.message || "Login failed.");
+        setMessage(
+          messageText.toLowerCase().includes("invalid login credentials")
+            ? "Invalid email or password."
+            : messageText
+        );
         return;
       }
 
-      redirectAfterLogin(role);
+      if (!data?.session || !data.user) {
+        setMessage("Sign in succeeded but no active session was returned. Please try again.");
+        return;
+      }
+
+      hasHandledSessionRef.current = true;
+      setMessage("Signed in. Redirecting to dashboard...");
+      redirectAfterLogin();
     } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "Unable to sign in right now.");
+      console.error("[Auth][email] Unable to sign in", error);
+      setMessage(
+        error instanceof Error && error.message
+          ? error.message
+          : "Unable to sign in right now."
+      );
     } finally {
       setEmailLoading(false);
     }
