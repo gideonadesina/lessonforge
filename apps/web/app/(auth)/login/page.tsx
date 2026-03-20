@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser"
 import { useEffect } from "react";
+import { routeForUser } from "@/lib/auth/role";
 
 
 type Mode = "login" | "signup";
@@ -22,23 +23,33 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-    useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
-        router.push("/dashboard");
-      }
-    });
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!alive || !sessionData.session) return;
+
+      const { data: userData } = await supabase.auth.getUser();
+      if (!alive) return;
+
+      router.replace(routeForUser(userData.user));
+    })();
+
+    return () => {
+      alive = false;
+    };
   }, [router, supabase]);
 
   async function ensureProfile() {
     const { data } = await supabase.auth.getUser();
     const user = data?.user;
     if (!user) return;
+    const metadata = (user.user_metadata ?? {}) as Record<string, unknown>;
 
     await supabase.from("profiles").upsert({
       id: user.id,
       email: user.email,
-      full_name: (user.user_metadata as any)?.full_name ?? "",
+      full_name: typeof metadata.full_name === "string" ? metadata.full_name : "",
       updated_at: new Date().toISOString(),
     });
   }
@@ -84,7 +95,7 @@ export default function LoginPage() {
       }
 
       // Login
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data: signInData, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
       });
@@ -104,11 +115,12 @@ export default function LoginPage() {
       // After login, ensure profile exists (good for old users)
       await ensureProfile();
 
+      const targetRoute = routeForUser(signInData?.user);
       setMsg("Logged in ✅ Redirecting…");
-      router.push("/dashboard");
+      router.replace(targetRoute);
       router.refresh();
-    } catch (err: any) {
-      setMsg(String(err?.message ?? err));
+    } catch (err: unknown) {
+      setMsg(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
