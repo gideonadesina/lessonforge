@@ -3,8 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@supabase/ssr";
 
-import AppFrame from "@/components/layout/AppFrame";
-import { routeForUser } from "@/lib/auth/role";
+import { roleFromUserMetadata } from "@/lib/auth/role";
 import "../globals.css";
 
 async function createServerSupabase() {
@@ -33,7 +32,7 @@ async function createServerSupabase() {
   });
 }
 
-export default async function AppLayout({ children }: { children: ReactNode }) {
+export default async function PrincipalLayout({ children }: { children: ReactNode }) {
   const supabase = await createServerSupabase();
   const { data } = await supabase.auth.getUser();
   const user = data?.user;
@@ -42,14 +41,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     redirect("/login");
   }
 
-  const destination = routeForUser(user);
-  if (destination !== "/dashboard") {
-    redirect(destination);
+  if (roleFromUserMetadata(user) !== "principal") {
+    redirect("/dashboard");
   }
 
-  return (
-    <AppFrame userEmail={user?.email ?? ""}>
-      {children}
-    </AppFrame>
-  );
+  return <div className="min-h-screen bg-slate-50 text-slate-900">{children}</div>;
 }
