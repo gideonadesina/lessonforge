@@ -8,15 +8,17 @@ import { useEffect, useMemo, useState } from "react";
 import AuthShell from "@/components/auth/AuthShell";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import {
-  getRoleHomePath,
   isAppRole,
-  roleFromUserMetadata,
   ROLE_CONTENT,
   ROLE_STORAGE_KEY,
   type AppRole,
 } from "@/lib/auth/roles";
 
 type Mode = "login" | "signup";
+const ROLE_REDIRECTS = {
+  teacher: "/dashboard",
+  principal: "/principal/dashboard",
+} as const;
 
 function isMissingRoleColumnError(message: string) {
   const m = message.toLowerCase();
@@ -55,21 +57,12 @@ export default function RoleAuthPage() {
       return;
     }
 
+    console.info("[Auth][role-page] route role", { roleParam, role });
+
     if (typeof window !== "undefined") {
       window.localStorage.setItem(ROLE_STORAGE_KEY, role);
     }
-
-    let alive = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (!alive || !data.session) return;
-      const userRole = roleFromUserMetadata(data.session.user.user_metadata, role) ?? role;
-      router.replace(getRoleHomePath(userRole));
-    });
-
-    return () => {
-      alive = false;
-    };
-  }, [role, router, supabase]);
+  }, [role, roleParam, router]);
 
   async function ensureProfile(user: User, preferredName: string) {
     if (!role) return;
@@ -168,10 +161,14 @@ export default function RoleAuthPage() {
           return;
         }
 
-        await syncRole(data.user, cleanName);
+        void syncRole(data.user, cleanName).catch((syncError: unknown) => {
+          console.warn("[Auth][signup] role/profile sync failed", syncError);
+        });
 
         if (data.session) {
-          router.push(getRoleHomePath(role));
+          const redirectTarget = ROLE_REDIRECTS[role];
+          console.info("[Auth][signup] redirect target", { role, redirectTarget });
+          router.replace(redirectTarget);
           router.refresh();
           return;
         }
@@ -187,6 +184,7 @@ export default function RoleAuthPage() {
         email: cleanEmail,
         password,
       });
+      console.info("[Auth][login] signInWithPassword result", { role, data, error });
 
       if (error) {
         const text = String(error.message || "Login failed.");
@@ -200,10 +198,14 @@ export default function RoleAuthPage() {
         return;
       }
 
-      await syncRole(data.user, cleanName);
+      void syncRole(data.user, cleanName).catch((syncError: unknown) => {
+        console.warn("[Auth][login] role/profile sync failed", syncError);
+      });
 
       setMsg("Logged in. Redirecting...");
-      router.push(getRoleHomePath(role));
+      const redirectTarget = ROLE_REDIRECTS[role];
+      console.info("[Auth][login] redirect target", { role, redirectTarget });
+      router.replace(redirectTarget);
       router.refresh();
     } catch (err: unknown) {
       setMsg(err instanceof Error ? err.message : String(err));

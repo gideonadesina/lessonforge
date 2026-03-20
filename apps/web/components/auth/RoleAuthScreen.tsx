@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import AuthCard from "@/components/auth/AuthCard";
 import AuthHeader from "@/components/auth/AuthHeader";
@@ -29,63 +29,41 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
   const [socialLoading, setSocialLoading] = useState<SocialProvider | null>(null);
   const [syncingRole, setSyncingRole] = useState(false);
 
-  const hasHandledSessionRef = useRef(false);
-
   const roleConfig = ROLE_CONTENT[role];
+  const postLoginPath = role === "principal" ? "/principal/dashboard" : "/dashboard";
 
-  const redirectAfterLogin = useCallback(
-    (targetRole: AppRole = role) => {
-      router.replace(ROLE_CONTENT[targetRole].postAuthPath);
-      router.refresh();
-    },
-    [role, router]
-  );
+  const redirectAfterLogin = useCallback(() => {
+    router.replace(postLoginPath);
+    router.refresh();
+  }, [postLoginPath, router]);
 
-  const syncUserRoleAndRedirect = useCallback(
-    async (userId?: string) => {
-      if (hasHandledSessionRef.current) return;
-      hasHandledSessionRef.current = true;
-      setSyncingRole(true);
-      setMessage(null);
-
+  const validateSessionRole = useCallback(
+    async (userId: string) => {
       try {
-        const storedRole = localStorage.getItem(ROLE_STORAGE_KEY);
-        const effectiveRole: AppRole =
-          storedRole === "principal" || storedRole === "teacher" ? storedRole : role;
-
         const {
           data: { user },
           error: userError,
         } = await supabase.auth.getUser();
 
-        if (userError) throw userError;
-        if (!user || (userId && user.id !== userId)) {
-          hasHandledSessionRef.current = false;
-          return;
-        }
+        if (userError || !user || user.id !== userId) return;
 
-        const currentRole = user.user_metadata?.app_role;
-        if (currentRole !== effectiveRole) {
+        if (user.user_metadata?.app_role !== role) {
           const { error: updateError } = await supabase.auth.updateUser({
             data: {
               ...user.user_metadata,
-              app_role: effectiveRole,
+              app_role: role,
             },
           });
 
-          if (updateError) throw updateError;
+          if (updateError) {
+            console.warn("[Auth][session] Unable to sync role metadata", updateError);
+          }
         }
-
-        localStorage.setItem(ROLE_STORAGE_KEY, effectiveRole);
-        redirectAfterLogin(effectiveRole);
       } catch (error: unknown) {
-        hasHandledSessionRef.current = false;
-        setMessage(error instanceof Error ? error.message : "Unable to finish sign in.");
-      } finally {
-        setSyncingRole(false);
+        console.warn("[Auth][session] Role validation failed", error);
       }
     },
-    [role, redirectAfterLogin, supabase]
+    [role, supabase]
   );
 
   useEffect(() => {
@@ -94,28 +72,36 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
     localStorage.setItem(ROLE_STORAGE_KEY, role);
 
     (async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      setSyncingRole(true);
+      try {
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
 
-      if (active && session?.user) {
-        await syncUserRoleAndRedirect(session.user.id);
+        if (!active) return;
+        if (sessionError) {
+          console.error("[Auth][session] getSession failed", sessionError);
+          return;
+        }
+
+        if (!session?.user) return;
+        await validateSessionRole(session.user.id);
+        if (!active) return;
+        redirectAfterLogin();
+      } catch (error: unknown) {
+        if (!active) return;
+        console.error("[Auth][session] Session bootstrap failed", error);
+        setMessage(error instanceof Error ? error.message : "Unable to finish sign in.");
+      } finally {
+        if (active) setSyncingRole(false);
       }
     })();
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        await syncUserRoleAndRedirect(session.user.id);
-      }
-    });
-
     return () => {
       active = false;
-      subscription.unsubscribe();
     };
-  }, [role, supabase, syncUserRoleAndRedirect]);
+  }, [redirectAfterLogin, role, supabase, validateSessionRole]);
 
   async function handleSocialSignIn(provider: SocialProvider) {
     setMessage(null);
@@ -159,30 +145,54 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
     try {
       localStorage.setItem(ROLE_STORAGE_KEY, role);
 
-      const { error } = await supabase.auth.signInWithPassword({
+      const signInTimeoutMs = 15000;
+      const signInPromise = supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
       });
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        window.setTimeout(() => {
+          reject(
+            new Error(`Sign in timed out after ${Math.floor(signInTimeoutMs / 1000)} seconds.`)
+          );
+        }, signInTimeoutMs);
+      });
+      const signInResult = (await Promise.race([
+        signInPromise,
+        timeoutPromise,
+      ])) as Awaited<ReturnType<typeof supabase.auth.signInWithPassword>>;
 
-      if (error) {
-        setMessage(error.message);
-        return;
-      }
-
-      const { error: updateError } = await supabase.auth.updateUser({
-        data: {
-          app_role: role,
-        },
+      const { data, error } = signInResult;
+      console.info("[Auth][email] supabase.auth.signInWithPassword response", {
+        data,
+        error,
       });
 
-      if (updateError) {
-        setMessage(updateError.message);
+      if (error) {
+        const messageText = String(error.message || "Login failed.");
+        setMessage(
+          messageText.toLowerCase().includes("invalid login credentials")
+            ? "Invalid email or password."
+            : messageText
+        );
         return;
       }
 
-      redirectAfterLogin(role);
+      if (!data?.session || !data.user) {
+        setMessage("Sign in succeeded but no active session was returned. Please try again.");
+        return;
+      }
+
+      await validateSessionRole(data.user.id);
+      setMessage(`Signed in. Redirecting to ${postLoginPath}...`);
+      redirectAfterLogin();
     } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "Unable to sign in right now.");
+      console.error("[Auth][email] Unable to sign in", error);
+      setMessage(
+        error instanceof Error && error.message
+          ? error.message
+          : "Unable to sign in right now."
+      );
     } finally {
       setEmailLoading(false);
     }

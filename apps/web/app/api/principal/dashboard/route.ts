@@ -167,7 +167,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, error: context.error }, { status: context.status ?? 401 });
     }
 
-    if (context.isTeacherOnly) {
+    const clearlyNonPrincipal = Boolean(context.isTeacherOnly && !context.hasPrincipalAppRole);
+    if (clearlyNonPrincipal) {
       return NextResponse.json(
         { ok: false, error: "Principal access required for this route." },
         { status: 403 }
