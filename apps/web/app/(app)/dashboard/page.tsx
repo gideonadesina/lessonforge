@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { useProfile } from "@/lib/useProfile";
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
@@ -13,6 +13,7 @@ import RecentActivity from "@/components/dashboard/RecentActivity";
 import WeeklyInsight from "@/components/dashboard/WeeklyInsight";
 import { listSchemeOfWork } from "@/lib/planning/scheme";
 import { listAcademicEvents } from "@/lib/planning/academicCalender";
+import SchoolCodeInput from "@/components/SchoolCodeInput";
 import type {
   AcademicCalendarRow,
   SchemeOfWorkRow,
@@ -31,6 +32,13 @@ type LessonRow = {
   grade: string | null;
   curriculum: string | null;
   created_at: string;
+};
+
+type SchoolMembershipApiResponse = {
+  ok: boolean;
+  data?: {
+    school: { id: string; name: string | null } | null;
+  };
 };
 
 function formatDate(iso: string) {
@@ -76,12 +84,44 @@ export default function DashboardPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [planningMsg, setPlanningMsg] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [schoolMembershipLoading, setSchoolMembershipLoading] = useState(true);
+  const [hasSchoolMembership, setHasSchoolMembership] = useState(false);
 
   const teacherName =
     (profile as any)?.full_name ||
     (profile as any)?.name ||
     userEmail?.split("@")[0] ||
     "Teacher";
+
+  const loadSchoolMembership = useCallback(async () => {
+    setSchoolMembershipLoading(true);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const token = session?.access_token ?? "";
+      if (!token) {
+        setHasSchoolMembership(false);
+        return;
+      }
+
+      const res = await fetch("/api/schools/me", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = (await res.json()) as SchoolMembershipApiResponse;
+      if (!res.ok || !json.ok) {
+        setHasSchoolMembership(false);
+        return;
+      }
+
+      setHasSchoolMembership(Boolean(json.data?.school?.id));
+    } catch {
+      setHasSchoolMembership(false);
+    } finally {
+      setSchoolMembershipLoading(false);
+    }
+  }, [supabase]);
 
   useEffect(() => {
     (window as any).__FORGE_CONTEXT__ = {
@@ -92,6 +132,10 @@ export default function DashboardPage() {
       recentLessons: lessons.slice(0, 5),
     };
   }, [teacherName, creditsRemaining, planLabel, lessons]);
+
+  useEffect(() => {
+    void loadSchoolMembership();
+  }, [loadSchoolMembership]);
 
   useEffect(() => {
     let alive = true;
@@ -338,6 +382,18 @@ export default function DashboardPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-800 shadow-sm">
             {msg}
           </div>
+        ) : null}
+
+        {!schoolMembershipLoading && !hasSchoolMembership ? (
+          <section className="rounded-2xl border border-violet-200 bg-violet-50/50 p-4 shadow-sm">
+            <div className="mb-3">
+              <h2 className="text-sm font-bold text-slate-900">Join your school workspace</h2>
+              <p className="mt-1 text-xs text-slate-600">
+                Enter your school code from your principal to activate your teacher seat.
+              </p>
+            </div>
+            <SchoolCodeInput redirectTo="/dashboard" onJoined={loadSchoolMembership} />
+          </section>
         ) : null}
 
         <QuickActionsGrid />

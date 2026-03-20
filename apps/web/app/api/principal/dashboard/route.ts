@@ -204,8 +204,17 @@ export async function GET(req: NextRequest) {
     }
 
     const members = (membersRes.data ?? []) as MemberRow[];
-    const teacherMembers = members.filter((m) => !isPrincipalRole(m.role) && m.user_id !== context.user!.id);
-    const teacherIds = Array.from(new Set(teacherMembers.map((m) => m.user_id)));
+    const latestTeacherMembershipByUser = new Map<string, MemberRow>();
+    for (const member of members) {
+      if (isPrincipalRole(member.role)) continue;
+      if (member.user_id === context.user!.id) continue;
+      if (!latestTeacherMembershipByUser.has(member.user_id)) {
+        latestTeacherMembershipByUser.set(member.user_id, member);
+      }
+    }
+
+    const teacherMembers = Array.from(latestTeacherMembershipByUser.values());
+    const teacherIds = teacherMembers.map((m) => m.user_id);
 
     const profileMap = new Map<string, { full_name: string | null; email: string | null }>();
     if (teacherIds.length) {

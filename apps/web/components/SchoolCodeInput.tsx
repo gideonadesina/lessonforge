@@ -1,9 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 
-export default function SchoolCodeInput() {
+type SchoolCodeInputProps = {
+  redirectTo?: string;
+  onJoined?: () => void | Promise<void>;
+};
+
+export default function SchoolCodeInput({ redirectTo = "/dashboard", onJoined }: SchoolCodeInputProps) {
+  const router = useRouter();
   const supabase = useMemo(() => createBrowserSupabase(), []);
 
   const [code, setCode] = useState("");
@@ -44,10 +51,12 @@ export default function SchoolCodeInput() {
         return;
       }
 
-      setMessage("✅ Joined school successfully!");
-      setTimeout(() => window.location.reload(), 800);
-    } catch (e: any) {
-      setMessage(e?.message || "Something went wrong");
+      setMessage("Joined school successfully. Redirecting...");
+      await onJoined?.();
+      router.replace(redirectTo);
+      router.refresh();
+    } catch (e: unknown) {
+      setMessage(e instanceof Error ? e.message : "Something went wrong");
     } finally {
       setLoading(false);
     }
