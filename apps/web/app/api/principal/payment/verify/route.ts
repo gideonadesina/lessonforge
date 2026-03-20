@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyPaystackTransaction } from "@/lib/paystack";
 import { finalizePrincipalActivationFromPaystackData } from "@/lib/principal/payment";
+import { getBearerTokenFromHeaders, resolvePrincipalContext } from "@/lib/principal/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,6 +9,12 @@ export const revalidate = 0;
 
 export async function GET(req: NextRequest) {
   try {
+    const token = getBearerTokenFromHeaders(req.headers);
+    const context = await resolvePrincipalContext(token);
+    if (!context.ok || !context.user) {
+      return NextResponse.json({ ok: false, error: context.error ?? "Unauthorized" }, { status: context.status ?? 401 });
+    }
+
     const { searchParams } = new URL(req.url);
     const reference = String(searchParams.get("reference") ?? "").trim();
     if (!reference) {
@@ -15,6 +22,11 @@ export async function GET(req: NextRequest) {
     }
 
     const data = await verifyPaystackTransaction(reference);
+    const paystackUserId = String(data?.metadata?.user_id ?? "").trim();
+    if (paystackUserId && paystackUserId !== context.user.id) {
+      return NextResponse.json({ ok: false, error: "Payment reference does not belong to this user." }, { status: 403 });
+    }
+
     if (String(data?.status ?? "").toLowerCase() !== "success") {
       return NextResponse.json(
         {

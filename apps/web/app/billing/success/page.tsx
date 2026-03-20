@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { track } from "@/lib/analytics";
+import { createBrowserSupabase } from "@/lib/supabase/browser";
 
 function SuccessInner() {
+  const supabase = useMemo(() => createBrowserSupabase(), []);
   const sp = useSearchParams();
   const reference = sp.get("reference");
   const flow = sp.get("flow");
@@ -26,7 +28,17 @@ function SuccessInner() {
           flow === "principal_onboarding"
             ? `/api/principal/payment/verify?reference=${encodeURIComponent(reference)}`
             : `/api/paystack/verify?reference=${encodeURIComponent(reference)}`;
-        const res = await fetch(endpoint);
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const token = session?.access_token ?? "";
+        if (!token) {
+          throw new Error("Session expired. Please login again.");
+        }
+
+        const res = await fetch(endpoint, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         const json = await res.json().catch(() => ({}));
 
         if (res.ok && json?.ok !== false) {
@@ -41,7 +53,7 @@ function SuccessInner() {
         setMsg(e instanceof Error ? e.message : "⚠️ Verification failed.");
       }
     })();
-  }, [flow, reference]);
+  }, [flow, reference, supabase]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center p-6">

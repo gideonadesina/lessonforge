@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { verifyPaystackTransaction } from "@/lib/paystack";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { finalizePrincipalActivationFromPaystackData, getPrincipalPaystackFlow } from "@/lib/principal/payment";
+import { getBearerTokenFromHeaders, resolvePrincipalContext } from "@/lib/principal/server";
 
 type LegacyPaystackData = {
   status?: string | null;
@@ -40,15 +41,26 @@ async function applyLegacyProfileUpgrade(data: LegacyPaystackData) {
 }
 
 export async function GET(req: Request) {
+  const token = getBearerTokenFromHeaders(req.headers);
+  const authContext = await resolvePrincipalContext(token);
+  if (!authContext.ok || !authContext.user) {
+    return NextResponse.json({ ok: false, error: authContext.error ?? "Unauthorized" }, { status: authContext.status ?? 401 });
+  }
+
   const { searchParams } = new URL(req.url);
-  const reference = searchParams.get("reference");
+  const reference = String(searchParams.get("reference") ?? "").trim();
 
   if (!reference) {
-    return NextResponse.json({ error: "Missing reference" }, { status: 400 });
+    return NextResponse.json({ ok: false, error: "Missing reference" }, { status: 400 });
   }
 
   try {
     const data = await verifyPaystackTransaction(reference);
+    const metadataUserId = String(data?.metadata?.user_id ?? "").trim();
+    if (metadataUserId && metadataUserId !== authContext.user.id) {
+      return NextResponse.json({ ok: false, error: "Payment reference does not belong to this user." }, { status: 403 });
+    }
+
     const flow = String(data?.metadata?.flow ?? "");
 
     if (flow === getPrincipalPaystackFlow()) {
@@ -60,6 +72,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: true, data }, { status: 200 });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Verify failed";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json({ ok: false, error: message }, { status: 400 });
   }
 }

@@ -14,6 +14,22 @@ type OnboardingPayload = {
   };
 };
 
+function getErrorStatus(message: string) {
+  const m = message.toLowerCase();
+  if (m.includes("unauthorized")) return 401;
+  if (m.includes("does not belong")) return 403;
+  if (
+    m.includes("required") ||
+    m.includes("missing") ||
+    m.includes("invalid") ||
+    m.includes("not successful") ||
+    m.includes("mismatch")
+  ) {
+    return 400;
+  }
+  return 500;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const token = getBearerTokenFromHeaders(req.headers);
@@ -69,6 +85,6 @@ export async function POST(req: NextRequest) {
     );
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Failed to complete onboarding";
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    return NextResponse.json({ ok: false, error: message }, { status: getErrorStatus(message) });
   }
 }

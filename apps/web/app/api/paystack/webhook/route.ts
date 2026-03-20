@@ -24,6 +24,21 @@ type LegacyPaystackData = {
   subscription?: { subscription_code?: string | null } | null;
 };
 
+type PaystackWebhookEvent = {
+  event?: string;
+  data?: {
+    reference?: string | null;
+  } | null;
+};
+
+function parseWebhookEvent(rawBody: string): PaystackWebhookEvent | null {
+  try {
+    return JSON.parse(rawBody) as PaystackWebhookEvent;
+  } catch {
+    return null;
+  }
+}
+
 async function applyLegacyProfileUpgrade(data: LegacyPaystackData) {
   const email = data?.customer?.email ?? null;
   const subscriptionCode = data?.subscription?.subscription_code ?? null;
@@ -64,7 +79,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
     }
 
-    const event = JSON.parse(rawBody);
+    const event = parseWebhookEvent(rawBody);
+    if (!event) {
+      return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+    }
 
     if (event?.event === "charge.success") {
       const reference = String(event?.data?.reference ?? "").trim();
@@ -84,7 +102,7 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ received: true }, { status: 200 });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Webhook error:", error);
     return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
   }
