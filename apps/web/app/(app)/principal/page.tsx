@@ -153,13 +153,13 @@ export default function PrincipalPage() {
       const { ok, json } = await requestWithAuth<{ alreadyActivated?: boolean; authorizationUrl?: string }>(
         "/api/principal/payment/init",
         {
-        method: "POST",
-        body: JSON.stringify({
-          principalName,
-          schoolName,
-          teacherSlots: paymentQuote.teacherSlots,
-        }),
-      }
+          method: "POST",
+          body: JSON.stringify({
+            principalName,
+            schoolName,
+            teacherSlots: paymentQuote.teacherSlots,
+          }),
+        }
       );
 
       if (!ok || !json?.ok) {
