@@ -584,17 +584,17 @@ export default function PrincipalPage() {
             ].join(" ")}
             id="dashboard-overview"
           >
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-              <div className="space-y-3 lg:col-span-8">
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(280px,1fr)]">
+              <div className="min-w-0 space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Principal command center</p>
-                <h2 className="text-2xl font-black tracking-tight text-slate-900">
+                <h2 className="text-xl font-black tracking-tight text-slate-900 sm:text-2xl">
                   {signals.principalDisplayName}, your school needs your leadership today.
                 </h2>
                 <p className="text-sm text-slate-600">
                   {dashboard.school.name} • Daily summary for {formatShortDate(new Date().toISOString())}
                 </p>
 
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                     <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Active teachers</div>
                     <div className="mt-1 text-2xl font-bold text-slate-900">{dashboard.overview.activeTeachers}</div>
@@ -610,7 +610,7 @@ export default function PrincipalPage() {
                 </div>
               </div>
 
-              <div className="lg:col-span-4">
+              <div className="min-w-0 xl:min-w-[280px]">
                 <div className={["rounded-xl border p-4", focusToneClass].join(" ")}>
                   <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Focus card</div>
                   <h3 className="mt-2 text-lg font-bold text-slate-900">{signals.focusCard.title}</h3>
@@ -633,7 +633,7 @@ export default function PrincipalPage() {
             <MetricCard title="Weekly Activity" value={dashboard.overview.weeklyActivityCount} subtitle="Last 7 days events" />
           </div>
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <SectionCard
               title="Generation oversight"
               subtitle="School-wide generation signal so you can nudge the right teams quickly."

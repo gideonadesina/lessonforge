@@ -65,7 +65,7 @@ export default function PrincipalTopbar({
 
   return (
     <div className="rounded-3xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:px-5 md:py-4">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+      <div className="flex flex-col gap-3 2xl:flex-row 2xl:items-center 2xl:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"
@@ -89,7 +89,7 @@ export default function PrincipalTopbar({
           </div>
         </div>
 
-        <div className="relative w-full xl:max-w-md">
+        <div className="relative w-full 2xl:max-w-md">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             placeholder="Search teachers, lessons, worksheets"
@@ -97,7 +97,7 @@ export default function PrincipalTopbar({
           />
         </div>
 
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <button
             type="button"
             className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
