@@ -183,7 +183,7 @@ export default function Sidebar({
           const Icon = item.icon;
 
           return (
-                      <div key={item.href}>
+            <div key={item.href}>
               <Link
                 href={item.href}
                 onClick={onNavigate}
