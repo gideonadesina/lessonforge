@@ -6,11 +6,14 @@ import { usePathname } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import {
   LayoutDashboard,
+  Users,
   Sparkles,
   Library,
   FileText,
   CalendarDays,
   School,
+  BarChart3,
+  CreditCard,
   Settings,
 } from "lucide-react";
 
@@ -26,16 +29,27 @@ type NavItem = {
   children?: Array<{ href: string; label: string }>;
 };
 
-const nav: NavItem[] = [
+const teacherNav: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/generate", label: "Generate", icon: Sparkles },
   { href: "/library", label: "Library", icon: Library },
-   {
+  {
     href: "/planning", label: "Planning", icon: CalendarDays,
   },
   { href: "/worksheets", label: "Worksheets", icon: FileText },
   { href: "/school", label: "School", icon: School },
   { href: "/settings", label: "Settings", icon: Settings },
+];
+
+const principalNav: NavItem[] = [
+  { href: "/principal", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/principal/teachers", label: "Teachers", icon: Users },
+  { href: "/principal/generate", label: "Generate", icon: Sparkles },
+  { href: "/principal/library", label: "Library", icon: Library },
+  { href: "/principal/workspace", label: "Workspace", icon: School },
+  { href: "/principal/planning", label: "Planning", icon: CalendarDays },
+  { href: "/principal/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/principal/billing", label: "Billing", icon: CreditCard },
 ];
 
 export default function Sidebar({
@@ -46,6 +60,8 @@ export default function Sidebar({
   setOpen: (v: boolean) => void;
 }) {
   const pathname = usePathname();
+  const isPrincipalArea = pathname.startsWith("/principal");
+  const navItems = isPrincipalArea ? principalNav : teacherNav;
 
   // ✅ create supabase client once
   const supabase = useMemo(() => createBrowserSupabase(), []);
@@ -159,9 +175,11 @@ export default function Sidebar({
 
       {/* Nav */}
       <nav className="mt-4 flex flex-col gap-1">
-        {nav.map((item) => {
+        {navItems.map((item) => {
           const active =
-            pathname === item.href || pathname.startsWith(item.href + "/");
+            item.href === "/principal"
+              ? pathname === "/principal"
+              : pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = item.icon;
 
           return (
