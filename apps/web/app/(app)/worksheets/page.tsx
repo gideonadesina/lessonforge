@@ -15,14 +15,30 @@ type WorksheetRow = {
   created_at: string;
 };
 
+type ContentMode = "normal" | "diagram" | "coloring" | "practical";
+
+type WorksheetVisual = {
+  label: string;
+  imageDataUrl: string;
+};
+
 type GeneratedPayload = {
   title?: string;
   instructions?: string[];
   worksheet?: string;
   answerKey?: string;
+  visuals?: WorksheetVisual[];
+  contentMode?: ContentMode;
 };
 
 type PrintMode = "student" | "teacher";
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === "object" && "message" in error) {
+    return String((error as { message?: unknown }).message ?? fallback);
+  }
+  return fallback;
+}
 
 export default function WorksheetsPage() {
   const [subject, setSubject] = useState("Basic Science");
@@ -30,6 +46,7 @@ export default function WorksheetsPage() {
   const [topic, setTopic] = useState("Alimentary Canal");
   const [worksheetType, setWorksheetType] = useState("Mixed");
   const [difficulty, setDifficulty] = useState("Medium");
+  const [contentMode, setContentMode] = useState<ContentMode>("normal");
   const [numQuestions, setNumQuestions] = useState(10);
   const [durationMins, setDurationMins] = useState(30);
 
@@ -68,30 +85,42 @@ export default function WorksheetsPage() {
   }
 
   // --- Helpers to normalize API responses (so your UI never breaks) ---
-  function normalizeListResponse(json: any): WorksheetRow[] {
+  function normalizeListResponse(json: unknown): WorksheetRow[] {
+    const obj = (json ?? {}) as { data?: unknown };
+    const dataObj = (obj.data ?? {}) as { data?: unknown };
     // Your route returns: { ok:true, data:[...] }
     // Some older routes returned: { data:[...] } or { ok:true, data:{data:[...]} }
     const list =
-      (Array.isArray(json?.data) ? json.data : null) ??
-      (Array.isArray(json?.data?.data) ? json.data.data : null) ??
+      (Array.isArray(obj.data) ? obj.data : null) ??
+      (Array.isArray(dataObj.data) ? dataObj.data : null) ??
       (Array.isArray(json) ? json : null) ??
       [];
     return list as WorksheetRow[];
   }
 
-  function normalizeFullResponse(json: any): { meta?: WorksheetRow; generated?: GeneratedPayload } {
+  function normalizeFullResponse(json: unknown): { meta?: WorksheetRow; generated?: GeneratedPayload } {
+    const root = (json ?? {}) as Record<string, unknown>;
     // Your route GET?id returns: { ok:true, data:{ saved, generated } }
-    const payload = json?.data ?? json;
-    const saved = payload?.saved ?? payload?.data?.saved ?? payload?.data ?? payload?.row ?? null;
+    const payload = (root.data ?? root) as Record<string, unknown>;
+    const payloadData = (payload.data ?? {}) as Record<string, unknown>;
+    const payloadResultJson = (payload.result_json ?? null) as Record<string, unknown> | null;
+    const resultWorksheet = (payloadResultJson?.worksheet ?? null) as Record<string, unknown> | null;
+    const saved =
+      payload.saved ??
+      payloadData.saved ??
+      payloadData.data ??
+      payload.row ??
+      payload.data ??
+      null;
     const generated =
-      payload?.generated ??
-      payload?.data?.generated ??
-      (payload?.result_json
+      payload.generated ??
+      payloadData.generated ??
+      (payloadResultJson
         ? {
-            title: payload?.result_json?.worksheet?.title,
-            instructions: payload?.result_json?.worksheet?.instructions,
-            worksheet: stringifyWorksheetFromJson(payload?.result_json),
-            answerKey: stringifyAnswerKeyFromJson(payload?.result_json),
+            title: resultWorksheet?.title,
+            instructions: resultWorksheet?.instructions as string[] | undefined,
+            worksheet: stringifyWorksheetFromJson(payloadResultJson),
+            answerKey: stringifyAnswerKeyFromJson(payloadResultJson),
           }
         : null);
 
@@ -117,8 +146,8 @@ export default function WorksheetsPage() {
       if (!res.ok) throw new Error(json?.error || "Failed to load worksheets");
 
       setItems(normalizeListResponse(json));
-    } catch (e: any) {
-      setError(e?.message || "Failed to load");
+    } catch (e: unknown) {
+      setError(getErrorMessage(e, "Failed to load"));
     } finally {
       setListLoading(false);
     }
@@ -149,6 +178,7 @@ export default function WorksheetsPage() {
           topic,
           worksheetType,
           difficulty,
+          contentMode,
           numQuestions,
           durationMins,
         }),
@@ -169,8 +199,8 @@ export default function WorksheetsPage() {
       setActive({ meta: payload.meta, generated: payload.generated });
       setPrintMode("student");
       setOpen(true);
-    } catch (e: any) {
-      setError(e?.message || "Something went wrong");
+    } catch (e: unknown) {
+      setError(getErrorMessage(e, "Something went wrong"));
     } finally {
       setLoading(false);
     }
@@ -197,8 +227,8 @@ export default function WorksheetsPage() {
         setOpen(false);
         setActive(null);
       }
-    } catch (e: any) {
-      setError(e?.message || "Delete failed");
+    } catch (e: unknown) {
+      setError(getErrorMessage(e, "Delete failed"));
     }
   }
 
@@ -213,7 +243,7 @@ export default function WorksheetsPage() {
       const token = await getAccessToken();
       if (!token) throw new Error("Not logged in");
 
-      const res = await fetch(`/api/worksheets?id=${encodeURIComponent(row.id)}`, {
+      const res = await fetch(`/api/worksheets?id=${encodeURIComponent(row.id)}&visuals=1`, {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -229,9 +259,9 @@ export default function WorksheetsPage() {
         meta: (payload.meta ?? row) as WorksheetRow,
         generated: payload.generated,
       });
-    } catch (e: any) {
+    } catch (e: unknown) {
       // keep modal open with meta, but show error
-      setError(e?.message || "Failed to open worksheet");
+      setError(getErrorMessage(e, "Failed to open worksheet"));
     }
   }
 
@@ -262,6 +292,7 @@ function printGenerated(mode: PrintMode) {
 
   const worksheet = active?.generated?.worksheet || "";
   const answerKey = active?.generated?.answerKey || "";
+  const visuals = Array.isArray(active?.generated?.visuals) ? active?.generated?.visuals : [];
 
   if (!worksheet) {
     alert("Nothing to print yet. Click View (so it loads content) or Generate a worksheet first.");
@@ -269,6 +300,16 @@ function printGenerated(mode: PrintMode) {
   }
 
   const includeAnswer = mode === "teacher" && !!answerKey;
+  const visualsHtml = visuals
+    .map(
+      (v, i) => `
+      <div class="card">
+        <div class="label">Visual ${i + 1}: ${escapeHtml(v.label || "Worksheet visual")}</div>
+        <img src="${escapeHtml(v.imageDataUrl)}" alt="${escapeHtml(v.label || "visual")}" style="width:100%; max-width:680px; height:auto; border:1px solid #ddd; border-radius:8px;" />
+      </div>
+    `
+    )
+    .join("");
 
   const html = `<!doctype html>
 <html>
@@ -299,6 +340,8 @@ function printGenerated(mode: PrintMode) {
     <div class="label">Worksheet</div>
     <pre>${escapeHtml(worksheet)}</pre>
   </div>
+
+  ${visualsHtml}
 
   ${
     includeAnswer
@@ -430,6 +473,19 @@ function printGenerated(mode: PrintMode) {
               <option>Easy</option>
               <option>Medium</option>
               <option>Hard</option>
+            </select>
+          </Field>
+
+          <Field label="Content Mode" span="md:col-span-2">
+            <select
+              value={contentMode}
+              onChange={(e) => setContentMode(e.target.value as ContentMode)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+            >
+              <option value="normal">Normal</option>
+              <option value="coloring">Coloring (Nursery)</option>
+              <option value="diagram">Diagram</option>
+              <option value="practical">Practical</option>
             </select>
           </Field>
 
@@ -589,6 +645,29 @@ function printGenerated(mode: PrintMode) {
                     </div>
                   </div>
 
+                  {Array.isArray(active?.generated?.visuals) &&
+                  active.generated.visuals.length > 0 ? (
+                    <div className="rounded-xl border border-slate-200 bg-white p-3">
+                      <div className="text-xs font-semibold text-slate-900">
+                        {active.generated.contentMode === "coloring"
+                          ? "Coloring Outline Pictures"
+                          : "Diagram / Practical Outline Pictures"}
+                      </div>
+                      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                        {active.generated.visuals.map((v, idx) => (
+                          <div key={`${v.label}-${idx}`} className="rounded-xl border border-slate-200 bg-slate-50 p-2">
+                            <div className="mb-2 text-xs font-medium text-slate-700">{v.label}</div>
+                            <img
+                              src={v.imageDataUrl}
+                              alt={v.label}
+                              className="w-full rounded-lg border border-slate-200 bg-white"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
                   {/* Teacher-only preview in UI */}
                   {active?.generated?.answerKey ? (
                     <div className="rounded-xl border border-slate-200 bg-white p-3">
@@ -671,10 +750,11 @@ function timeAgo(iso: string) {
  * Optional helpers if your API returns JSON-shaped worksheet objects (result_json)
  * These keep your UI stable even if the backend returns structured JSON sometimes.
  */
-function stringifyWorksheetFromJson(resultJson: any): string {
+function stringifyWorksheetFromJson(resultJson: unknown): string {
   try {
-    const meta = resultJson?.meta ?? {};
-    const w = resultJson?.worksheet ?? {};
+    const root = (resultJson ?? {}) as Record<string, unknown>;
+    const meta = (root.meta ?? {}) as Record<string, unknown>;
+    const w = (root.worksheet ?? {}) as Record<string, unknown>;
     const title = w?.title ? `${w.title}\n\n` : "";
 
     const instructions = Array.isArray(w?.instructions)
@@ -683,22 +763,23 @@ function stringifyWorksheetFromJson(resultJson: any): string {
 
     const questions = Array.isArray(w?.questions)
       ? w.questions
-          .map((q: any, i: number) => {
+          .map((q: unknown, i: number) => {
+            const question = (q ?? {}) as Record<string, unknown>;
             const n = i + 1;
-            if (q?.type === "mcq") {
-              const opts = Array.isArray(q?.options)
-                ? q.options
+            if (question?.type === "mcq") {
+              const opts = Array.isArray(question?.options)
+                ? (question.options as unknown[])
                     .map(
                       (o: string, j: number) =>
                         `   ${String.fromCharCode(65 + j)}. ${o}`
                     )
                     .join("\n")
                 : "";
-              return `${n}. ${q?.q ?? ""}\n${opts}`;
+              return `${n}. ${question?.q ?? ""}\n${opts}`;
             }
-            if (q?.type === "short") return `${n}. ${q?.q ?? ""}`;
-            if (q?.type === "theory") return `${n}. ${q?.q ?? ""}`;
-            return `${n}. ${q?.q ?? ""}`;
+            if (question?.type === "short") return `${n}. ${question?.q ?? ""}`;
+            if (question?.type === "theory") return `${n}. ${question?.q ?? ""}`;
+            return `${n}. ${question?.q ?? ""}`;
           })
           .join("\n\n")
       : "";
@@ -717,16 +798,18 @@ function stringifyWorksheetFromJson(resultJson: any): string {
   }
 }
 
-function stringifyAnswerKeyFromJson(resultJson: any): string {
+function stringifyAnswerKeyFromJson(resultJson: unknown): string {
   try {
-    const ak = resultJson?.answerKey;
+    const root = (resultJson ?? {}) as Record<string, unknown>;
+    const ak = root.answerKey;
     if (typeof ak === "string") return ak;
     if (!Array.isArray(ak)) return "";
 
     return ak
-      .map((x: any) => {
-        const idx = x?.qIndex ?? "";
-        const ans = x?.answer ?? "";
+      .map((x: unknown) => {
+        const obj = (x ?? {}) as Record<string, unknown>;
+        const idx = obj?.qIndex ?? "";
+        const ans = obj?.answer ?? "";
         return `${idx}. ${ans}`;
       })
       .join("\n");
