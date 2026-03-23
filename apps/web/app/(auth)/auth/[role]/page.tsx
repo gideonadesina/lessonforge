@@ -48,6 +48,7 @@ export default function RoleAuthPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [activeSessionEmail, setActiveSessionEmail] = useState<string | null>(null);
 
   useEffect(() => {
     if (!role) {
@@ -60,16 +61,31 @@ export default function RoleAuthPage() {
     }
 
     let alive = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (!alive || !data.session) return;
-      const userRole = roleFromUserMetadata(data.session.user.user_metadata, role) ?? role;
-      router.replace(getRoleHomePath(userRole));
+    supabase.auth.getUser().then(({ data }) => {
+      if (!alive) return;
+      setActiveSessionEmail(data.user?.email ?? null);
+    });
+
+    const { data: authSubscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!alive) return;
+      setActiveSessionEmail(session?.user?.email ?? null);
     });
 
     return () => {
       alive = false;
+      authSubscription.subscription.unsubscribe();
     };
   }, [role, router, supabase]);
+
+  async function switchAccount() {
+    setMsg(null);
+    await supabase.auth.signOut();
+    setActiveSessionEmail(null);
+    setEmail("");
+    setPassword("");
+    setFullName("");
+    setMsg("Signed out. Continue with the other account.");
+  }
 
   async function ensureProfile(user: User, preferredName: string) {
     if (!role) return;
@@ -259,6 +275,27 @@ export default function RoleAuthPage() {
           {msg}
         </div>
       )}
+
+      <div className="mt-4 space-y-2">
+        <p className="text-xs leading-relaxed text-slate-500">
+          Need to use a different email on this browser? Sign in below with the account
+          you want to continue with.
+        </p>
+        {activeSessionEmail && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <span>
+              Current session: <span className="font-medium text-slate-800">{activeSessionEmail}</span>
+            </span>
+            <button
+              type="button"
+              onClick={switchAccount}
+              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-700 hover:bg-slate-100"
+            >
+              Sign out to switch
+            </button>
+          </div>
+        )}
+      </div>
 
       <form onSubmit={onSubmit} className="mt-6 space-y-4">
         {mode === "signup" && (
