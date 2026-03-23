@@ -17,13 +17,12 @@ export default function AppFrame({
     <div className="min-h-screen bg-slate-50">
       <Sidebar open={sidebarOpen} setOpen={setSidebarOpen} />
 
-      {/* match Sidebar desktop width: w-80 => lg:pl-80 */}
-      <main className="lg:pl-72">
-        <div className="mx-auto max-w-6xl px-4 py-4">
+        <main className="xl:pl-72">
+        <div className="mx-auto max-w-6xl px-3 py-3 sm:px-4 sm:py-4">
           <Topbar userEmail={userEmail} onMenu={() => setSidebarOpen(true)} />
         </div>
 
-        <div className="mx-auto max-w-6xl px-4 pb-10">{children}</div>
+         <div className="mx-auto max-w-6xl px-3 pb-8 sm:px-4 sm:pb-10">{children}</div>
       </main>
     </div>
   );

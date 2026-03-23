@@ -144,11 +144,10 @@ LESSON NOTES (VERY IMPORTANT)
   1) Introduction
   2) Key Concepts
   3) Worked Examples (at least 2, step-by-step)
-  4) Common Misconceptions (at least 3) + corrections
-  5) Real-life Applications (at least 3, Nigeria-friendly where possible)
-  6) Summary (5–8 bullet points)
-  7) Exit Ticket (3 short questions)
-  8) Key Vocabulary (at least 8 terms with meanings)
+  4) Real-life Applications (at least 3, Nigeria-friendly where possible)
+  5) Summary (5–8 bullet points)
+  6) Exit Ticket (3 short questions)
+  7) Key Vocabulary (at least 8 terms with meanings)
 
   REFERENCES
 - references: 3 to 6 items.
@@ -242,23 +241,56 @@ Slide Title: ${params.slideTitle ?? ""}
 Image Focus: ${params.imageQuery ?? params.topic}
 
 Requirements:
-- classroom safe
-- education-focused
-- mature academic style
-- realistic educational illustration or textbook-style diagram
-- visually clear and presentation-ready
-- relevant to the exact lesson concept
-- suitable for teachers and school presentations
-- avoid cartoon style
-- avoid childish design
-- avoid random people
-- avoid stock photo look unless truly necessary
-- no watermarks
-- minimal text inside the image (only if it adds educational value, e.g., labels in a diagram) 
-Additional style guidance:
-- If School Level is EYFS / Nursery, use simple, bright, child-friendly educational visuals.
-- If School Level is Primary, use clear educational visuals that are friendly but not cartoonish.
-- If School Level is Secondary, use mature, realistic, textbook-style diagrams or academic illustrations. 
+- The image must be strictly based on the exact lesson concept, topic, and school level provided.
+- The image must be classroom-safe, education-focused, and genuinely useful for teaching and learning.
+- Create a realistic educational illustration, textbook-style diagram, concept visual, or subject-relevant academic scene depending on the lesson need.
+- The image must look clear, intentional, and presentation-ready for classroom teaching, lesson notes, worksheets, or slides.
+- The image must support understanding of the lesson, not just decorate it.
+- Prioritize educational clarity over artistic beauty.
+- Avoid vague or generic visuals.
+- Avoid irrelevant objects, backgrounds, or subjects.
+- Avoid random people unless people are directly necessary to explain the lesson concept.
+- Avoid stock-photo style unless a real-life scene is truly the best fit for the concept.
+- Avoid cartoon style unless the school level is EYFS / Nursery.
+- Avoid childish design for Primary and Secondary unless the topic truly requires playful visuals.
+- No watermarks.
+- No unrelated text in the image.
+- Only include text inside the image when it clearly improves learning, such as:
+  - labels on a diagram
+  - names of key parts
+  - arrows pointing to structures
+  - short concept markers
+- If labels are included, they must be accurate, readable, well-placed, and educationally meaningful.
+- If the lesson concept requires a diagram, generate a diagram with multiple clearly labeled parts where appropriate.
+- If the topic benefits from process explanation, include arrows, stage markers, or short annotations directly inside the image.
+- Make the image visually clean, with good spacing and strong focus on the key subject.
+- The final image should feel like something a teacher would confidently use in class or add to a school presentation.
+
+Labeling and instructional guidance:
+- For science, biology, geography, technology, math, business, or other concept-heavy subjects, prefer labeled educational diagrams over decorative illustrations.
+- Include more labels when the concept has identifiable parts, structures, stages, or functions.
+- Labels should help students learn the topic faster and more clearly.
+- Use short, precise educational labels instead of long paragraphs.
+- Where useful, include arrows, callouts, section names, or step indicators.
+- For diagrams, ensure the labels are large enough to read and logically connected to the correct parts.
+- If the image explains a process, show the process in a clear sequence with concise text support.
+
+School-level style guidance:
+- If School Level is EYFS / Nursery:
+  Use simple, bright, friendly educational visuals with very clear focus, large shapes, and easy-to-understand content. Keep labels minimal and extremely simple.
+- If School Level is Primary:
+  Use clear educational visuals that are engaging, neat, and age-appropriate. Include simple labels where they improve understanding, but keep the image visually easy for children to follow.
+- If School Level is Secondary:
+  Use mature, realistic, textbook-style diagrams, academic illustrations, or high-quality concept visuals. Include richer labels, structural callouts, and concept-supporting annotations where helpful.
+
+Output preference:
+- Prefer the most educationally useful image format for the topic:
+  - labeled diagram
+  - annotated concept illustration
+  - process visual
+  - specimen/apparatus visual
+  - realistic subject illustration
+- Do not generate an image that is merely attractive; generate one that actively teaches. 
 `;
 
     const imageResp = await client.images.generate({

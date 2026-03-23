@@ -1,9 +1,9 @@
 "use client";
-
+ 
 import { useCallback, useMemo, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import type { PrincipalDashboardPayload } from "@/lib/principal/types";
-
+ 
 export type PaymentQuote = {
   teacherSlots: number;
   slotPrice: number;
@@ -13,14 +13,29 @@ export type PaymentQuote = {
   provider: "placeholder" | "paystack";
   reference: string;
 };
-
+ 
 type DashboardApiResponse = {
   ok: boolean;
   onboardingRequired?: boolean;
   data?: PrincipalDashboardPayload;
   error?: string;
 };
-
+ 
+function isPrincipalDashboardPayload(value: unknown): value is PrincipalDashboardPayload {
+  if (!value || typeof value !== "object") return false;
+  const root = value as Record<string, unknown>;
+  const overview = root.overview as Record<string, unknown> | undefined;
+  const subscription = root.subscription as Record<string, unknown> | undefined;
+ 
+  return Boolean(
+    overview &&
+      subscription &&
+      Array.isArray(root.teachers) &&
+      typeof overview.totalTeachers === "number" &&
+      typeof subscription.slotLimit === "number"
+  );
+}
+ 
 export function toNaira(amount: number) {
   return new Intl.NumberFormat("en-NG", {
     style: "currency",
@@ -28,7 +43,7 @@ export function toNaira(amount: number) {
     maximumFractionDigits: 0,
   }).format(amount);
 }
-
+ 
 export function timeAgo(iso?: string | null) {
   if (!iso) return "No activity yet";
   const t = new Date(iso).getTime();
@@ -41,18 +56,18 @@ export function timeAgo(iso?: string | null) {
   const days = Math.floor(hrs / 24);
   return `${days}d ago`;
 }
-
+ 
 export function getErrorMessage(err: unknown, fallback: string) {
   return err instanceof Error ? err.message : fallback;
 }
-
+ 
 export function formatDateOnly(iso?: string | null) {
   if (!iso) return "—";
   const date = new Date(iso);
   if (!Number.isFinite(date.getTime())) return "—";
   return date.toLocaleDateString();
 }
-
+ 
 export function usePrincipalDashboard() {
   const supabase = useMemo(() => createBrowserSupabase(), []);
   const [loading, setLoading] = useState(true);
@@ -60,12 +75,12 @@ export function usePrincipalDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [dashboard, setDashboard] = useState<PrincipalDashboardPayload | null>(null);
   const [onboardingRequired, setOnboardingRequired] = useState(false);
-
+ 
   const getToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
     return data.session?.access_token ?? "";
   }, [supabase]);
-
+ 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -73,32 +88,44 @@ export function usePrincipalDashboard() {
     try {
       const token = await getToken();
       if (!token) throw new Error("Please login to continue.");
-
+ 
       const res = await fetch("/api/principal/dashboard", {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = (await res.json()) as DashboardApiResponse;
-
+ 
       if (res.status === 403) {
         setForbidden(true);
         setDashboard(null);
         setOnboardingRequired(false);
         return;
       }
-
+ 
       if (!res.ok || !json.ok) {
         throw new Error(json.error || "Failed to load principal workspace.");
       }
-
-      setOnboardingRequired(Boolean(json.onboardingRequired));
-      setDashboard(json.data ?? null);
+ 
+      const needsOnboarding = Boolean(json.onboardingRequired);
+      setOnboardingRequired(needsOnboarding);
+ 
+      if (needsOnboarding) {
+        // API returns lightweight onboarding payload, not full dashboard payload.
+        setDashboard(null);
+        return;
+      }
+ 
+      if (!isPrincipalDashboardPayload(json.data)) {
+        throw new Error("Unexpected dashboard response format.");
+      }
+ 
+      setDashboard(json.data);
     } catch (err: unknown) {
       setError(getErrorMessage(err, "Failed to load principal workspace."));
     } finally {
       setLoading(false);
     }
   }, [getToken]);
-
+ 
   return {
     supabase,
     loading,

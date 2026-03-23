@@ -228,15 +228,52 @@ function buildWorksheetPrompt(input: WorksheetRequestBody) {
       return `
 Special requirements:
 - This is a ${contentMode === "diagram" ? "diagram-based" : "practical"} worksheet.
-- Include biology/science-friendly questions where relevant.
-- If diagrams are needed, include clear placeholders in this exact style:
-  [Diagram: Human heart outline]
-  [Diagram: Leaf cross-section]
-  [Diagram: Microscope parts]
-- Include a "visualPrompts" array (3 to 6 prompts) for black-and-white outline diagrams.
-- Prompts should be specific and label-ready (e.g., "Human heart labeled outline").
-- Make the worksheet classroom-ready for practical/lab usage.
-- Include observation, labeling, or short explanation tasks where relevant.
+- Make it highly practical, classroom-ready, and easy for students to use during science/biology practicals.
+- Follow the user's exact topic, specimen, apparatus, or experiment request.
+- Include biology/science-friendly questions only where relevant to the requested topic.
+- If diagrams are needed, generate diagram placeholders BASED ON THE USER'S REQUEST in this exact style:
+  [Diagram: <topic-relevant black-and-white outline>]
+
+- Examples (do not limit to these):
+  If topic is "Human heart" → [Diagram: Human heart outline]
+  If topic is "Leaf" → [Diagram: Leaf cross-section outline]
+  If topic is "Microscope" → [Diagram: Microscope parts outline]
+  If topic is "Bean seed" → [Diagram: Bean seed internal structure outline]
+
+- Include a "visualPrompts" array (3 to 6 prompts) for black-and-white printable outline diagrams.
+- Each visual prompt must be specific, label-ready, and directly tied to the user’s topic.
+- Prefer prompts like:
+  "Human heart labeled outline"
+  "Longitudinal section of flower labeled outline"
+  "Microscope parts labeled outline"
+  "Bean seed internal structure labeled outline"
+
+- Include practical tasks such as:
+  - labeling parts
+  - observation tables
+  - drawing from specimen
+  - short function/explanation questions
+  - identification of structures
+  - comparison tasks where relevant
+
+- For practical worksheets, make the questions feel like real lab/practical class work, not generic theory questions.
+- Include clear instruction lines such as:
+  "Observe the specimen carefully."
+  "Label the indicated parts."
+  "State one function of each labeled part."
+  "Record your observations."
+  "Draw and label neatly."
+
+- Where appropriate, include:
+  - specimen/apparatus name
+  - aim
+  - materials needed
+  - observation
+  - inference
+  - conclusion
+
+- Keep wording clear, student-friendly, and exam-practical oriented.
+- Never insert unrelated specimen, apparatus, or diagrams that were not requested by the user’s topic unless they are directly necessary for the practical activity.
 `;
     }
  
@@ -246,13 +283,20 @@ Special requirements:
 - This is a nursery/early-years coloring worksheet.
 - Keep language very simple and child-friendly.
 - Use short instructions.
-- Include placeholders in this exact style:
-  [Coloring Picture: Apple outline]
-  [Coloring Picture: Lion outline]
-  [Coloring Picture: Letter A tracing]
-- Include a "visualPrompts" array (3 to 8 prompts) for black-and-white printable coloring outlines.
-- Keep large spacing and fewer questions/tasks.
-- Focus on matching, tracing, coloring, or simple recognition.
+- Generate coloring placeholders BASED ON THE USER'S TOPIC.
+- Use this format:
+  [Coloring Picture: <relevant object from topic> outline]
+
+- Examples (DO NOT LIMIT TO THESE):
+  If topic is "Fruits" → apple, banana, orange  
+  If topic is "Animals" → lion, dog, fish  
+  If topic is "Light" → sun, candle, bulb  
+
+- Include a "visualPrompts" array (3 to 8 prompts) that match the topic for black-and-white printable outlines.
+
+- Keep large spacing and fewer tasks.
+- Focus on coloring, tracing, matching, or simple recognition.
+- Never insert unrelated specimen, apparatus, or diagrams that were not requested by the user’s topic unless they are directly necessary for the practical activity.
 `;
     }
  

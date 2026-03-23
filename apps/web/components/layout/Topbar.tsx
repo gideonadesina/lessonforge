@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useMemo } from "react";
+import { usePathname } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 
 export default function Topbar({
@@ -10,6 +12,8 @@ export default function Topbar({
   userEmail: string;
   onMenu: () => void;
 }) {
+   const pathname = usePathname();
+  const isPrincipalArea = pathname.startsWith("/principal");
   const [loading, setLoading] = useState(false);
   const [plansOpen, setPlansOpen] = useState(false);
 
@@ -66,7 +70,7 @@ export default function Topbar({
           {/* ✅ Menu button for mobile/tablet */}
           <button
             onClick={onMenu}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white lg:hidden"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white xl:hidden"
             aria-label="Open menu"
           >
             <span className="text-xl leading-none">☰</span>
@@ -83,35 +87,62 @@ export default function Topbar({
         {/* CENTER */}
         <div className="relative w-full md:w-72">
           <input
-            placeholder="Search lessons, topics..."
+             placeholder={isPrincipalArea ? "Search principal workspace..." : "Search lessons, topics..."}
             className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-violet-400"
           />
         </div>
 
         {/* RIGHT */}
-        <div className="flex items-center gap-2">
-          {/* ✅ Mobile: show Upgrade button that opens a modal (works on iOS) */}
-          <button
-            onClick={() => setPlansOpen(true)}
-            className="sm:hidden rounded-xl bg-slate-900 text-white px-4 py-2 text-sm font-semibold hover:bg-slate-800"
-          >
-            Upgrade
-          </button>
+         <div className="flex flex-wrap items-center gap-2">
+          {isPrincipalArea ? (
+            <>
+              <Link
+                href="/principal/generate"
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+              >
+                Generate
+              </Link>
+              <Link
+                href="/principal/library"
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+              >
+                Library
+              </Link>
+              <Link
+                href="/principal/billing"
+                className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+              >
+                Manage billing
+              </Link>
+            </>
+          ) : (
+            <>
+              {/* ✅ Mobile: show Upgrade button that opens a modal (works on iOS) */}
+              <button
+                onClick={() => setPlansOpen(true)}
+                className="sm:hidden rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+              >
+                Upgrade
+              </button>
+
 
           {/* Desktop/tablet (sm+) */}
-          <button
-            onClick={() => upgradePlan("basic")}
-            className="hidden sm:inline-flex rounded-xl border bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50"
-          >
-            Basic ₦2,000
-          </button>
+           {/* Desktop/tablet (sm+) */}
+              <button
+                onClick={() => upgradePlan("basic")}
+                className="hidden rounded-xl border bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50 sm:inline-flex"
+              >
+                Basic ₦2,000/mo
+              </button>
 
-          <button
-            onClick={() => upgradePlan("pro")}
-            className="hidden sm:inline-flex rounded-xl bg-slate-900 text-white px-4 py-2 text-sm font-semibold hover:bg-slate-800"
-          >
-            Pro ₦5,000
-          </button>
+              <button
+                onClick={() => upgradePlan("pro")}
+                className="hidden rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 sm:inline-flex"
+              >
+                Pro ₦5,000/mo
+              </button>
+            </>
+          )}
 
           <button
             onClick={logout}
@@ -122,9 +153,35 @@ export default function Topbar({
           </button>
         </div>
       </div>
+       {isPrincipalArea ? (
+        <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+          {[
+            { href: "/principal", label: "Dashboard" },
+            { href: "/principal/teachers", label: "Teachers" },
+            { href: "/principal/workspace", label: "Workspace" },
+            { href: "/principal/planning", label: "Planning" },
+            { href: "/principal/analytics", label: "Analytics" },
+            { href: "/principal/billing", label: "Billing" },
+          ].map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={[
+                "whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+                pathname === link.href
+                  ? "border-violet-200 bg-violet-50 text-violet-700"
+                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+              ].join(" ")}
+            >
+              {link.label}
+            </Link>
+          ))}
+        </div>
+      ) : null}
+      
 
       {/* ✅ Upgrade Modal (mobile) */}
-      {plansOpen && (
+      {plansOpen && !isPrincipalArea && (
         <>
           <button
             className="fixed inset-0 z-50 bg-black/40"
