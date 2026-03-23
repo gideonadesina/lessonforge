@@ -34,6 +34,17 @@ function isProfilePermissionError(message: string) {
     normalized.includes("not authenticated")
   );
 }
+
+function hasOAuthCallbackParams() {
+  if (typeof window === "undefined") return false;
+  const searchParams = new URLSearchParams(window.location.search);
+  return (
+    searchParams.has("code") ||
+    searchParams.has("access_token") ||
+    searchParams.has("refresh_token") ||
+    searchParams.has("provider_token")
+  );
+}
  
 export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
   const router = useRouter();
@@ -124,10 +135,6 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
       setMessage(null);
  
       try {
-        const storedRole = localStorage.getItem(ROLE_STORAGE_KEY);
-        const effectiveRole: AppRole =
-          storedRole === "principal" || storedRole === "teacher" ? storedRole : role;
- 
         const {
           data: { user },
           error: userError,
@@ -139,10 +146,10 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
           return;
         }
  
-        await syncRoleForUser(user, "", effectiveRole);
+        await syncRoleForUser(user, "", role);
  
-        localStorage.setItem(ROLE_STORAGE_KEY, effectiveRole);
-        redirectAfterLogin(effectiveRole);
+        localStorage.setItem(ROLE_STORAGE_KEY, role);
+        redirectAfterLogin(role);
       } catch (error: unknown) {
         hasHandledSessionRef.current = false;
         setMessage(error instanceof Error ? error.message : "Unable to finish sign in.");
@@ -157,6 +164,7 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
     let active = true;
  
     localStorage.setItem(ROLE_STORAGE_KEY, role);
+    if (!hasOAuthCallbackParams()) return;
  
     (async () => {
       const {
@@ -170,8 +178,10 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
  
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!session?.user) return;
+
+      if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
         await syncUserRoleAndRedirect(session.user.id);
       }
     });
@@ -188,13 +198,21 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
  
     try {
       localStorage.setItem(ROLE_STORAGE_KEY, role);
+
+      const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
+      if (signOutError) {
+        console.warn(
+          "Unable to clear previous session before social sign in:",
+          signOutError.message
+        );
+      }
  
       const redirectTo = `${window.location.origin}/auth/${role}`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: provider === "google" ? "google" : "azure",
         options: {
           redirectTo,
-          queryParams: provider === "microsoft" ? { prompt: "select_account" } : undefined,
+          queryParams: { prompt: "select_account" },
         },
       });
  
@@ -229,6 +247,20 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
  
     try {
       localStorage.setItem(ROLE_STORAGE_KEY, role);
+
+      const {
+        data: { session: activeSession },
+      } = await supabase.auth.getSession();
+
+      if (
+        activeSession?.user?.email &&
+        activeSession.user.email.toLowerCase() !== cleanEmail
+      ) {
+        const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
+        if (signOutError) {
+          console.warn("Unable to clear previous session before sign in:", signOutError.message);
+        }
+      }
  
       if (mode === "signup") {
         const { data, error } = await supabase.auth.signUp({

@@ -21,6 +21,21 @@ type DashboardApiResponse = {
   error?: string;
 };
 
+function isPrincipalDashboardPayload(value: unknown): value is PrincipalDashboardPayload {
+  if (!value || typeof value !== "object") return false;
+  const root = value as Record<string, unknown>;
+  const overview = root.overview as Record<string, unknown> | undefined;
+  const subscription = root.subscription as Record<string, unknown> | undefined;
+
+  return Boolean(
+    overview &&
+      subscription &&
+      Array.isArray(root.teachers) &&
+      typeof overview.totalTeachers === "number" &&
+      typeof subscription.slotLimit === "number"
+  );
+}
+
 export function toNaira(amount: number) {
   return new Intl.NumberFormat("en-NG", {
     style: "currency",
@@ -90,8 +105,20 @@ export function usePrincipalDashboard() {
         throw new Error(json.error || "Failed to load principal workspace.");
       }
 
-      setOnboardingRequired(Boolean(json.onboardingRequired));
-      setDashboard(json.data ?? null);
+      const needsOnboarding = Boolean(json.onboardingRequired);
+      setOnboardingRequired(needsOnboarding);
+
+      if (needsOnboarding) {
+        // API returns a lightweight onboarding payload, not a full dashboard object.
+        setDashboard(null);
+        return;
+      }
+
+      if (!isPrincipalDashboardPayload(json.data)) {
+        throw new Error("Unexpected dashboard response format.");
+      }
+
+      setDashboard(json.data);
     } catch (err: unknown) {
       setError(getErrorMessage(err, "Failed to load principal workspace."));
     } finally {

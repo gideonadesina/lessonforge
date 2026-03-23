@@ -66,7 +66,7 @@ export default function Topbar({
           {/* ✅ Menu button for mobile/tablet */}
           <button
             onClick={onMenu}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white lg:hidden"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white xl:hidden"
             aria-label="Open menu"
           >
             <span className="text-xl leading-none">☰</span>
