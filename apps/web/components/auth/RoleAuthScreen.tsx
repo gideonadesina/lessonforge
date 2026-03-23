@@ -15,9 +15,24 @@ import { createBrowserSupabase } from "@/lib/supabase/browser";
  
 type SocialProvider = "google" | "microsoft";
 type Mode = "login" | "signup";
+type AuthEvent =
+  | "SIGNED_IN"
+  | "SIGNED_OUT"
+  | "TOKEN_REFRESHED"
+  | "USER_UPDATED"
+  | "PASSWORD_RECOVERY"
+  | "INITIAL_SESSION";
  
 type RoleAuthScreenProps = {
   role: AppRole;
+};
+
+const OAUTH_INTENT_STORAGE_KEY = "lessonforge:oauth-intent";
+const OAUTH_INTENT_MAX_AGE_MS = 10 * 60 * 1000;
+
+type OAuthIntent = {
+  role: AppRole;
+  createdAt: number;
 };
  
 function isMissingRoleColumnError(message: string) {
@@ -34,6 +49,48 @@ function isProfilePermissionError(message: string) {
     normalized.includes("not authenticated")
   );
 }
+
+function readOAuthIntent(): OAuthIntent | null {
+  if (typeof window === "undefined") return null;
+
+  const raw = window.localStorage.getItem(OAUTH_INTENT_STORAGE_KEY);
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<OAuthIntent>;
+    const isRoleValid = parsed.role === "teacher" || parsed.role === "principal";
+    const createdAt = Number(parsed.createdAt);
+
+    if (!isRoleValid || !Number.isFinite(createdAt)) {
+      window.localStorage.removeItem(OAUTH_INTENT_STORAGE_KEY);
+      return null;
+    }
+
+    if (Date.now() - createdAt > OAUTH_INTENT_MAX_AGE_MS) {
+      window.localStorage.removeItem(OAUTH_INTENT_STORAGE_KEY);
+      return null;
+    }
+
+    return { role: parsed.role, createdAt };
+  } catch {
+    window.localStorage.removeItem(OAUTH_INTENT_STORAGE_KEY);
+    return null;
+  }
+}
+
+function writeOAuthIntent(role: AppRole) {
+  if (typeof window === "undefined") return;
+  const payload: OAuthIntent = {
+    role,
+    createdAt: Date.now(),
+  };
+  window.localStorage.setItem(OAUTH_INTENT_STORAGE_KEY, JSON.stringify(payload));
+}
+
+function clearOAuthIntent() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(OAUTH_INTENT_STORAGE_KEY);
+}
  
 export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
   const router = useRouter();
@@ -49,6 +106,7 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
   const [syncingRole, setSyncingRole] = useState(false);
  
   const hasHandledSessionRef = useRef(false);
+  const shouldHandleOAuthSessionRef = useRef(false);
  
   const roleConfig = ROLE_CONTENT[role];
  
@@ -142,6 +200,7 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
         await syncRoleForUser(user, "", effectiveRole);
  
         localStorage.setItem(ROLE_STORAGE_KEY, effectiveRole);
+        clearOAuthIntent();
         redirectAfterLogin(effectiveRole);
       } catch (error: unknown) {
         hasHandledSessionRef.current = false;
@@ -157,21 +216,39 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
     let active = true;
  
     localStorage.setItem(ROLE_STORAGE_KEY, role);
+    const oauthIntent = readOAuthIntent();
+    const searchParams = new URLSearchParams(window.location.search);
+    const hasOAuthCallbackParams =
+      searchParams.has("code") ||
+      searchParams.has("access_token") ||
+      searchParams.has("refresh_token") ||
+      searchParams.has("provider_token");
+    const shouldHandleOAuthSession =
+      (oauthIntent?.role === role && Date.now() - oauthIntent.createdAt <= OAUTH_INTENT_MAX_AGE_MS) ||
+      hasOAuthCallbackParams;
+
+    shouldHandleOAuthSessionRef.current = shouldHandleOAuthSession;
  
     (async () => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
  
-      if (active && session?.user) {
+      if (active && shouldHandleOAuthSession && session?.user) {
         await syncUserRoleAndRedirect(session.user.id);
       }
     })();
  
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!session?.user) return;
+
+      const authEvent = event as AuthEvent;
+      const isOAuthSessionEvent =
+        authEvent === "SIGNED_IN" || (authEvent === "INITIAL_SESSION" && shouldHandleOAuthSessionRef.current);
+
+      if (isOAuthSessionEvent && shouldHandleOAuthSessionRef.current) {
         await syncUserRoleAndRedirect(session.user.id);
       }
     });
@@ -188,20 +265,23 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
  
     try {
       localStorage.setItem(ROLE_STORAGE_KEY, role);
+      writeOAuthIntent(role);
  
       const redirectTo = `${window.location.origin}/auth/${role}`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: provider === "google" ? "google" : "azure",
         options: {
           redirectTo,
-          queryParams: provider === "microsoft" ? { prompt: "select_account" } : undefined,
+          queryParams: { prompt: "select_account" },
         },
       });
  
       if (error) {
+        clearOAuthIntent();
         setMessage(error.message);
       }
     } catch (error: unknown) {
+      clearOAuthIntent();
       setMessage(error instanceof Error ? error.message : "Unable to sign in right now.");
     } finally {
       setSocialLoading(null);
@@ -229,6 +309,21 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
  
     try {
       localStorage.setItem(ROLE_STORAGE_KEY, role);
+      clearOAuthIntent();
+
+      const {
+        data: { session: activeSession },
+      } = await supabase.auth.getSession();
+
+      if (
+        activeSession?.user?.email &&
+        activeSession.user.email.toLowerCase() !== cleanEmail
+      ) {
+        const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
+        if (signOutError) {
+          console.warn("Unable to clear previous session before sign in:", signOutError.message);
+        }
+      }
  
       if (mode === "signup") {
         const { data, error } = await supabase.auth.signUp({
