@@ -266,6 +266,14 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
     try {
       localStorage.setItem(ROLE_STORAGE_KEY, role);
       writeOAuthIntent(role);
+
+      const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
+      if (signOutError) {
+        console.warn(
+          "Unable to clear previous session before social sign in:",
+          signOutError.message
+        );
+      }
  
       const redirectTo = `${window.location.origin}/auth/${role}`;
       const { error } = await supabase.auth.signInWithOAuth({
