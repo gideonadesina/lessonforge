@@ -1,13 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { getBearerTokenFromHeaders, resolvePrincipalContext } from "@/lib/principal/server";
-import {
-  DEFAULT_CURRENCY,
-  DEFAULT_SLOT_PRICE,
-  computeSubscriptionAmount,
-  isMissingTableOrColumnError,
-  sanitizeSlotCount,
-} from "@/lib/principal/utils";
+import { sanitizeSlotCount } from "@/lib/principal/utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,72 +22,18 @@ export async function POST(req: NextRequest) {
 
     const body = (await req.json().catch(() => null)) as SlotPayload | null;
     const addSlots = sanitizeSlotCount(body?.addSlots ?? 1);
-    const admin = createAdminClient();
+    
 
-    const slotRes = await admin
-      .from("teacher_slots")
-      .select("slot_limit")
-      .eq("school_id", context.school.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (slotRes.error && !isMissingTableOrColumnError(slotRes.error)) {
-      return NextResponse.json({ ok: false, error: slotRes.error.message }, { status: 500 });
-    }
-
-    const current = Number(slotRes.data?.slot_limit ?? 0);
-    const nextLimit = Math.max(1, current + addSlots);
-
-    const createSlotRes = await admin.from("teacher_slots").insert({
-      school_id: context.school.id,
-      slot_limit: nextLimit,
-      slot_price: DEFAULT_SLOT_PRICE,
-      currency: DEFAULT_CURRENCY,
-      status: "active",
-    });
-
-    if (createSlotRes.error && !isMissingTableOrColumnError(createSlotRes.error)) {
-      return NextResponse.json({ ok: false, error: createSlotRes.error.message }, { status: 500 });
-    }
-
-    const amount = computeSubscriptionAmount(addSlots, DEFAULT_SLOT_PRICE);
-    const billingRes = await admin.from("subscriptions").insert({
-      school_id: context.school.id,
-      amount,
-      currency: DEFAULT_CURRENCY,
-      status: "paid",
-      provider: "placeholder",
-      reference: `upgrade_${Date.now()}`,
-      teacher_slots: nextLimit,
-      billing_cycle: "monthly",
-      paid_at: new Date().toISOString(),
-    });
-
-    if (billingRes.error && !isMissingTableOrColumnError(billingRes.error)) {
-      return NextResponse.json({ ok: false, error: billingRes.error.message }, { status: 500 });
-    }
-
-    // Sync with school_licenses if available.
-    const licenseUpdate = await admin
-      .from("school_licenses")
-      .update({ seats: nextLimit })
-      .eq("school_id", context.school.id);
-    if (licenseUpdate.error && !isMissingTableOrColumnError(licenseUpdate.error)) {
-      return NextResponse.json({ ok: false, error: licenseUpdate.error.message }, { status: 500 });
-    }
-
+    
     return NextResponse.json(
       {
-        ok: true,
-        data: {
-          slotLimit: nextLimit,
-          addedSlots: addSlots,
-          amount,
-          currency: DEFAULT_CURRENCY,
-        },
+               ok: false,
+        error:
+          "Direct slot upgrades are disabled. Start a manual Paystack payment from the principal dashboard to renew or change slot count.",
+        data: { requestedAdditionalSlots: addSlots },
+
       },
-      { status: 200 }
+      { status: 400 }
     );
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Failed to update slots";

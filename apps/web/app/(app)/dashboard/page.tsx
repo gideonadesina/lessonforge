@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { useProfile } from "@/lib/useProfile";
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
@@ -13,6 +13,7 @@ import RecentActivity from "@/components/dashboard/RecentActivity";
 import WeeklyInsight from "@/components/dashboard/WeeklyInsight";
 import { listSchemeOfWork } from "@/lib/planning/scheme";
 import { listAcademicEvents } from "@/lib/planning/academicCalender";
+import SchoolCodeInput from "@/components/SchoolCodeInput";
 import type {
   AcademicCalendarRow,
   SchemeOfWorkRow,
@@ -31,6 +32,12 @@ type LessonRow = {
   grade: string | null;
   curriculum: string | null;
   created_at: string;
+};
+type SchoolMembershipApiResponse = {
+  ok: boolean;
+  data?: {
+    school: { id: string; name: string | null } | null;
+  };
 };
 
 function formatDate(iso: string) {
@@ -76,12 +83,46 @@ export default function DashboardPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [planningMsg, setPlanningMsg] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [schoolMembershipLoading, setSchoolMembershipLoading] = useState(true);
+  const [hasSchoolMembership, setHasSchoolMembership] = useState(false);
 
   const teacherName =
     (profile as any)?.full_name ||
     (profile as any)?.name ||
     userEmail?.split("@")[0] ||
     "Teacher";
+
+
+    const loadSchoolMembership = useCallback(async () => {
+    setSchoolMembershipLoading(true);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const token = session?.access_token ?? "";
+      if (!token) {
+        setHasSchoolMembership(false);
+        return;
+      }
+
+      const res = await fetch("/api/schools/me", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = (await res.json()) as SchoolMembershipApiResponse;
+      if (!res.ok || !json.ok) {
+        setHasSchoolMembership(false);
+        return;
+      }
+
+      setHasSchoolMembership(Boolean(json.data?.school?.id));
+    } catch {
+      setHasSchoolMembership(false);
+    } finally {
+      setSchoolMembershipLoading(false);
+    }
+  }, [supabase]);
+
 
   useEffect(() => {
     (window as any).__FORGE_CONTEXT__ = {
@@ -92,6 +133,9 @@ export default function DashboardPage() {
       recentLessons: lessons.slice(0, 5),
     };
   }, [teacherName, creditsRemaining, planLabel, lessons]);
+   useEffect(() => {
+     void loadSchoolMembership();
+  }, [loadSchoolMembership]);
 
   useEffect(() => {
     let alive = true;
@@ -107,11 +151,7 @@ export default function DashboardPage() {
           error: authError,
         } = await supabase.auth.getUser();
 
-        if (user?.user_metadata?.app_role === "principal") {
-  router.replace("/principal");
-  return;
-}
-
+    
         if (!alive) return;
 
         if (authError) {
@@ -321,6 +361,8 @@ export default function DashboardPage() {
   ).size;
   const pendingItems = planningReminders.pendingTopicsCount;
 
+  const isOutOfCredits = creditsRemaining <= 0;
+  const isLowCredits = creditsRemaining > 0 && creditsRemaining <= 5;
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <DashboardHeader />
@@ -339,6 +381,37 @@ export default function DashboardPage() {
             {msg}
           </div>
         ) : null}
+          {isOutOfCredits ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900 shadow-sm">
+            <p className="font-semibold">You are out of credits.</p>
+            <p className="mt-1">
+              New generation actions are blocked, but your dashboard and saved content remain available.
+            </p>
+            <Link href="/settings" className="mt-3 inline-flex rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-semibold text-rose-900">
+              Recharge / Upgrade
+            </Link>
+          </div>
+        ) : null}
+
+        {isLowCredits ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
+            Credits are running low ({creditsRemaining} left). Plan a manual recharge soon to avoid interruptions.
+          </div>
+        ) : null}
+
+
+            {!schoolMembershipLoading && !hasSchoolMembership ? (
+          <section className="rounded-2xl border border-violet-200 bg-violet-50/50 p-4 shadow-sm">
+            <div className="mb-3">
+              <h2 className="text-sm font-bold text-slate-900">Join your school workspace</h2>
+              <p className="mt-1 text-xs text-slate-600">
+                Enter your school code from your principal to activate your teacher seat.
+              </p>
+            </div>
+            <SchoolCodeInput redirectTo="/dashboard" onJoined={loadSchoolMembership} />
+          </section>
+        ) : null}
+
 
         <QuickActionsGrid />
 

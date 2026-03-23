@@ -32,7 +32,7 @@ export const ROLE_CONTENT: Record<AppRole, RoleContent> = {
     authTitle: "Continue as a Principal",
     authSubtitle:
       "Sign in to oversee academic planning, teacher activity, school setup, and curriculum operations.",
-    postAuthPath: "/principal",
+     postAuthPath: "/principal/dashboard",
   },
 };
 

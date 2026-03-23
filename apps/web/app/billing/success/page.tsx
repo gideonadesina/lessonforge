@@ -1,58 +1,118 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { track } from "@/lib/analytics";
+
+type VerifyState = "loading" | "ok" | "bad";
 
 function SuccessInner() {
   const sp = useSearchParams();
   const reference = sp.get("reference");
+  const flow = sp.get("flow");
 
-  const [state, setState] = useState<"loading" | "ok" | "bad">("loading");
-  const [msg, setMsg] = useState<string>("");
+  const [state, setState] = useState<VerifyState>("loading");
+  const [msg, setMsg] = useState("Confirming your payment...");
+
+  const isPrincipalFlow = flow === "principal_onboarding";
+
+  const endpoint = useMemo(() => {
+    if (!reference) return null;
+
+    return isPrincipalFlow
+      ? `/api/principal/payment/verify?reference=${encodeURIComponent(reference)}`
+      : `/api/paystack/verify?reference=${encodeURIComponent(reference)}`;
+  }, [isPrincipalFlow, reference]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        if (!reference) {
-          setState("bad");
-          setMsg("Missing payment reference.");
-          return;
-        }
+    let active = true;
 
-        const res = await fetch(`/api/paystack/verify?reference=${encodeURIComponent(reference)}`);
+    async function verifyPayment() {
+      if (!reference || !endpoint) {
+        if (!active) return;
+        setState("bad");
+        setMsg("Missing payment reference.");
+        return;
+      }
+
+      try {
+        const res = await fetch(endpoint, {
+          method: "GET",
+          cache: "no-store",
+        });
+
         const json = await res.json().catch(() => ({}));
 
-        if (res.ok) {
+        if (!active) return;
+
+        if (res.ok && json?.ok !== false) {
           setState("ok");
-          setMsg("✅ Subscription activated! You can now continue.");
+          setMsg(
+            isPrincipalFlow
+              ? "✅ Payment confirmed and principal workspace activated."
+              : "✅ Payment confirmed successfully."
+          );
         } else {
           setState("bad");
-          setMsg(json?.error || "⚠️ Could not confirm payment yet. Refresh in a minute.");
+          setMsg(
+            json?.error || "⚠️ Could not confirm payment yet. Please refresh shortly."
+          );
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
+        if (!active) return;
         setState("bad");
-        setMsg(e?.message || "⚠️ Verification failed.");
+        setMsg(e instanceof Error ? e.message : "⚠️ Verification failed.");
       }
-    })();
-  }, [reference]);
+    }
+
+    verifyPayment();
+
+    return () => {
+      active = false;
+    };
+  }, [endpoint, isPrincipalFlow, reference]);
+
+  useEffect(() => {
+    if (state !== "ok") return;
+
+    track("payment_success", {
+      reference,
+      flow: flow ?? "default",
+    });
+  }, [flow, reference, state]);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center p-6">
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6 text-slate-900">
       <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-bold">Payment Status</h1>
 
         <p className="mt-3 text-slate-700">
-          {state === "loading" ? "Confirming your subscription…" : msg}
+          {state === "loading" ? "Confirming your payment..." : msg}
         </p>
 
-        <div className="mt-6 flex gap-3">
-          <Link href="/dashboard" className="px-4 py-2 rounded-xl bg-slate-900 text-white font-semibold">
-            Go to Dashboard
-          </Link>
-          <Link href="/" className="px-4 py-2 rounded-xl border border-slate-300 bg-white font-semibold">
-            Generate Lesson
+        <div className="mt-6 flex flex-wrap gap-3">
+          {isPrincipalFlow ? (
+            <Link
+              href="/principal/dashboard"
+              className="rounded-xl bg-slate-900 px-4 py-2 font-semibold text-white"
+            >
+              Go to Principal Dashboard
+            </Link>
+          ) : (
+            <Link
+              href="/dashboard"
+              className="rounded-xl bg-slate-900 px-4 py-2 font-semibold text-white"
+            >
+              Go to Dashboard
+            </Link>
+          )}
+
+          <Link
+            href="/"
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2 font-semibold"
+          >
+            Back to home
           </Link>
         </div>
 
@@ -67,11 +127,10 @@ function SuccessInner() {
 }
 
 export default function BillingSuccessPage() {
-  track("payment_success", { plan: "pro_monthly" });
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center p-6 text-slate-900">
+        <div className="flex min-h-screen items-center justify-center p-6 text-slate-900">
           Loading…
         </div>
       }

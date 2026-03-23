@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getBearerTokenFromHeaders, resolveActiveSchoolCode, resolvePrincipalContext } from "@/lib/principal/server";
+import { ensurePrincipalBillingActive } from "@/lib/principal/billing";
 import { generateSchoolCode, isMissingTableOrColumnError } from "@/lib/principal/utils";
 
 export const runtime = "nodejs";
@@ -41,6 +42,10 @@ export async function POST(req: NextRequest) {
     const schoolId = context.school.id;
     const admin = createAdminClient();
     const newCode = generateSchoolCode(context.school.name ?? "LessonForge School");
+     const billingGuard = await ensurePrincipalBillingActive(admin, schoolId);
+    if (!billingGuard.ok) {
+      return NextResponse.json({ ok: false, error: billingGuard.error, billing: billingGuard.billing }, { status: billingGuard.status });
+    }
 
     const deactivateRes = await admin
       .from("school_codes")

@@ -20,8 +20,8 @@ export type Profile = {
 };
 
 export function getPlanInfo(plan: Plan) {
-  if (plan === "basic") return { label: "Basic", priceLabel: "₦2,000/mo" };
-  if (plan === "pro") return { label: "Pro", priceLabel: "₦5,000/mo" };
+  if (plan === "basic") return { label: "Basic", priceLabel: "₦2,000 per recharge" };
+  if (plan === "pro") return { label: "Pro", priceLabel: "₦5,000/ per recharge" };
   return { label: "Free Trial", priceLabel: "₦0" };
 }
 

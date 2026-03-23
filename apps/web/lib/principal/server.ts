@@ -1,6 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isPrincipalRole, isMissingTableOrColumnError } from "@/lib/principal/utils";
+import {
+  isPrincipalRole,
+  isMissingTableOrColumnError,
+} from "@/lib/principal/utils";
 
 export type PrincipalContext = {
   ok: boolean;
@@ -19,6 +22,8 @@ export type PrincipalContext = {
     principal_name?: string | null;
   } | null;
   membershipRole?: string | null;
+  appRole?: string | null;
+  hasPrincipalAppRole?: boolean;
   isPrincipal?: boolean;
   isTeacherOnly?: boolean;
 };
@@ -32,17 +37,32 @@ type SchoolRecord = {
   principal_name?: string | null;
 };
 
+type MembershipRow = {
+  school_id: string;
+  role: string | null;
+};
+
 function getUserClientWithToken(token: string) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
   if (!url || !anon) {
-    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY");
+    throw new Error(
+      "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY"
+    );
   }
 
   return createClient(url, anon, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+    global: {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
   });
 }
 
@@ -51,8 +71,12 @@ export function getBearerTokenFromHeaders(headers: Headers) {
   return auth.startsWith("Bearer ") ? auth.slice(7) : "";
 }
 
-export async function resolvePrincipalContext(token: string): Promise<PrincipalContext> {
-  if (!token) return { ok: false, error: "Unauthorized", status: 401 };
+export async function resolvePrincipalContext(
+  token: string
+): Promise<PrincipalContext> {
+  if (!token) {
+    return { ok: false, error: "Unauthorized", status: 401 };
+  }
 
   const userClient = getUserClientWithToken(token);
   const admin = createAdminClient();
@@ -60,9 +84,18 @@ export async function resolvePrincipalContext(token: string): Promise<PrincipalC
   const { data: authData, error: authErr } = await userClient.auth.getUser();
   const user = authData?.user;
 
-  if (authErr || !user) return { ok: false, error: "Unauthorized", status: 401 };
+  if (authErr || !user) {
+    return { ok: false, error: "Unauthorized", status: 401 };
+  }
 
-  let membershipRows: Array<{ school_id: string; role: string | null }> = [];
+  const rawAppRole = (user.user_metadata as Record<string, unknown> | null)
+    ?.app_role;
+  const appRole =
+    typeof rawAppRole === "string" ? rawAppRole.toLowerCase() : null;
+  const hasPrincipalAppRole = Boolean(
+    appRole && isPrincipalRole(appRole)
+  );
+
   const memRes = await admin
     .from("school_members")
     .select("school_id, role")
@@ -72,12 +105,16 @@ export async function resolvePrincipalContext(token: string): Promise<PrincipalC
   if (memRes.error && !isMissingTableOrColumnError(memRes.error)) {
     return { ok: false, error: memRes.error.message, status: 500 };
   }
-  membershipRows = (memRes.data ?? []) as Array<{ school_id: string; role: string | null }>;
 
-  const principalMembership = membershipRows.find((m) => isPrincipalRole(m.role));
-  const teacherMembership = membershipRows.find((m) => !isPrincipalRole(m.role));
+  const membershipRows = (memRes.data ?? []) as MembershipRow[];
+  const principalMembership =
+    membershipRows.find((m) => isPrincipalRole(m.role)) ?? null;
+  const latestMembership = membershipRows[0] ?? null;
+  const teacherMembership =
+    membershipRows.find((m) => !isPrincipalRole(m.role)) ?? null;
 
-  let school: PrincipalContext["school"] = null;
+  let school: SchoolRecord | null = null;
+
   if (principalMembership?.school_id) {
     const schoolRes = await admin
       .from("schools")
@@ -88,6 +125,7 @@ export async function resolvePrincipalContext(token: string): Promise<PrincipalC
     if (schoolRes.error && !isMissingTableOrColumnError(schoolRes.error)) {
       return { ok: false, error: schoolRes.error.message, status: 500 };
     }
+
     school = (schoolRes.data as SchoolRecord | null) ?? null;
   }
 
@@ -103,24 +141,39 @@ export async function resolvePrincipalContext(token: string): Promise<PrincipalC
     if (byCreatorRes.error && !isMissingTableOrColumnError(byCreatorRes.error)) {
       return { ok: false, error: byCreatorRes.error.message, status: 500 };
     }
+
     school = (byCreatorRes.data as SchoolRecord | null) ?? null;
   }
 
-  const isPrincipal = Boolean(principalMembership || (school && school.created_by === user.id));
+  const isPrincipal = Boolean(
+    principalMembership ||
+      (school && school.created_by === user.id) ||
+      hasPrincipalAppRole
+  );
+
   const isTeacherOnly = Boolean(teacherMembership && !isPrincipal);
 
   return {
     ok: true,
-    user: { id: user.id, email: user.email ?? null },
+    user: {
+      id: user.id,
+      email: user.email ?? null,
+    },
     school,
-    membershipRole: principalMembership?.role ?? null,
+    membershipRole: principalMembership?.role ?? latestMembership?.role ?? null,
+    appRole,
+    hasPrincipalAppRole,
     isPrincipal,
     isTeacherOnly,
   };
 }
 
-export async function resolveActiveSchoolCode(schoolId: string, fallbackCode: string | null) {
+export async function resolveActiveSchoolCode(
+  schoolId: string,
+  fallbackCode: string | null
+) {
   const admin = createAdminClient();
+
   const codeRes = await admin
     .from("school_codes")
     .select("code, is_active, created_at")

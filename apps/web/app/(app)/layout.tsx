@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { createServerClient } from "@supabase/ssr";
 
 import AppFrame from "@/components/layout/AppFrame";
@@ -7,7 +8,7 @@ import ForgeGuideLauncher from "@/components/ForgeGuideLauncher";
 import "../globals.css";
 
 async function createServerSupabase() {
-  const cookieStore: any = await Promise.resolve(cookies());
+  const cookieStore = await Promise.resolve(cookies());
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -23,7 +24,7 @@ async function createServerSupabase() {
       getAll() {
         return cookieStore.getAll?.() ?? [];
       },
-      setAll(cookiesToSet: any[]) {
+            setAll(cookiesToSet: Array<{ name: string; value: string; options?: Record<string, unknown> }>) {
         for (const { name, value, options } of cookiesToSet) {
           cookieStore.set?.(name, value, options);
         }
@@ -32,23 +33,37 @@ async function createServerSupabase() {
   });
 }
 
-export default async function AppLayout({ children }: { children: ReactNode }) {
+export default async function AppLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
   const supabase = await createServerSupabase();
-  const { data } = await supabase.auth.getUser();
+  const { data, error } = await supabase.auth.getUser();
+  const userMeta = (data?.user?.user_metadata as { app_role?: string; full_name?: string; name?: string } | null) ?? null;
+  const user = data?.user;
 
-  const userEmail = data?.user?.email ?? "";
-  const teacherName =
-    (data?.user?.user_metadata as any)?.full_name ||
-    (data?.user?.user_metadata as any)?.name ||
+  if (error || !user) {
+    redirect("/login");
+  }
+
+  const userEmail = user.email ?? "";
+  const appRole = (userMeta?.app_role ?? "").toLowerCase();
+  const userName =
+   userMeta?.full_name ||
+    userMeta?.name ||
     userEmail.split("@")[0] ||
-    "Teacher";
+    "User";
+
+    if (appRole === "principal") {
+    return <>{children}</>;
+  }
 
   return (
     <AppFrame userEmail={userEmail}>
       {children}
-
       <ForgeGuideLauncher
-        teacherName={teacherName}
+        teacherName={String(userName)}
         userEmail={userEmail}
       />
     </AppFrame>

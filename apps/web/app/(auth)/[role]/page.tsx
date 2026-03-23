@@ -1,28 +1,30 @@
 "use client";
-
+ 
 import type { User } from "@supabase/supabase-js";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-
+ 
 import AuthShell from "@/components/auth/AuthShell";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import {
-  getRoleHomePath,
   isAppRole,
-  roleFromUserMetadata,
   ROLE_CONTENT,
   ROLE_STORAGE_KEY,
   type AppRole,
 } from "@/lib/auth/roles";
-
+ 
 type Mode = "login" | "signup";
-
+const ROLE_REDIRECTS = {
+  teacher: "/dashboard",
+  principal: "/principal/dashboard",
+} as const;
+ 
 function isMissingRoleColumnError(message: string) {
   const m = message.toLowerCase();
   return m.includes("column") && m.includes("role");
 }
-
+ 
 function isProfilePermissionError(message: string) {
   const m = message.toLowerCase();
   return (
@@ -32,15 +34,15 @@ function isProfilePermissionError(message: string) {
     m.includes("not authenticated")
   );
 }
-
+ 
 export default function RoleAuthPage() {
   const params = useParams<{ role: string }>();
   const roleParam = params?.role;
   const role: AppRole | null = isAppRole(roleParam) ? roleParam : null;
-
+ 
   const router = useRouter();
   const supabase = useMemo(() => createBrowserSupabase(), []);
-
+ 
   const [mode, setMode] = useState<Mode>("login");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -48,32 +50,23 @@ export default function RoleAuthPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-
+ 
   useEffect(() => {
     if (!role) {
       router.replace("/select-role");
       return;
     }
-
+ 
+    console.info("[Auth][role-page] route role", { roleParam, role });
+ 
     if (typeof window !== "undefined") {
       window.localStorage.setItem(ROLE_STORAGE_KEY, role);
     }
-
-    let alive = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (!alive || !data.session) return;
-      const userRole = roleFromUserMetadata(data.session.user.user_metadata, role) ?? role;
-      router.replace(getRoleHomePath(userRole));
-    });
-
-    return () => {
-      alive = false;
-    };
-  }, [role, router, supabase]);
-
+  }, [role, roleParam, router]);
+ 
   async function ensureProfile(user: User, preferredName: string) {
     if (!role) return;
-
+ 
     const profileBase = {
       id: user.id,
       email: user.email ?? "",
@@ -83,13 +76,13 @@ export default function RoleAuthPage() {
         "",
       updated_at: new Date().toISOString(),
     };
-
+ 
     const upsertWithRole = await supabase
       .from("profiles")
       .upsert({ ...profileBase, role });
-
+ 
     if (!upsertWithRole.error) return;
-
+ 
     if (isMissingRoleColumnError(upsertWithRole.error.message)) {
       const fallbackUpsert = await supabase.from("profiles").upsert(profileBase);
       if (fallbackUpsert.error && !isProfilePermissionError(fallbackUpsert.error.message)) {
@@ -97,58 +90,58 @@ export default function RoleAuthPage() {
       }
       return;
     }
-
+ 
     if (!isProfilePermissionError(upsertWithRole.error.message)) {
       throw upsertWithRole.error;
     }
   }
-
+ 
   async function syncRole(user: User | null, preferredName: string) {
     if (!role) return;
-
+ 
     const activeUser = user ?? (await supabase.auth.getUser()).data.user;
     if (!activeUser) return;
-
+ 
     const nextMetadata: Record<string, unknown> = {
       ...(activeUser.user_metadata ?? {}),
       app_role: role,
     };
-
+ 
     if (preferredName.trim()) {
       nextMetadata.full_name = preferredName.trim();
     }
-
+ 
     const metadataResult = await supabase.auth.updateUser({ data: nextMetadata });
     if (metadataResult.error) {
       console.warn("Unable to update user metadata role:", metadataResult.error.message);
     }
-
+ 
     await ensureProfile(activeUser, preferredName);
   }
-
+ 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!role) return;
-
+ 
     setMsg(null);
-
+ 
     const cleanEmail = email.trim().toLowerCase();
     const cleanName = fullName.trim();
-
+ 
     if (!cleanEmail || !password || (mode === "signup" && !cleanName)) {
       setMsg("Please fill in all required fields.");
       return;
     }
-
+ 
     if (password.length < 6) {
       setMsg("Password must be at least 6 characters.");
       return;
     }
-
+ 
     if (typeof window !== "undefined") {
       window.localStorage.setItem(ROLE_STORAGE_KEY, role);
     }
-
+ 
     setLoading(true);
     try {
       if (mode === "signup") {
@@ -162,32 +155,37 @@ export default function RoleAuthPage() {
             },
           },
         });
-
+ 
         if (error) {
           setMsg(error.message);
           return;
         }
-
-        await syncRole(data.user, cleanName);
-
+ 
+        void syncRole(data.user, cleanName).catch((syncError: unknown) => {
+          console.warn("[Auth][signup] role/profile sync failed", syncError);
+        });
+ 
         if (data.session) {
-          router.push(getRoleHomePath(role));
+          const redirectTarget = ROLE_REDIRECTS[role];
+          console.info("[Auth][signup] redirect target", { role, redirectTarget });
+          router.replace(redirectTarget);
           router.refresh();
           return;
         }
-
+ 
         setMsg(
           "Account created. Please confirm your email if required, then log in to continue."
         );
         setMode("login");
         return;
       }
-
+ 
       const { data, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
       });
-
+      console.info("[Auth][login] signInWithPassword result", { role, data, error });
+ 
       if (error) {
         const text = String(error.message || "Login failed.");
         if (text.toLowerCase().includes("email not confirmed")) {
@@ -199,11 +197,15 @@ export default function RoleAuthPage() {
         }
         return;
       }
-
-      await syncRole(data.user, cleanName);
-
+ 
+      void syncRole(data.user, cleanName).catch((syncError: unknown) => {
+        console.warn("[Auth][login] role/profile sync failed", syncError);
+      });
+ 
       setMsg("Logged in. Redirecting...");
-      router.push(getRoleHomePath(role));
+      const redirectTarget = ROLE_REDIRECTS[role];
+      console.info("[Auth][login] redirect target", { role, redirectTarget });
+      router.replace(redirectTarget);
       router.refresh();
     } catch (err: unknown) {
       setMsg(err instanceof Error ? err.message : String(err));
@@ -211,11 +213,11 @@ export default function RoleAuthPage() {
       setLoading(false);
     }
   }
-
+ 
   if (!role) return null;
-
+ 
   const roleContent = ROLE_CONTENT[role];
-
+ 
   return (
     <AuthShell
       title={roleContent.authTitle}
@@ -253,13 +255,13 @@ export default function RoleAuthPage() {
           Sign up
         </button>
       </div>
-
+ 
       {msg && (
         <div className="mt-5 rounded-2xl border border-violet-100 bg-violet-50/70 p-4 text-sm text-slate-700">
           {msg}
         </div>
       )}
-
+ 
       <form onSubmit={onSubmit} className="mt-6 space-y-4">
         {mode === "signup" && (
           <div>
@@ -277,7 +279,7 @@ export default function RoleAuthPage() {
             />
           </div>
         )}
-
+ 
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Email</label>
           <input
@@ -290,7 +292,7 @@ export default function RoleAuthPage() {
             required
           />
         </div>
-
+ 
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Password</label>
           <div className="relative">
@@ -312,7 +314,7 @@ export default function RoleAuthPage() {
               {showPassword ? "Hide" : "Show"}
             </button>
           </div>
-
+ 
           {mode === "login" && (
             <div className="mt-2 flex justify-end">
               <Link
@@ -324,7 +326,7 @@ export default function RoleAuthPage() {
             </div>
           )}
         </div>
-
+ 
         <button
           type="submit"
           disabled={loading}

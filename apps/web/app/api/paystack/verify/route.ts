@@ -1,51 +1,110 @@
 import { NextResponse } from "next/server";
 import { paystackHeaders } from "@/lib/paystack";
 import { createAdminClient } from "@/lib/supabase/admin";
-
+ 
+type PaidTier = "basic" | "pro";
+ 
+const BASIC_ALLOWANCE = 20;
+const PRO_ALLOWANCE = 50;
+ 
+function normalizeTier(rawTier: unknown): PaidTier | null {
+  const tier = String(rawTier ?? "").toLowerCase().trim();
+  if (tier === "basic" || tier === "pro") return tier;
+  return null;
+}
+ 
+function inferTierFromAmount(rawAmount: unknown, rawCurrency: unknown): PaidTier | null {
+  const amount = Number(rawAmount);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+ 
+  const currency = String(rawCurrency ?? "NGN").toUpperCase();
+ 
+  if (currency === "NGN") {
+    if (amount >= 500000) return "pro";
+    if (amount >= 200000) return "basic";
+    return null;
+  }
+ 
+  if (currency === "USD") {
+    if (amount >= 500) return "pro";
+    if (amount >= 200) return "basic";
+  }
+ 
+  return null;
+}
+ 
+async function resolveTierForUser(userId: string, data: any): Promise<PaidTier> {
+  const admin = createAdminClient();
+ 
+  const { data: existing } = await admin
+    .from("profiles")
+    .select("plan, is_pro")
+    .eq("id", userId)
+    .maybeSingle();
+ 
+  const fromMetadata = normalizeTier(data?.metadata?.tier);
+  if (fromMetadata) return fromMetadata;
+ 
+  const fromExisting = normalizeTier(existing?.plan);
+  if (fromExisting) return fromExisting;
+ 
+  if (existing?.is_pro === true) return "pro";
+ 
+  const fromAmount = inferTierFromAmount(data?.amount, data?.currency);
+  return fromAmount ?? "basic";
+}
+ 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const reference = searchParams.get("reference");
-
+  const reference = String(searchParams.get("reference") ?? "").trim();
+ 
   if (!reference) {
     return NextResponse.json({ error: "Missing reference" }, { status: 400 });
   }
-
+ 
   const res = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
     headers: paystackHeaders(),
   });
-
+ 
   const json = await res.json();
-
+ 
   if (!res.ok || !json?.status) {
     return NextResponse.json({ error: "Verify failed", details: json }, { status: 400 });
   }
-
-  // If successful, also upgrade user as a backup (webhook is still primary)
+ 
   if (json?.data?.status === "success") {
-    const user_id = json?.data?.metadata?.user_id as string | undefined;
-    const email = json?.data?.customer?.email as string | undefined;
-    const currency = (json?.data?.currency as "NGN" | "USD") || "NGN";
-    const subscription_code = json?.data?.subscription?.subscription_code as string | undefined;
-    const customer_code = json?.data?.customer?.customer_code as string | undefined;
-
-    if (user_id) {
+    const userId = String(json?.data?.metadata?.user_id ?? "").trim();
+ 
+    if (userId) {
+      const tier = await resolveTierForUser(userId, json?.data);
+      const allowance = tier === "pro" ? PRO_ALLOWANCE : BASIC_ALLOWANCE;
+ 
       const admin = createAdminClient();
-      await admin.from("profiles").upsert(
+      const { error } = await admin.from("profiles").upsert(
         {
-          id: user_id,
-          is_pro: true,
-          free_credits: 1, // optional (or leave credits as-is)
-          pro_expires_at: new Date(Date.now() + 32 * 24 * 60 * 60 * 1000).toISOString(),
-          plan: currency,
-          paystack_subscription_code: subscription_code ?? null,
-          paystack_customer_code: customer_code ?? null,
-          paystack_email: email ?? null,
+          id: userId,
+          plan: tier,
+          is_pro: tier === "pro",
+          pro_expires_at:
+            tier === "pro"
+              ? new Date(Date.now() + 32 * 24 * 60 * 60 * 1000).toISOString()
+              : null,
+          credits_monthly_allowance: allowance,
+          credits_balance: allowance,
+          credits_reset_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          paystack_subscription_code: json?.data?.subscription?.subscription_code ?? null,
+          paystack_customer_code: json?.data?.customer?.customer_code ?? null,
+          paystack_email: json?.data?.customer?.email ?? null,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "id" }
       );
+ 
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
     }
   }
-
+ 
   return NextResponse.json({ ok: true, data: json.data });
 }

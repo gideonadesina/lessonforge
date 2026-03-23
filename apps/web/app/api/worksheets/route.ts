@@ -1,11 +1,21 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-
+ 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-
+ 
+type WorksheetSource = "generated" | "uploaded";
+type PrintLayout = "standard" | "exam" | "worksheet";
+type ContentMode = "normal" | "diagram" | "coloring" | "practical" | "answer_key";
+type VisualContentMode = "diagram" | "coloring" | "practical";
+ 
+type WorksheetVisual = {
+  label: string;
+  imageDataUrl: string;
+};
+ 
 type WorksheetRequestBody = {
   subject: string;
   topic: string;
@@ -14,260 +24,909 @@ type WorksheetRequestBody = {
   difficulty?: string;
   numQuestions?: number;
   durationMins?: number;
+ 
+  title?: string;
+  instructions?: string[];
+  worksheet?: string;
+  answerKey?: string;
+ 
+  schoolName?: string;
+  className?: string;
+  worksheetDate?: string | null;
+ 
+  source?: WorksheetSource;
+  fileUrl?: string | null;
+  fileName?: string | null;
+  fileType?: string | null;
+ 
+  printLayout?: PrintLayout;
+  contentMode?: ContentMode;
 };
-
-function jsonOk(data: any, status = 200) {
+ 
+type WorksheetPatchBody = {
+  id: string;
+  title?: string;
+  schoolName?: string | null;
+  className?: string | null;
+  worksheetDate?: string | null;
+  instructions?: string[];
+  worksheet?: string;
+  answerKey?: string;
+  printLayout?: PrintLayout;
+  contentMode?: ContentMode;
+  worksheetType?: string | null;
+  difficulty?: string | null;
+  numQuestions?: number | null;
+  durationMins?: number | null;
+};
+ 
+function jsonOk(data: unknown, status = 200) {
   return NextResponse.json({ ok: true, data }, { status });
 }
+ 
 function jsonErr(error: string, status = 500) {
   return NextResponse.json({ ok: false, error }, { status });
 }
-
+ 
+function getErrorMessage(err: unknown, fallback: string) {
+  if (err && typeof err === "object" && "message" in err) {
+    return String((err as { message?: unknown }).message ?? fallback);
+  }
+  return fallback;
+}
+ 
 function getBearerToken(req: NextRequest) {
   const auth = req.headers.get("authorization") ?? "";
   return auth.startsWith("Bearer ") ? auth.slice(7) : "";
 }
-
+ 
 function supabaseWithToken(token: string) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
+ 
   if (!url || !anon) {
     throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY");
   }
-
+ 
   return createClient(url, anon, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
     global: { headers: { Authorization: `Bearer ${token}` } },
   });
 }
-
-function clampInt(n: any, min: number, max: number, fallback: number) {
+ 
+function clampInt(n: unknown, min: number, max: number, fallback: number) {
   const x = Number(n);
   if (!Number.isFinite(x)) return fallback;
   return Math.max(min, Math.min(max, Math.trunc(x)));
 }
-
-/** Prompt builder: returns JSON that matches YOUR DB columns */
+ 
+function normalizeSource(value: unknown): WorksheetSource {
+  return value === "uploaded" ? "uploaded" : "generated";
+}
+ 
+function normalizePrintLayout(value: unknown): PrintLayout {
+  if (value === "exam" || value === "worksheet") return value;
+  return "standard";
+}
+ 
+function normalizeContentMode(value: unknown): ContentMode {
+  if (
+    value === "diagram" ||
+    value === "coloring" ||
+    value === "practical" ||
+    value === "answer_key"
+  ) {
+    return value;
+  }
+  return "normal";
+}
+ 
+function normalizeInstructions(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((x) => String(x ?? "").trim()).filter(Boolean);
+}
+ 
+function normalizeVisualPrompts(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+ 
+  for (const item of value) {
+    if (typeof item === "string" && item.trim()) {
+      out.push(item.trim());
+      continue;
+    }
+    if (item && typeof item === "object") {
+      const obj = item as { prompt?: unknown; label?: unknown };
+      const p = String(obj.prompt ?? obj.label ?? "").trim();
+      if (p) out.push(p);
+    }
+  }
+ 
+  return out;
+}
+ 
+function dedupeKeepOrder(values: string[]) {
+  const seen = new Set<string>();
+  const out: string[] = [];
+ 
+  for (const v of values) {
+    const key = v.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(v.trim());
+  }
+ 
+  return out;
+}
+ 
+function extractVisualPromptsFromWorksheet(worksheet: string): string[] {
+  const found = new Set<string>();
+  const text = worksheet || "";
+  const regex = /\[(?:Coloring Picture|Diagram)\s*:\s*([^\]]+)\]/gi;
+ 
+  let m: RegExpExecArray | null = regex.exec(text);
+  while (m) {
+    const label = String(m[1] ?? "").trim();
+    if (label) found.add(label);
+    m = regex.exec(text);
+  }
+ 
+  return [...found];
+}
+ 
+function getFallbackVisualPrompts(
+  mode: VisualContentMode,
+  subject: string,
+  topic: string
+): string[] {
+  if (mode === "coloring") {
+    return [
+      `${topic} outline`,
+      "Apple outline",
+      "House outline",
+      "Flower outline",
+      "Fish outline",
+    ];
+  }
+ 
+  return [
+    `${topic} labeled outline`,
+    `${subject} practical diagram outline`,
+    "Human heart labeled outline",
+    "Plant cell labeled outline",
+    "Simple electric circuit labeled outline",
+  ];
+}
+ 
+function getVisualMode(mode: ContentMode, worksheetText: string): VisualContentMode | null {
+  if (mode === "coloring" || mode === "diagram" || mode === "practical") return mode;
+  if ((worksheetText || "").includes("[Coloring Picture:")) return "coloring";
+  if ((worksheetText || "").includes("[Diagram:")) return "diagram";
+  return null;
+}
+ 
+function hasBasicNumbering(text: string, count: number) {
+  const t = text || "";
+  return t.includes("1.") && (t.includes(`${count}.`) || t.includes(`${count})`));
+}
+ 
 function buildWorksheetPrompt(input: WorksheetRequestBody) {
-  const count = clampInt(input.numQuestions, 5, 50, 10);
-  const type = input.worksheetType ?? "Mixed";
-  const difficulty = input.difficulty ?? "Medium";
+  const count = clampInt(input.numQuestions, 3, 50, 10);
+  const type = String(input.worksheetType ?? "Mixed").trim();
+  const difficulty = String(input.difficulty ?? "Medium").trim();
   const duration = clampInt(input.durationMins, 10, 180, 30);
-
+ 
+  const contentMode = normalizeContentMode(input.contentMode);
+  const printLayout = normalizePrintLayout(input.printLayout);
+ 
+  const specialRules = (() => {
+    if (contentMode === "diagram" || contentMode === "practical") {
+      return `
+Special requirements:
+- This is a ${contentMode === "diagram" ? "diagram-based" : "practical"} worksheet.
+- Include biology/science-friendly questions where relevant.
+- If diagrams are needed, include clear placeholders in this exact style:
+  [Diagram: Human heart outline]
+  [Diagram: Leaf cross-section]
+  [Diagram: Microscope parts]
+- Include a "visualPrompts" array (3 to 6 prompts) for black-and-white outline diagrams.
+- Prompts should be specific and label-ready (e.g., "Human heart labeled outline").
+- Make the worksheet classroom-ready for practical/lab usage.
+- Include observation, labeling, or short explanation tasks where relevant.
+`;
+    }
+ 
+    if (contentMode === "coloring") {
+      return `
+Special requirements:
+- This is a nursery/early-years coloring worksheet.
+- Keep language very simple and child-friendly.
+- Use short instructions.
+- Include placeholders in this exact style:
+  [Coloring Picture: Apple outline]
+  [Coloring Picture: Lion outline]
+  [Coloring Picture: Letter A tracing]
+- Include a "visualPrompts" array (3 to 8 prompts) for black-and-white printable coloring outlines.
+- Keep large spacing and fewer questions/tasks.
+- Focus on matching, tracing, coloring, or simple recognition.
+`;
+    }
+ 
+    if (contentMode === "answer_key") {
+      return `
+Special requirements:
+- Ensure the answer key is especially clear and complete.
+- Match every question exactly.
+- visualPrompts must be [].
+`;
+    }
+ 
+    return `
+Special requirements:
+- Keep the worksheet neat, classroom-ready, and printable.
+- Use Nigeria-relevant school style where appropriate.
+- visualPrompts must be [].
+`;
+  })();
+ 
   return `
 Return STRICT JSON only. No markdown. No backticks. No extra text.
-
+ 
 Audience: ${input.grade}
 Subject: ${input.subject}
 Topic: ${input.topic}
-
+ 
 Worksheet Type: ${type}
 Difficulty: ${difficulty}
 Questions Count: ${count}
 Duration: ${duration} minutes
-
+Print Layout: ${printLayout}
+Content Mode: ${contentMode}
+ 
+${specialRules}
+ 
 You MUST output JSON with exactly this shape:
 {
   "title": "",
   "instructions": ["...","..."],
   "worksheet": "A clean printable worksheet text with numbered questions 1..${count}.",
-  "answerKey": "Answer key text that corresponds to questions 1..${count}."
+  "answerKey": "Answer key text that corresponds to questions 1..${count}.",
+  "visualPrompts": ["..."]
 }
-
+ 
 Hard requirements:
-- worksheet MUST contain EXACTLY ${count} numbered questions (1..${count})
-- The worksheet must be classroom-ready and Nigeria-relevant where possible
-- The answerKey must cover ALL questions (1..${count})
-- Keep formatting neat and printable (clear spacing, headings)
-
-Return JSON only.
+- worksheet MUST contain EXACTLY ${count} numbered questions/tasks/items unless contentMode is coloring and very early-years style requires shorter child-friendly activity prompts; even then still number items 1..${count}
+- The worksheet must be classroom-ready
+- The answerKey must cover ALL questions/tasks meaningfully
+- Keep formatting neat and printable
+- Do not return markdown
+- Return JSON only
 `.trim();
 }
-
-function hasBasicNumbering(text: string, count: number) {
-  const t = text || "";
-  return t.includes("1.") && (t.includes(`${count}.`) || t.includes(`${count})`));
+ 
+async function generateOutlineImage(
+  client: OpenAI,
+  args: {
+    prompt: string;
+    mode: VisualContentMode;
+    subject: string;
+    topic: string;
+    grade: string;
+  }
+): Promise<WorksheetVisual | null> {
+  const baseInstruction =
+    args.mode === "coloring"
+      ? `
+Create a black-and-white printable coloring outline image for children.
+No color, no grayscale shading, no watermark, no logo, no background scene.
+Use clear thick outlines and large empty spaces for coloring.
+No text on the image.
+`
+      : `
+Create a black-and-white printable educational line diagram outline.
+No color, no grayscale shading, no watermark, no logo, no background scene.
+Make it suitable for students to label in class.
+No text paragraphs on the image.
+`;
+ 
+  const prompt = `
+${baseInstruction}
+Subject: ${args.subject}
+Topic: ${args.topic}
+Grade: ${args.grade}
+Image focus: ${args.prompt}
+`.trim();
+ 
+  try {
+    const imageResp = await client.images.generate({
+      model: "gpt-image-1",
+      prompt,
+      size: "1024x1024",
+      quality: "medium",
+    });
+ 
+    const b64 = imageResp?.data?.[0]?.b64_json;
+    if (!b64 || typeof b64 !== "string") return null;
+ 
+    return {
+      label: args.prompt,
+      imageDataUrl: `data:image/png;base64,${b64}`,
+    };
+  } catch {
+    return null;
+  }
 }
-
+ 
+async function generateWorksheetVisuals(
+  client: OpenAI,
+  args: {
+    mode: VisualContentMode;
+    prompts: string[];
+    subject: string;
+    topic: string;
+    grade: string;
+  }
+): Promise<WorksheetVisual[]> {
+  const maxCount = args.mode === "coloring" ? 8 : 6;
+  const uniquePrompts = dedupeKeepOrder(args.prompts).slice(0, maxCount);
+ 
+  const visuals: WorksheetVisual[] = [];
+  for (const p of uniquePrompts) {
+    const one = await generateOutlineImage(client, {
+      prompt: p,
+      mode: args.mode,
+      subject: args.subject,
+      topic: args.topic,
+      grade: args.grade,
+    });
+    if (one) visuals.push(one);
+  }
+ 
+  return visuals;
+}
+ 
+async function authenticate(req: NextRequest) {
+  const token = getBearerToken(req);
+  if (!token) {
+    return { ok: false as const, error: "Unauthorized (no token)", status: 401 };
+  }
+ 
+  const supabase = supabaseWithToken(token);
+  const { data: authData, error: authErr } = await supabase.auth.getUser();
+  const user = authData?.user;
+ 
+  if (authErr || !user) {
+    return { ok: false as const, error: "Unauthorized (invalid token)", status: 401 };
+  }
+ 
+  return { ok: true as const, supabase, user };
+}
+ 
 /**
  * GET
- * - /api/worksheets            => list meta
- * - /api/worksheets?id=<uuid>  => fetch full row + generated view model
+ * - /api/worksheets                    => list meta
+ * - /api/worksheets?id=<uuid>          => fetch full row + generated view model
+ * - /api/worksheets?id=<uuid>&visuals=1 => also generate visuals from worksheet placeholders
  */
 export async function GET(req: NextRequest) {
   try {
-    const token = getBearerToken(req);
-    if (!token) return jsonErr("Unauthorized (no token)", 401);
-
-    const supabase = supabaseWithToken(token);
-
-    const { data: authData, error: authErr } = await supabase.auth.getUser();
-    if (authErr || !authData?.user) return jsonErr("Unauthorized (invalid token)", 401);
-
+    const auth = await authenticate(req);
+    if (!auth.ok) return jsonErr(auth.error, auth.status);
+ 
+    const { supabase, user } = auth;
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
-
-    // Full fetch (for modal open)
+    const withVisuals = searchParams.get("visuals") === "1";
+ 
     if (id) {
       const { data, error } = await supabase
         .from("worksheets")
         .select(
-          "id, subject, topic, grade, worksheet_type, difficulty, num_questions, duration_mins, title, instructions, worksheet, answer_key, created_at"
+          `
+          id,
+          user_id,
+          subject,
+          topic,
+          grade,
+          worksheet_type,
+          difficulty,
+          num_questions,
+          duration_mins,
+          title,
+          instructions,
+          worksheet,
+          answer_key,
+          school_name,
+          class_name,
+          worksheet_date,
+          source,
+          file_url,
+          file_name,
+          file_type,
+          print_layout,
+          content_mode,
+          created_at,
+          updated_at
+        `
         )
         .eq("id", id)
-        .single();
-
+        .eq("user_id", user.id)
+        .maybeSingle();
+ 
       if (error) return jsonErr(error.message, 500);
-
+      if (!data) return jsonErr("Worksheet not found", 404);
+ 
+      const worksheet = String(data.worksheet ?? "");
+      const storedMode = normalizeContentMode(data.content_mode);
+      const visualMode = getVisualMode(storedMode, worksheet);
+ 
+      let visuals: WorksheetVisual[] = [];
+      if (withVisuals && visualMode && process.env.OPENAI_API_KEY) {
+        const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        let prompts = dedupeKeepOrder(extractVisualPromptsFromWorksheet(worksheet));
+        if (prompts.length === 0) {
+          prompts = getFallbackVisualPrompts(visualMode, data.subject, data.topic);
+        }
+        visuals = await generateWorksheetVisuals(client, {
+          mode: visualMode,
+          prompts,
+          subject: data.subject,
+          topic: data.topic,
+          grade: data.grade,
+        });
+      }
+ 
       const generated = {
-        title: data?.title ?? `${data?.subject ?? ""}: ${data?.topic ?? ""}`.trim(),
-        instructions: Array.isArray(data?.instructions) ? data.instructions : [],
-        worksheet: data?.worksheet ?? "",
-        answerKey: data?.answer_key ?? "",
+        title: data.title ?? `${data.subject ?? ""}: ${data.topic ?? ""}`.trim(),
+        instructions: Array.isArray(data.instructions) ? data.instructions : [],
+        worksheet,
+        answerKey: data.answer_key ?? "",
+        contentMode: storedMode,
+        visuals,
       };
-
+ 
       return jsonOk({ saved: data, generated }, 200);
     }
-
-    // List meta only
+ 
     const { data, error } = await supabase
       .from("worksheets")
-      .select("id, subject, topic, grade, worksheet_type, difficulty, num_questions, duration_mins, created_at")
+      .select(
+        `
+        id,
+        subject,
+        topic,
+        grade,
+        worksheet_type,
+        difficulty,
+        num_questions,
+        duration_mins,
+        title,
+        school_name,
+        class_name,
+        worksheet_date,
+        source,
+        file_url,
+        file_name,
+        file_type,
+        print_layout,
+        content_mode,
+        created_at,
+        updated_at
+      `
+      )
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(100);
-
+ 
     if (error) return jsonErr(error.message, 500);
     return jsonOk(data ?? [], 200);
-  } catch (e: any) {
-    return jsonErr(e?.message ?? "Failed", 500);
+  } catch (e: unknown) {
+    return jsonErr(getErrorMessage(e, "Failed"), 500);
   }
 }
-
+ 
 /**
  * POST /api/worksheets
- * Generates + autosaves to DB
+ * - generates + saves
+ * - OR saves uploaded worksheet metadata if source='uploaded'
  */
 export async function POST(req: NextRequest) {
   try {
-    const token = getBearerToken(req);
-    if (!token) return jsonErr("Unauthorized (no token)", 401);
-
-    const supabase = supabaseWithToken(token);
-
-    const { data: authData, error: authErr } = await supabase.auth.getUser();
-    const user = authData?.user;
-    if (authErr || !user) return jsonErr("Unauthorized (invalid token)", 401);
-
+    const auth = await authenticate(req);
+    if (!auth.ok) return jsonErr(auth.error, auth.status);
+ 
+    const { supabase, user } = auth;
+ 
     let body: WorksheetRequestBody;
     try {
       body = (await req.json()) as WorksheetRequestBody;
     } catch {
       return jsonErr("Invalid JSON body", 400);
     }
-
-    if (!body?.subject || !body?.topic || !body?.grade) {
+ 
+    const subject = String(body?.subject ?? "").trim();
+    const topic = String(body?.topic ?? "").trim();
+    const grade = String(body?.grade ?? "").trim();
+ 
+    if (!subject || !topic || !grade) {
       return jsonErr("Missing required fields: subject, topic, grade", 400);
     }
-
-    if (!process.env.OPENAI_API_KEY) return jsonErr("OPENAI_API_KEY missing", 500);
-
-    const count = clampInt(body.numQuestions, 5, 50, 10);
+ 
+    const source = normalizeSource(body.source);
+    const printLayout = normalizePrintLayout(body.printLayout);
+    const contentMode = normalizeContentMode(body.contentMode);
+    const count = clampInt(body.numQuestions, 3, 50, contentMode === "coloring" ? 5 : 10);
+    const duration = clampInt(body.durationMins, 10, 180, contentMode === "coloring" ? 20 : 30);
+ 
+    // Uploaded worksheet metadata save path
+    if (source === "uploaded") {
+      const title = String(body.title ?? topic).trim() || topic;
+      const instructions = normalizeInstructions(body.instructions);
+ 
+      const { data: saved, error: saveErr } = await supabase
+        .from("worksheets")
+        .insert({
+          user_id: user.id,
+          subject,
+          topic,
+          grade,
+          worksheet_type: body.worksheetType ?? null,
+          difficulty: body.difficulty ?? null,
+          num_questions: count,
+          duration_mins: duration,
+          title,
+          instructions,
+          worksheet: String(body.worksheet ?? "").trim(),
+          answer_key: String(body.answerKey ?? "").trim(),
+          school_name: body.schoolName?.trim() || null,
+          class_name: body.className?.trim() || null,
+          worksheet_date: body.worksheetDate || null,
+          source,
+          file_url: body.fileUrl?.trim() || null,
+          file_name: body.fileName?.trim() || null,
+          file_type: body.fileType?.trim() || null,
+          print_layout: printLayout,
+          content_mode: contentMode,
+        })
+        .select(
+          `
+          id,
+          subject,
+          topic,
+          grade,
+          worksheet_type,
+          difficulty,
+          num_questions,
+          duration_mins,
+          title,
+          school_name,
+          class_name,
+          worksheet_date,
+          source,
+          file_url,
+          file_name,
+          file_type,
+          print_layout,
+          content_mode,
+          created_at,
+          updated_at
+        `
+        )
+        .single();
+ 
+      if (saveErr) return jsonErr(saveErr.message, 500);
+ 
+      return jsonOk(
+        {
+          saved,
+          generated: {
+            title,
+            instructions,
+            worksheet: String(body.worksheet ?? "").trim(),
+            answerKey: String(body.answerKey ?? "").trim(),
+            contentMode,
+            visuals: [] as WorksheetVisual[],
+          },
+        },
+        201
+      );
+    }
+ 
+    if (!process.env.OPENAI_API_KEY) {
+      return jsonErr("OPENAI_API_KEY missing", 500);
+    }
+ 
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
+ 
+    // 1) Generate worksheet text JSON
     const resp = await client.responses.create({
       model: "gpt-4.1-mini",
       input: [
-        { role: "system", content: "Return STRICT valid JSON only. No markdown. No extra text." },
-        { role: "user", content: buildWorksheetPrompt(body) },
+        {
+          role: "system",
+          content:
+            "Return STRICT valid JSON only. No markdown. No code fences. No extra commentary.",
+        },
+        {
+          role: "user",
+          content: buildWorksheetPrompt({
+            ...body,
+            subject,
+            topic,
+            grade,
+            numQuestions: count,
+            durationMins: duration,
+            source,
+            printLayout,
+            contentMode,
+          }),
+        },
       ],
       temperature: 0.2,
       max_output_tokens: 3500,
       text: { format: { type: "json_object" } },
     });
-
+ 
     const raw = resp.output_text ?? "";
-    let parsed: any;
+    let parsed: Record<string, unknown>;
     try {
-      parsed = JSON.parse(raw);
+      parsed = JSON.parse(raw) as Record<string, unknown>;
     } catch {
       return jsonErr("Model returned invalid JSON", 502);
     }
-
-    const title = (parsed?.title && String(parsed.title)) || `${body.subject}: ${body.topic}`.trim();
-
-    const instructions = Array.isArray(parsed?.instructions)
-      ? parsed.instructions.map((x: any) => String(x))
-      : [];
-
-    const worksheet = String(parsed?.worksheet ?? "").trim();
-    const answerKey = String(parsed?.answerKey ?? parsed?.answer_key ?? "").trim();
-
-    // Guards: prevent empty/garbage inserts
+ 
+    const title =
+      String(parsed.title ?? body.title ?? `${subject}: ${topic}`).trim() || `${subject}: ${topic}`;
+ 
+    const instructions = normalizeInstructions(parsed.instructions);
+    const worksheet = String(parsed.worksheet ?? "").trim();
+    const answerKey = String(parsed.answerKey ?? parsed.answer_key ?? "").trim();
+ 
     if (!worksheet) return jsonErr("Generation failed: worksheet is empty", 502);
     if (!answerKey) return jsonErr("Generation failed: answerKey is empty", 502);
     if (!hasBasicNumbering(worksheet, count)) {
-      return jsonErr("Generation failed: worksheet numbering/format is not correct. Please try again.", 502);
+      return jsonErr(
+        "Generation failed: worksheet numbering/format is not correct. Please try again.",
+        502
+      );
     }
-
+ 
+    // 2) Charge credit only after generation is valid
+    const { data: creditData, error: creditErr } = await supabase.rpc("consume_generation_credit");
+    if (creditErr) {
+      return jsonErr(`Credit check failed: ${creditErr.message}`, 500);
+    }
+    if (!creditData?.ok) {
+      const msg = String(creditData?.error ?? "No credits");
+      return jsonErr(msg, msg.toLowerCase().includes("not authenticated") ? 401 : 402);
+    }
+ 
+    // 3) Generate visuals (coloring/diagram/practical only)
+    const visualMode = getVisualMode(contentMode, worksheet);
+    let visuals: WorksheetVisual[] = [];
+ 
+    if (visualMode) {
+      let promptCandidates = dedupeKeepOrder([
+        ...normalizeVisualPrompts(parsed.visualPrompts),
+        ...extractVisualPromptsFromWorksheet(worksheet),
+      ]);
+ 
+      if (promptCandidates.length === 0) {
+        promptCandidates = getFallbackVisualPrompts(visualMode, subject, topic);
+      }
+ 
+      visuals = await generateWorksheetVisuals(client, {
+        mode: visualMode,
+        prompts: promptCandidates,
+        subject,
+        topic,
+        grade,
+      });
+    }
+ 
+    // 4) Save row
     const { data: saved, error: saveErr } = await supabase
       .from("worksheets")
       .insert({
         user_id: user.id,
-        subject: body.subject,
-        topic: body.topic,
-        grade: body.grade,
+        subject,
+        topic,
+        grade,
         worksheet_type: body.worksheetType ?? null,
         difficulty: body.difficulty ?? null,
         num_questions: count,
-        duration_mins: clampInt(body.durationMins, 10, 180, 30),
+        duration_mins: duration,
         title,
-        instructions: instructions ?? [], // ALWAYS array
+        instructions,
         worksheet,
         answer_key: answerKey,
+        school_name: body.schoolName?.trim() || null,
+        class_name: body.className?.trim() || null,
+        worksheet_date: body.worksheetDate || null,
+        source,
+        file_url: null,
+        file_name: null,
+        file_type: null,
+        print_layout: printLayout,
+        content_mode: contentMode,
       })
-      .select("id, subject, topic, grade, worksheet_type, difficulty, num_questions, duration_mins, created_at")
+      .select(
+        `
+        id,
+        subject,
+        topic,
+        grade,
+        worksheet_type,
+        difficulty,
+        num_questions,
+        duration_mins,
+        title,
+        school_name,
+        class_name,
+        worksheet_date,
+        source,
+        file_url,
+        file_name,
+        file_type,
+        print_layout,
+        content_mode,
+        created_at,
+        updated_at
+      `
+      )
       .single();
-
-    if (saveErr) return jsonErr(saveErr.message, 500);
-
+ 
+    if (saveErr) {
+      // Optional: if you have this RPC
+      await supabase.rpc("refund_generation_credit").match(() => null);
+      return jsonErr(saveErr.message, 500);
+    }
+ 
     return jsonOk(
       {
         saved,
-        generated: { title, instructions, worksheet, answerKey },
+        generated: { title, instructions, worksheet, answerKey, contentMode, visuals },
       },
       200
     );
-  } catch (e: any) {
+  } catch (e: unknown) {
     return NextResponse.json(
-      { ok: false, error: "Worksheet generation failed", message: e?.message ?? String(e) },
+      {
+        ok: false,
+        error: "Worksheet generation failed",
+        message: getErrorMessage(e, "Worksheet generation failed"),
+      },
       { status: 500 }
     );
   }
 }
-
+ 
+/**
+ * PATCH /api/worksheets
+ * updates editable worksheet fields
+ */
+export async function PATCH(req: NextRequest) {
+  try {
+    const auth = await authenticate(req);
+    if (!auth.ok) return jsonErr(auth.error, auth.status);
+ 
+    const { supabase, user } = auth;
+ 
+    let body: WorksheetPatchBody;
+    try {
+      body = (await req.json()) as WorksheetPatchBody;
+    } catch {
+      return jsonErr("Invalid JSON body", 400);
+    }
+ 
+    if (!body?.id) {
+      return jsonErr("Missing worksheet id", 400);
+    }
+ 
+    const updates: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+ 
+    if ("title" in body) updates.title = String(body.title ?? "").trim() || null;
+    if ("schoolName" in body) updates.school_name = body.schoolName?.trim() || null;
+    if ("className" in body) updates.class_name = body.className?.trim() || null;
+    if ("worksheetDate" in body) updates.worksheet_date = body.worksheetDate || null;
+    if ("instructions" in body) updates.instructions = normalizeInstructions(body.instructions);
+    if ("worksheet" in body) updates.worksheet = String(body.worksheet ?? "").trim();
+    if ("answerKey" in body) updates.answer_key = String(body.answerKey ?? "").trim();
+    if ("printLayout" in body) updates.print_layout = normalizePrintLayout(body.printLayout);
+    if ("contentMode" in body) updates.content_mode = normalizeContentMode(body.contentMode);
+    if ("worksheetType" in body) updates.worksheet_type = body.worksheetType ?? null;
+    if ("difficulty" in body) updates.difficulty = body.difficulty ?? null;
+    if ("numQuestions" in body)
+      updates.num_questions =
+        body.numQuestions == null ? null : clampInt(body.numQuestions, 1, 50, 10);
+    if ("durationMins" in body)
+      updates.duration_mins =
+        body.durationMins == null ? null : clampInt(body.durationMins, 10, 180, 30);
+ 
+    const { data, error } = await supabase
+      .from("worksheets")
+      .update(updates)
+      .eq("id", body.id)
+      .eq("user_id", user.id)
+      .select(
+        `
+        id,
+        subject,
+        topic,
+        grade,
+        worksheet_type,
+        difficulty,
+        num_questions,
+        duration_mins,
+        title,
+        instructions,
+        worksheet,
+        answer_key,
+        school_name,
+        class_name,
+        worksheet_date,
+        source,
+        file_url,
+        file_name,
+        file_type,
+        print_layout,
+        content_mode,
+        created_at,
+        updated_at
+      `
+      )
+      .maybeSingle();
+ 
+    if (error) return jsonErr(error.message, 500);
+    if (!data) return jsonErr("Worksheet not found", 404);
+ 
+    const generated = {
+      title: data.title ?? `${data.subject ?? ""}: ${data.topic ?? ""}`.trim(),
+      instructions: Array.isArray(data.instructions) ? data.instructions : [],
+      worksheet: data.worksheet ?? "",
+      answerKey: data.answer_key ?? "",
+      contentMode: normalizeContentMode(data.content_mode),
+      visuals: [] as WorksheetVisual[],
+    };
+ 
+    return jsonOk({ saved: data, generated }, 200);
+  } catch (e: unknown) {
+    return jsonErr(getErrorMessage(e, "Update failed"), 500);
+  }
+}
+ 
 /**
  * DELETE /api/worksheets?id=<uuid>
  */
 export async function DELETE(req: NextRequest) {
   try {
-    const token = getBearerToken(req);
-    if (!token) return jsonErr("Unauthorized (no token)", 401);
-
-    const supabase = supabaseWithToken(token);
-
-    const { data: authData, error: authErr } = await supabase.auth.getUser();
-    if (authErr || !authData?.user) return jsonErr("Unauthorized (invalid token)", 401);
-
+    const auth = await authenticate(req);
+    if (!auth.ok) return jsonErr(auth.error, auth.status);
+ 
+    const { supabase, user } = auth;
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
     if (!id) return jsonErr("Missing id", 400);
-
-    const { error } = await supabase.from("worksheets").delete().eq("id", id);
+ 
+    const { data, error } = await supabase
+      .from("worksheets")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .select("id")
+      .maybeSingle();
+ 
     if (error) return jsonErr(error.message, 500);
-
+    if (!data) return jsonErr("Worksheet not found", 404);
+ 
     return jsonOk({ deleted: true }, 200);
-  } catch (e: any) {
-    return jsonErr(e?.message ?? "Delete failed", 500);
+  } catch (e: unknown) {
+    return jsonErr(getErrorMessage(e, "Delete failed"), 500);
   }
 }
