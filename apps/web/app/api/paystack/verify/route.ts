@@ -24,7 +24,10 @@ export async function GET(req: Request) {
   if (json?.data?.status === "success") {
     const user_id = json?.data?.metadata?.user_id as string | undefined;
     const email = json?.data?.customer?.email as string | undefined;
-    const currency = (json?.data?.currency as "NGN" | "USD") || "NGN";
+    const rawTier = String(json?.data?.metadata?.tier ?? "").toLowerCase();
+    const plan: "free" | "basic" | "pro" =
+      rawTier === "basic" || rawTier === "pro" ? rawTier : "pro";
+    const isPro = plan === "pro";
     const subscription_code = json?.data?.subscription?.subscription_code as string | undefined;
     const customer_code = json?.data?.customer?.customer_code as string | undefined;
 
@@ -33,10 +36,12 @@ export async function GET(req: Request) {
       await admin.from("profiles").upsert(
         {
           id: user_id,
-          is_pro: true,
+          is_pro: isPro,
           free_credits: 1, // optional (or leave credits as-is)
-          pro_expires_at: new Date(Date.now() + 32 * 24 * 60 * 60 * 1000).toISOString(),
-          plan: currency,
+          pro_expires_at: isPro
+            ? new Date(Date.now() + 32 * 24 * 60 * 60 * 1000).toISOString()
+            : null,
+          plan,
           paystack_subscription_code: subscription_code ?? null,
           paystack_customer_code: customer_code ?? null,
           paystack_email: email ?? null,
