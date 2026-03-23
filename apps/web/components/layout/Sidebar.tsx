@@ -85,6 +85,14 @@ export default function Sidebar({
     };
   }, [open]);
 
+  useEffect(() => {
+    if (open) {
+      setOpen(false);
+    }
+    // Run only on route changes to collapse drawer after navigation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
   async function loadUser() {
     const { data } = await supabase.auth.getUser();
     const user = data.user;
@@ -144,9 +152,9 @@ export default function Sidebar({
     )}&background=6366f1&color=fff`;
 
   const SidebarCard = ({ onNavigate }: { onNavigate?: () => void }) => (
-    <aside className="h-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <aside className="flex h-full min-h-0 flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       {/* User */}
-      <div className="flex items-center gap-3 pb-4 border-b border-slate-200">
+      <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 pb-4">
         <label className="relative cursor-pointer">
           <img
             src={avatar}
@@ -174,7 +182,7 @@ export default function Sidebar({
       </div>
 
       {/* Nav */}
-      <nav className="mt-4 flex flex-col gap-1">
+      <nav className="mt-4 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
          {navItems.map((item) => {
           const active =
             item.href === "/principal"
@@ -230,43 +238,49 @@ export default function Sidebar({
 
   return (
     <>
-      {/* Desktop sidebar (lg+) fixed left */}
-      <div className="hidden lg:block">
+      {/* Desktop sidebar (xl+) fixed left */}
+      <div className="hidden xl:block">
         <div className="fixed inset-y-0 left-0 z-30 w-72 p-4">
           <SidebarCard />
         </div>
       </div>
 
       {/* Mobile/Tablet overlay */}
-      {open && (
-        <button
-          aria-label="Close menu overlay"
-          className="fixed inset-0 z-40 bg-black/30 lg:hidden"
-          onClick={() => setOpen(false)}
-        />
-      )}
+      <button
+        aria-label="Close menu overlay"
+        className={[
+          "fixed inset-0 z-40 bg-black/35 transition-opacity xl:hidden",
+          open ? "opacity-100" : "pointer-events-none opacity-0",
+        ].join(" ")}
+        onClick={() => setOpen(false)}
+      />
 
       {/* Mobile/Tablet drawer */}
       <div
         className={[
-          "fixed inset-y-0 left-0 z-50 w-[86vw] max-w-[360px] p-4 lg:hidden",
-          "transition-transform duration-200 ease-out",
-          open ? "translate-x-0" : "-translate-x-full",
+          "fixed inset-y-0 left-0 z-50 w-[88vw] max-w-[24rem] p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:w-[22rem] md:w-[24rem] xl:hidden",
+          "transform-gpu transition-transform duration-300 ease-out",
+          open ? "translate-x-0" : "-translate-x-[105%]",
         ].join(" ")}
+        aria-hidden={!open}
       >
-        {/* Drawer header */}
-        <div className="mb-3 flex items-center justify-between">
-          <div className="font-semibold text-slate-900">Menu</div>
-          <button
-            aria-label="Close menu"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white"
-            onClick={() => setOpen(false)}
-          >
-            ✕
-          </button>
-        </div>
+        <div className="flex h-full min-h-0 flex-col">
+          {/* Drawer header */}
+          <div className="mb-3 flex shrink-0 items-center justify-between">
+            <div className="font-semibold text-slate-900">Menu</div>
+            <button
+              aria-label="Close menu"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white"
+              onClick={() => setOpen(false)}
+            >
+              ✕
+            </button>
+          </div>
 
-        <SidebarCard onNavigate={() => setOpen(false)} />
+          <div className="min-h-0 flex-1">
+            <SidebarCard onNavigate={() => setOpen(false)} />
+          </div>
+        </div>
       </div>
     </>
   );
