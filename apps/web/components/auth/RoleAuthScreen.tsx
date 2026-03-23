@@ -15,24 +15,9 @@ import { createBrowserSupabase } from "@/lib/supabase/browser";
  
 type SocialProvider = "google" | "microsoft";
 type Mode = "login" | "signup";
-type AuthEvent =
-  | "SIGNED_IN"
-  | "SIGNED_OUT"
-  | "TOKEN_REFRESHED"
-  | "USER_UPDATED"
-  | "PASSWORD_RECOVERY"
-  | "INITIAL_SESSION";
  
 type RoleAuthScreenProps = {
   role: AppRole;
-};
-
-const OAUTH_INTENT_STORAGE_KEY = "lessonforge:oauth-intent";
-const OAUTH_INTENT_MAX_AGE_MS = 10 * 60 * 1000;
-
-type OAuthIntent = {
-  role: AppRole;
-  createdAt: number;
 };
  
 function isMissingRoleColumnError(message: string) {
@@ -50,46 +35,15 @@ function isProfilePermissionError(message: string) {
   );
 }
 
-function readOAuthIntent(): OAuthIntent | null {
-  if (typeof window === "undefined") return null;
-
-  const raw = window.localStorage.getItem(OAUTH_INTENT_STORAGE_KEY);
-  if (!raw) return null;
-
-  try {
-    const parsed = JSON.parse(raw) as Partial<OAuthIntent>;
-    const isRoleValid = parsed.role === "teacher" || parsed.role === "principal";
-    const createdAt = Number(parsed.createdAt);
-
-    if (!isRoleValid || !Number.isFinite(createdAt)) {
-      window.localStorage.removeItem(OAUTH_INTENT_STORAGE_KEY);
-      return null;
-    }
-
-    if (Date.now() - createdAt > OAUTH_INTENT_MAX_AGE_MS) {
-      window.localStorage.removeItem(OAUTH_INTENT_STORAGE_KEY);
-      return null;
-    }
-
-    return { role: parsed.role, createdAt };
-  } catch {
-    window.localStorage.removeItem(OAUTH_INTENT_STORAGE_KEY);
-    return null;
-  }
-}
-
-function writeOAuthIntent(role: AppRole) {
-  if (typeof window === "undefined") return;
-  const payload: OAuthIntent = {
-    role,
-    createdAt: Date.now(),
-  };
-  window.localStorage.setItem(OAUTH_INTENT_STORAGE_KEY, JSON.stringify(payload));
-}
-
-function clearOAuthIntent() {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(OAUTH_INTENT_STORAGE_KEY);
+function hasOAuthCallbackParams() {
+  if (typeof window === "undefined") return false;
+  const searchParams = new URLSearchParams(window.location.search);
+  return (
+    searchParams.has("code") ||
+    searchParams.has("access_token") ||
+    searchParams.has("refresh_token") ||
+    searchParams.has("provider_token")
+  );
 }
  
 export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
@@ -106,7 +60,6 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
   const [syncingRole, setSyncingRole] = useState(false);
  
   const hasHandledSessionRef = useRef(false);
-  const shouldHandleOAuthSessionRef = useRef(false);
  
   const roleConfig = ROLE_CONTENT[role];
  
@@ -182,10 +135,6 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
       setMessage(null);
  
       try {
-        const storedRole = localStorage.getItem(ROLE_STORAGE_KEY);
-        const effectiveRole: AppRole =
-          storedRole === "principal" || storedRole === "teacher" ? storedRole : role;
- 
         const {
           data: { user },
           error: userError,
@@ -197,11 +146,10 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
           return;
         }
  
-        await syncRoleForUser(user, "", effectiveRole);
+        await syncRoleForUser(user, "", role);
  
-        localStorage.setItem(ROLE_STORAGE_KEY, effectiveRole);
-        clearOAuthIntent();
-        redirectAfterLogin(effectiveRole);
+        localStorage.setItem(ROLE_STORAGE_KEY, role);
+        redirectAfterLogin(role);
       } catch (error: unknown) {
         hasHandledSessionRef.current = false;
         setMessage(error instanceof Error ? error.message : "Unable to finish sign in.");
@@ -216,25 +164,14 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
     let active = true;
  
     localStorage.setItem(ROLE_STORAGE_KEY, role);
-    const oauthIntent = readOAuthIntent();
-    const searchParams = new URLSearchParams(window.location.search);
-    const hasOAuthCallbackParams =
-      searchParams.has("code") ||
-      searchParams.has("access_token") ||
-      searchParams.has("refresh_token") ||
-      searchParams.has("provider_token");
-    const shouldHandleOAuthSession =
-      (oauthIntent?.role === role && Date.now() - oauthIntent.createdAt <= OAUTH_INTENT_MAX_AGE_MS) ||
-      hasOAuthCallbackParams;
-
-    shouldHandleOAuthSessionRef.current = shouldHandleOAuthSession;
+    if (!hasOAuthCallbackParams()) return;
  
     (async () => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
  
-      if (active && shouldHandleOAuthSession && session?.user) {
+      if (active && session?.user) {
         await syncUserRoleAndRedirect(session.user.id);
       }
     })();
@@ -244,11 +181,7 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!session?.user) return;
 
-      const authEvent = event as AuthEvent;
-      const isOAuthSessionEvent =
-        authEvent === "SIGNED_IN" || (authEvent === "INITIAL_SESSION" && shouldHandleOAuthSessionRef.current);
-
-      if (isOAuthSessionEvent && shouldHandleOAuthSessionRef.current) {
+      if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
         await syncUserRoleAndRedirect(session.user.id);
       }
     });
@@ -265,7 +198,6 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
  
     try {
       localStorage.setItem(ROLE_STORAGE_KEY, role);
-      writeOAuthIntent(role);
 
       const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
       if (signOutError) {
@@ -285,11 +217,9 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
       });
  
       if (error) {
-        clearOAuthIntent();
         setMessage(error.message);
       }
     } catch (error: unknown) {
-      clearOAuthIntent();
       setMessage(error instanceof Error ? error.message : "Unable to sign in right now.");
     } finally {
       setSocialLoading(null);
@@ -317,7 +247,6 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
  
     try {
       localStorage.setItem(ROLE_STORAGE_KEY, role);
-      clearOAuthIntent();
 
       const {
         data: { session: activeSession },
