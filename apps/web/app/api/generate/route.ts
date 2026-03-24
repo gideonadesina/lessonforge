@@ -334,12 +334,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    console.info("[credits][generate] checking", {
+      userId: user.id,
+      topic: body.topic,
+    });
+
     const creditResult = await consumeGenerationCredit(supabase, user.id);
     if (!creditResult.ok) {
       const msg = creditResult.error || "No credits";
       const status = msg.toLowerCase().includes("not authenticated") ? 401 : 402;
+      console.info("[credits][generate] blocked", {
+        userId: user.id,
+        topic: body.topic,
+        beforeBalance: creditResult.beforeBalance,
+        afterBalance: creditResult.afterBalance,
+        error: msg,
+      });
       return NextResponse.json({ error: msg }, { status });
     }
+    console.info("[credits][generate] consumed", {
+      userId: user.id,
+      topic: body.topic,
+      beforeBalance: creditResult.beforeBalance,
+      afterBalance: creditResult.afterBalance,
+    });
 
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(

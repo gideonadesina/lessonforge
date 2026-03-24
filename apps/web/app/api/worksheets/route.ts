@@ -697,11 +697,26 @@ export async function POST(req: NextRequest) {
     }
  
     // 2) Charge credit only after generation is valid
-    const creditResult = await consumeGenerationCredit(supabase, user.id);
+    const creditResult = await consumeGenerationCredit(
+      supabase,
+      user.id,
+      "api/worksheets"
+    );
     if (!creditResult.ok) {
       const msg = String(creditResult.error ?? "No credits");
+      console.info("[credits][worksheets] blocked", {
+        userId: user.id,
+        topic,
+        error: msg,
+      });
       return jsonErr(msg, msg.toLowerCase().includes("not authenticated") ? 401 : 402);
     }
+      console.info("[credits][worksheets] consumed", {
+      userId: user.id,
+      topic,
+        before: creditResult.beforeBalance,
+        after: creditResult.afterBalance,
+    });
  
     // 3) Generate visuals (coloring/diagram/practical only)
     const visualMode = getVisualMode(contentMode, worksheet);

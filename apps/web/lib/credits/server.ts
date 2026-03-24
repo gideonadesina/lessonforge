@@ -2,16 +2,11 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-type ConsumeGenerationCreditRpcResult = {
-  ok?: boolean;
-  error?: string | null;
-};
-
 export type ConsumeGenerationCreditResult =
-  | { ok: true }
-  | { ok: false; error: string };
+  | { ok: true; beforeBalance: number; afterBalance: number }
+  | { ok: false; error: string; beforeBalance: number | null; afterBalance: number | null };
 
-async function consumeCreditFromBalanceFallback(
+export async function consumeGenerationCredit(
   supabase: SupabaseClient,
   userId: string
 ): Promise<ConsumeGenerationCreditResult> {
@@ -24,18 +19,29 @@ async function consumeCreditFromBalanceFallback(
       .maybeSingle();
 
     if (profileError) {
-      return { ok: false, error: `Credit check failed: ${profileError.message}` };
+      return {
+        ok: false,
+        error: `Credit check failed: ${profileError.message}`,
+        beforeBalance: null,
+        afterBalance: null,
+      };
     }
 
     const currentBalance = Number(profile?.credits_balance ?? 0);
     if (!Number.isFinite(currentBalance) || currentBalance <= 0) {
-      return { ok: false, error: "No credits" };
+      return {
+        ok: false,
+        error: "No credits",
+        beforeBalance: Number.isFinite(currentBalance) ? currentBalance : null,
+        afterBalance: Number.isFinite(currentBalance) ? currentBalance : null,
+      };
     }
 
+    const nextBalance = currentBalance - 1;
     const { data: updatedRow, error: updateError } = await supabase
       .from("profiles")
       .update({
-        credits_balance: currentBalance - 1,
+        credits_balance: nextBalance,
         updated_at: new Date().toISOString(),
       })
       .eq("id", userId)
@@ -44,39 +50,25 @@ async function consumeCreditFromBalanceFallback(
       .maybeSingle();
 
     if (updateError) {
-      return { ok: false, error: `Credit check failed: ${updateError.message}` };
+      return {
+        ok: false,
+        error: `Credit check failed: ${updateError.message}`,
+        beforeBalance: currentBalance,
+        afterBalance: currentBalance,
+      };
     }
 
     if (updatedRow) {
-      return { ok: true };
+      return { ok: true, beforeBalance: currentBalance, afterBalance: nextBalance };
     }
   }
 
-  return { ok: false, error: "Credit balance changed. Please retry." };
-}
-
-export async function consumeGenerationCredit(
-  supabase: SupabaseClient,
-  userId: string
-): Promise<ConsumeGenerationCreditResult> {
-  const { data, error } = await supabase.rpc("consume_generation_credit");
-  const rpcResult = (data as ConsumeGenerationCreditRpcResult | null) ?? null;
-
-  if (!error && rpcResult?.ok) {
-    return { ok: true };
-  }
-
-  const fallbackResult = await consumeCreditFromBalanceFallback(supabase, userId);
-  if (fallbackResult.ok) {
-    return fallbackResult;
-  }
-
-  const rpcMessage = error?.message || String(rpcResult?.error ?? "").trim();
-  if (rpcMessage && fallbackResult.error !== "No credits") {
-    return { ok: false, error: `Credit check failed: ${rpcMessage}` };
-  }
-
-  return fallbackResult;
+  return {
+    ok: false,
+    error: "Credit balance changed. Please retry.",
+    beforeBalance: null,
+    afterBalance: null,
+  };
 }
 
 // Backward-compatible aliases for routes that use descriptive names.

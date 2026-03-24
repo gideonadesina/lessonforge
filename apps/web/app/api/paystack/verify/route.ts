@@ -33,12 +33,20 @@ function inferTierFromAmount(rawAmount: unknown, rawCurrency: unknown): PaidTier
   return null;
 }
  
-async function resolveTierForUser(userId: string, data: any): Promise<PaidTier> {
+type PaystackVerifyData = {
+  metadata?: {
+    tier?: unknown;
+  } | null;
+  amount?: unknown;
+  currency?: unknown;
+};
+
+async function resolveTierForUser(userId: string, data: PaystackVerifyData): Promise<PaidTier> {
   const admin = createAdminClient();
  
   const { data: existing } = await admin
     .from("profiles")
-    .select("plan, is_pro")
+    .select("plan")
     .eq("id", userId)
     .maybeSingle();
  
@@ -47,8 +55,6 @@ async function resolveTierForUser(userId: string, data: any): Promise<PaidTier> 
  
   const fromExisting = normalizeTier(existing?.plan);
   if (fromExisting) return fromExisting;
- 
-  if (existing?.is_pro === true) return "pro";
  
   const fromAmount = inferTierFromAmount(data?.amount, data?.currency);
   return fromAmount ?? "basic";
@@ -84,14 +90,11 @@ export async function GET(req: Request) {
         {
           id: userId,
           plan: tier,
-          is_pro: tier === "pro",
           pro_expires_at:
             tier === "pro"
               ? new Date(Date.now() + 32 * 24 * 60 * 60 * 1000).toISOString()
               : null,
-          credits_monthly_allowance: allowance,
           credits_balance: allowance,
-          credits_reset_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
           paystack_subscription_code: json?.data?.subscription?.subscription_code ?? null,
           paystack_customer_code: json?.data?.customer?.customer_code ?? null,
           paystack_email: json?.data?.customer?.email ?? null,

@@ -25,7 +25,6 @@ type ProfileRow = {
   id: string;
   email?: string | null;
   plan?: string | null;
-  is_pro?: boolean | null;
 };
  
 type PaymentTransactionRow = {
@@ -120,12 +119,7 @@ function buildProfileUpgradePatch(tier: PaidTier, data: FinalizeInput) {
  
   return {
     plan: tier,
-    is_pro: tier === "pro",
     credits_balance: allowance,
-    credits_monthly_allowance: 0, // manual renewal mode
-    credits_reset_at: null,
-    free_credits: 0,
-    pro_expires_at: null,
     paystack_subscription_code: data?.subscription?.subscription_code ?? null,
     paystack_customer_code: data?.customer?.customer_code ?? null,
     paystack_email: data?.customer?.email ?? null,
@@ -138,7 +132,7 @@ async function getExistingProfile(userId: string): Promise<ProfileRow | null> {
  
   const { data, error } = await admin
     .from("profiles")
-    .select("id, email, plan, is_pro")
+    .select("id, email, plan")
     .eq("id", userId)
     .maybeSingle();
  
@@ -160,15 +154,10 @@ async function ensureProfileExists(userId: string, email: string | null) {
       email,
       paystack_email: email,
       plan: "free",
-      is_pro: false,
-      free_credits: TRIAL_CREDITS,
       credits_balance: TRIAL_CREDITS,
-      credits_monthly_allowance: 0,
-      credits_reset_at: null,
-      pro_expires_at: null,
       updated_at: now,
     })
-    .select("id, email, plan, is_pro")
+    .select("id, email, plan")
     .single();
  
   if (error) {
@@ -188,7 +177,7 @@ async function resolveTierForUser(
 ): Promise<PaidTier> {
   const existing = await getExistingProfile(userId);
  
-  // priority: metadata -> amount -> existing plan -> is_pro -> fallback
+  // priority: metadata -> amount -> existing plan -> fallback
   const fromMetadata = normalizeTier(data?.metadata?.tier);
   if (fromMetadata) return fromMetadata;
  
@@ -197,8 +186,6 @@ async function resolveTierForUser(
  
   const fromExistingPlan = normalizeTier(existing?.plan);
   if (fromExistingPlan) return fromExistingPlan;
- 
-  if (existing?.is_pro === true) return "pro";
  
   return "basic";
 }
@@ -329,7 +316,6 @@ async function applyLegacyProfileUpgrade(userId: string, data: FinalizeInput) {
     user_id: userId,
     tier,
     credits_balance: patch.credits_balance,
-    credits_monthly_allowance: patch.credits_monthly_allowance,
     paystack_email: patch.paystack_email,
     paystack_customer_code: patch.paystack_customer_code,
     paystack_subscription_code: patch.paystack_subscription_code,
