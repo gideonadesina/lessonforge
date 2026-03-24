@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { consumeGenerationCredit } from "@/lib/credits/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -326,16 +327,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data: creditData, error: creditErr } =
-      await supabase.rpc("consume_generation_credit");
-
-    if (creditErr) {
-      return NextResponse.json(
-        { error: "Credit check failed", detail: creditErr.message },
-        { status: 500 }
-      );
-    }
-
     if (!user?.email_confirmed_at) {
       return NextResponse.json(
         { error: "Please confirm your email before generating lessons." },
@@ -343,11 +334,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!creditData?.ok) {
-      const msg = creditData?.error || "No credits";
-      const status =
-        msg.toLowerCase().includes("not authenticated") ? 401 : 402;
-
+    const creditResult = await consumeGenerationCredit(supabase, user.id);
+    if (!creditResult.ok) {
+      const msg = creditResult.error || "No credits";
+      const status = msg.toLowerCase().includes("not authenticated") ? 401 : 402;
       return NextResponse.json({ error: msg }, { status });
     }
 
