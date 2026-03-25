@@ -6,6 +6,7 @@ import { buildExamGenerationPrompt } from "@/lib/exams/prompt";
 import {
   buildExamResultFromModel,
   mapInputToDbFields,
+  normalizeEditedExamResult,
   parseExamBuilderInput,
 } from "@/lib/exams/normalize";
 import { EXAM_MODEL } from "@/lib/exams/constants";
@@ -20,6 +21,10 @@ type ExamPatchBody = {
   schoolName?: string | null;
   instructions?: string[];
   resultJson?: unknown;
+};
+
+type ExamReuseBody = {
+  sourceExamId: string;
 };
 
 function jsonOk(data: unknown, status = 200) {
@@ -40,6 +45,52 @@ function getErrorMessage(err: unknown, fallback: string) {
 function normalizeInstructions(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.map((x) => String(x ?? "").trim()).filter(Boolean).slice(0, 10);
+}
+
+function getDbSelectFields() {
+  return `
+    id,
+    user_id,
+    subject,
+    topic_or_coverage,
+    class_or_grade,
+    school_level,
+    curriculum,
+    exam_alignment,
+    exam_type,
+    duration_mins,
+    total_marks,
+    objective_question_count,
+    theory_question_count,
+    difficulty_level,
+    instructions,
+    special_notes,
+    school_name,
+    exam_title_override,
+    exam_title,
+    result_json,
+    metadata,
+    status,
+    created_at,
+    updated_at
+  `;
+}
+
+function getListSelectFields() {
+  return `
+    id,
+    exam_title,
+    subject,
+    class_or_grade,
+    exam_type,
+    exam_alignment,
+    objective_question_count,
+    theory_question_count,
+    duration_mins,
+    total_marks,
+    created_at,
+    updated_at
+  `;
 }
 
 function getBearerToken(req: NextRequest) {
@@ -90,38 +141,12 @@ export async function GET(req: NextRequest) {
     const { supabase, user } = auth;
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
+    searchParams.get("action");
 
     if (id) {
       const { data, error } = await supabase
         .from("exams")
-        .select(
-          `
-          id,
-          user_id,
-          subject,
-          topic_or_coverage,
-          class_or_grade,
-          school_level,
-          curriculum,
-          exam_alignment,
-          exam_type,
-          duration_mins,
-          total_marks,
-          objective_question_count,
-          theory_question_count,
-          difficulty_level,
-          instructions,
-          special_notes,
-          school_name,
-          exam_title_override,
-          exam_title,
-          result_json,
-          metadata,
-          status,
-          created_at,
-          updated_at
-        `
-        )
+        .select(getDbSelectFields())
         .eq("id", id)
         .eq("user_id", user.id)
         .maybeSingle();
@@ -133,22 +158,7 @@ export async function GET(req: NextRequest) {
 
     const { data, error } = await supabase
       .from("exams")
-      .select(
-        `
-        id,
-        exam_title,
-        subject,
-        class_or_grade,
-        exam_type,
-        exam_alignment,
-        objective_question_count,
-        theory_question_count,
-        duration_mins,
-        total_marks,
-        created_at,
-        updated_at
-      `
-      )
+      .select(getListSelectFields())
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(100);
@@ -171,6 +181,76 @@ export async function POST(req: NextRequest) {
       body = await req.json();
     } catch {
       return jsonErr("Invalid JSON body", 400);
+    }
+
+    const payload = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+    const action = String(payload.action ?? "").trim().toLowerCase();
+
+    if (action === "reuse") {
+      const reuseBody = payload as unknown as ExamReuseBody;
+      const sourceExamId = String(reuseBody.sourceExamId ?? "").trim();
+      if (!sourceExamId) return jsonErr("Missing sourceExamId", 400);
+
+      const { data: source, error: sourceErr } = await supabase
+        .from("exams")
+        .select(getDbSelectFields())
+        .eq("id", sourceExamId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (sourceErr) return jsonErr(sourceErr.message, 500);
+      if (!source) return jsonErr("Source exam not found", 404);
+
+      const sourceResult = normalizeEditedExamResult(source.result_json, source.result_json);
+
+      const cloneTitle = `${source.exam_title} (Copy)`;
+      sourceResult.examTitle = cloneTitle;
+      sourceResult.printableHeader.examTitle = cloneTitle;
+      sourceResult.metadata.lifecycle.sourceExamId = source.id;
+      sourceResult.metadata.lifecycle.reusable = true;
+      sourceResult.metadata.lifecycle.editable = true;
+      sourceResult.metadata.generation.generatedAt = new Date().toISOString();
+
+      const cloneMetadata = {
+        ...(source.metadata ?? {}),
+        lifecycle: {
+          status: "published",
+          editable: true,
+          reusable: true,
+          sourceExamId: source.id,
+        },
+      };
+
+      const { data: cloned, error: cloneErr } = await supabase
+        .from("exams")
+        .insert({
+          user_id: user.id,
+          subject: source.subject,
+          topic_or_coverage: source.topic_or_coverage,
+          class_or_grade: source.class_or_grade,
+          school_level: source.school_level,
+          curriculum: source.curriculum,
+          exam_alignment: source.exam_alignment,
+          exam_type: source.exam_type,
+          duration_mins: source.duration_mins,
+          total_marks: source.total_marks,
+          objective_question_count: source.objective_question_count,
+          theory_question_count: source.theory_question_count,
+          difficulty_level: source.difficulty_level,
+          instructions: source.instructions,
+          special_notes: source.special_notes,
+          school_name: source.school_name,
+          exam_title_override: source.exam_title_override,
+          exam_title: cloneTitle,
+          result_json: sourceResult,
+          metadata: cloneMetadata,
+          status: "published",
+        })
+        .select(getDbSelectFields())
+        .single();
+
+      if (cloneErr) return jsonErr(cloneErr.message, 500);
+      return jsonOk(cloned, 201);
     }
 
     const parsedInput = parseExamBuilderInput(body);
@@ -239,34 +319,7 @@ export async function POST(req: NextRequest) {
         metadata: built.result.metadata,
         status: "published",
       })
-      .select(
-        `
-        id,
-        user_id,
-        subject,
-        topic_or_coverage,
-        class_or_grade,
-        school_level,
-        curriculum,
-        exam_alignment,
-        exam_type,
-        duration_mins,
-        total_marks,
-        objective_question_count,
-        theory_question_count,
-        difficulty_level,
-        instructions,
-        special_notes,
-        school_name,
-        exam_title_override,
-        exam_title,
-        result_json,
-        metadata,
-        status,
-        created_at,
-        updated_at
-      `
-      )
+      .select(getDbSelectFields())
       .single();
 
     if (saveErr) {
@@ -306,41 +359,39 @@ export async function PATCH(req: NextRequest) {
     }
     if ("schoolName" in body) updates.school_name = body.schoolName?.trim() || null;
     if ("instructions" in body) updates.instructions = normalizeInstructions(body.instructions);
-    if ("resultJson" in body) updates.result_json = body.resultJson;
+    if ("resultJson" in body) {
+      const { data: existingExam, error: existingErr } = await supabase
+        .from("exams")
+        .select("result_json")
+        .eq("id", body.id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (existingErr) return jsonErr(existingErr.message, 500);
+      if (!existingExam?.result_json || typeof existingExam.result_json !== "object") {
+        return jsonErr("Existing exam payload not found", 404);
+      }
+
+      const mergedRaw = body.resultJson as Record<string, unknown>;
+      if ("examTitle" in body) mergedRaw.examTitle = String(body.examTitle ?? "").trim();
+      if ("schoolName" in body) mergedRaw.schoolName = body.schoolName ?? null;
+      if ("instructions" in body) mergedRaw.instructions = normalizeInstructions(body.instructions);
+
+      const normalized = normalizeEditedExamResult(mergedRaw, existingExam.result_json);
+      updates.result_json = normalized;
+      updates.metadata = normalized.metadata;
+      updates.exam_title = normalized.examTitle;
+      updates.total_marks = normalized.totalMarks;
+      updates.objective_question_count = normalized.objectiveSection.questions.length;
+      updates.theory_question_count = normalized.theorySection.questions.length;
+    }
 
     const { data, error } = await supabase
       .from("exams")
       .update(updates)
       .eq("id", body.id)
       .eq("user_id", user.id)
-      .select(
-        `
-        id,
-        user_id,
-        subject,
-        topic_or_coverage,
-        class_or_grade,
-        school_level,
-        curriculum,
-        exam_alignment,
-        exam_type,
-        duration_mins,
-        total_marks,
-        objective_question_count,
-        theory_question_count,
-        difficulty_level,
-        instructions,
-        special_notes,
-        school_name,
-        exam_title_override,
-        exam_title,
-        result_json,
-        metadata,
-        status,
-        created_at,
-        updated_at
-      `
-      )
+      .select(getDbSelectFields())
       .maybeSingle();
 
     if (error) return jsonErr(error.message, 500);

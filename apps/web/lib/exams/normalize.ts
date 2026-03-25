@@ -539,3 +539,148 @@ export function mapInputToDbFields(input: ExamBuilderInput) {
     exam_title_override: input.examTitleOverride,
   };
 }
+
+export function normalizeEditedExamResult(raw: unknown, existing: ExamResult): ExamResult {
+  const obj = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+
+  const examTitle =
+    asText(obj.examTitle ?? (obj.printableHeader as Record<string, unknown> | undefined)?.examTitle) ||
+    existing.examTitle;
+  const schoolName = asNullableText(
+    obj.schoolName ?? (obj.printableHeader as Record<string, unknown> | undefined)?.schoolName
+  ) ?? existing.schoolName;
+
+  const instructions = normalizeInstructions(obj.instructions);
+  const nextInstructions = instructions.length ? instructions : existing.instructions;
+
+  const durationMinutes = clampInt(
+    (obj.duration as Record<string, unknown> | undefined)?.minutes ?? existing.duration.minutes,
+    10,
+    300,
+    existing.duration.minutes
+  );
+
+  const targetTotalMarks = clampInt(obj.totalMarks ?? existing.totalMarks, 5, 500, existing.totalMarks);
+
+  const objectiveRaw = (
+    (obj.objectiveSection as Record<string, unknown> | undefined)?.questions ?? []
+  ) as unknown[];
+  const theoryRaw = ((obj.theorySection as Record<string, unknown> | undefined)?.questions ?? []) as unknown[];
+
+  const objectiveQuestions = (
+    Array.isArray(objectiveRaw) && objectiveRaw.length
+      ? objectiveRaw
+      : existing.objectiveSection.questions
+  )
+    .map((item, index) => normalizeObjectiveQuestion(item, index))
+    .filter((item): item is ObjectiveQuestion => Boolean(item))
+    .map((q, idx) => ({ ...q, number: idx + 1 }));
+
+  const theoryQuestions = (
+    Array.isArray(theoryRaw) && theoryRaw.length ? theoryRaw : existing.theorySection.questions
+  )
+    .map((item, index) => normalizeTheoryQuestion(item, index))
+    .filter((item): item is TheoryQuestion => Boolean(item))
+    .map((q, idx) => ({ ...q, mainQuestionNumber: idx + 1 }));
+
+  normalizeMarks(objectiveQuestions, theoryQuestions, targetTotalMarks);
+
+  const objectiveAnswerKey = objectiveQuestions.map((q) => {
+    const correctOptionLabel = labelFromIndex(q.correctOptionIndex);
+    return {
+      questionNumber: q.number,
+      correctOptionLabel,
+      correctOptionText: q.options[q.correctOptionIndex],
+      marks: q.marks,
+    };
+  });
+
+  const objectiveMarks = objectiveQuestions.reduce((sum, q) => sum + q.marks, 0);
+  const theoryMarks = theoryQuestions.reduce((sum, q) => sum + q.totalMarks, 0);
+  const overallMarks = objectiveMarks + theoryMarks;
+
+  const objectiveInstructions = normalizeInstructions(
+    (obj.objectiveSection as Record<string, unknown> | undefined)?.instructions
+  );
+  const theoryInstructions = normalizeInstructions(
+    (obj.theorySection as Record<string, unknown> | undefined)?.instructions
+  );
+
+  return {
+    ...existing,
+    examTitle,
+    schoolName,
+    duration: {
+      minutes: durationMinutes,
+      label: formatDurationLabel(durationMinutes),
+    },
+    totalMarks: overallMarks,
+    instructions: nextInstructions,
+    printableHeader: {
+      ...existing.printableHeader,
+      schoolName,
+      examTitle,
+      durationLabel: formatDurationLabel(durationMinutes),
+      totalMarks: overallMarks,
+    },
+    sections: {
+      objective: {
+        ...existing.sections.objective,
+        questionCount: objectiveQuestions.length,
+        marks: objectiveMarks,
+      },
+      theory: {
+        ...existing.sections.theory,
+        questionCount: theoryQuestions.length,
+        marks: theoryMarks,
+      },
+    },
+    objectiveSection: {
+      ...existing.objectiveSection,
+      instructions: objectiveInstructions.length
+        ? objectiveInstructions
+        : existing.objectiveSection.instructions,
+      questions: objectiveQuestions,
+      answerKey: objectiveAnswerKey,
+    },
+    theorySection: {
+      ...existing.theorySection,
+      instructions: theoryInstructions.length ? theoryInstructions : existing.theorySection.instructions,
+      questions: theoryQuestions,
+    },
+    markingGuide: {
+      objectiveAnswerKey: objectiveAnswerKey.map((x) => ({
+        questionNumber: x.questionNumber,
+        answerLabel: x.correctOptionLabel,
+        marks: x.marks,
+      })),
+      theoryGuide: theoryQuestions.map((q) => ({
+        mainQuestionNumber: q.mainQuestionNumber,
+        totalMarks: q.totalMarks,
+        subQuestions: q.subQuestions.map((sub) => ({
+          label: sub.label,
+          marks: sub.marks,
+          suggestedAnswer: sub.suggestedAnswer,
+          markingPoints: sub.markingPoints,
+        })),
+      })),
+      totals: {
+        objectiveMarks,
+        theoryMarks,
+        overall: overallMarks,
+      },
+    },
+    metadata: {
+      ...existing.metadata,
+      lifecycle: {
+        ...existing.metadata.lifecycle,
+        editable: true,
+        reusable: true,
+      },
+    },
+  };
+}
+
+export function normalizeExamResultForPersistence(raw: unknown, existing: ExamResult): ExamResult {
+  return normalizeEditedExamResult(raw, existing);
+}

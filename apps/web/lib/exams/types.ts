@@ -187,6 +187,20 @@ export type ExamRecord = {
   updated_at: string;
 };
 
+export type ExamListItem = {
+  id: string;
+  exam_title: string;
+  subject: string;
+  class_or_grade: string;
+  exam_type: string;
+  exam_alignment: string;
+  objective_question_count: number;
+  theory_question_count: number;
+  duration_mins: number;
+  total_marks: number;
+  created_at: string;
+};
+
 export type ExamListRow = {
   id: string;
   exam_title: string;

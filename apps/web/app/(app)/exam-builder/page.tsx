@@ -7,21 +7,8 @@ import { createBrowserSupabase } from "@/lib/supabase/browser";
 import ExamBuilderForm from "@/components/exam-builder/ExamBuilderForm";
 import ExamList from "@/components/exam-builder/ExamList";
 import ExamPaperPreview from "@/components/exam-builder/ExamPaperPreview";
-import type { ExamBuilderInput, ExamRecord } from "@/lib/exams/types";
-
-type ExamListItem = {
-  id: string;
-  exam_title: string;
-  subject: string;
-  class_or_grade: string;
-  exam_type: string;
-  exam_alignment: string;
-  objective_question_count: number;
-  theory_question_count: number;
-  duration_mins: number;
-  total_marks: number;
-  created_at: string;
-};
+import ExamSectionEditor from "@/components/exam-builder/ExamSectionEditor";
+import type { ExamBuilderInput, ExamListRow, ExamRecord, ExamResult } from "@/lib/exams/types";
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (error && typeof error === "object" && "message" in error) {
@@ -38,12 +25,12 @@ function normalizeRecordResponse(json: unknown): ExamRecord | null {
   return payload as unknown as ExamRecord;
 }
 
-function normalizeListResponse(json: unknown): ExamListItem[] {
+function normalizeListResponse(json: unknown): ExamListRow[] {
   const root = (json ?? {}) as Record<string, unknown>;
   if (root.ok === false) return [];
   const payload = root.data;
-  if (Array.isArray(payload)) return payload as ExamListItem[];
-  if (Array.isArray(json)) return json as ExamListItem[];
+  if (Array.isArray(payload)) return payload as ExamListRow[];
+  if (Array.isArray(json)) return json as ExamListRow[];
   return [];
 }
 
@@ -73,10 +60,13 @@ export default function ExamBuilderPage() {
   const [form, setForm] = useState<ExamBuilderInput>(defaultInput);
   const [loading, setLoading] = useState(false);
   const [listLoading, setListLoading] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [teacherMode, setTeacherMode] = useState(false);
+  const [showEditor, setShowEditor] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [items, setItems] = useState<ExamListItem[]>([]);
+  const [items, setItems] = useState<ExamListRow[]>([]);
   const [active, setActive] = useState<ExamRecord | null>(null);
 
   const supabase = useMemo(() => createBrowserSupabase(), []);
@@ -186,6 +176,108 @@ export default function ExamBuilderPage() {
     }
   }
 
+  async function reuseExam(id: string) {
+    setError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not logged in");
+      const res = await fetch("/api/exams", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ action: "reuse", sourceExamId: id }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error((json as { error?: string }).error ?? "Failed to reuse exam");
+      }
+      const record = normalizeRecordResponse(json);
+      if (!record) throw new Error("Reused exam response was empty");
+      setActive(record);
+      setSelectedId(record.id);
+      setShowEditor(false);
+      await loadList();
+    } catch (e: unknown) {
+      setError(getErrorMessage(e, "Failed to reuse exam"));
+    }
+  }
+
+  async function saveSectionEdits(nextResult: ExamResult) {
+    if (!active?.id) return;
+    setSavingEdit(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not logged in");
+      const res = await fetch("/api/exams", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          id: active.id,
+          examTitle: nextResult.examTitle,
+          schoolName: nextResult.schoolName,
+          instructions: nextResult.instructions,
+          resultJson: nextResult,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error((json as { error?: string }).error ?? "Failed to save exam edits");
+      }
+      const record = normalizeRecordResponse(json);
+      if (!record) throw new Error("Save response was empty");
+      setActive(record);
+      setShowEditor(false);
+      await loadList();
+    } catch (e: unknown) {
+      setError(getErrorMessage(e, "Failed to save exam edits"));
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function downloadPdf() {
+    if (!active?.id) return;
+    setDownloadingPdf(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not logged in");
+      const res = await fetch(
+        `/api/exams/export/pdf?id=${encodeURIComponent(active.id)}&mode=${
+          teacherMode ? "teacher" : "student"
+        }`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error((json as { error?: string }).error ?? "PDF export failed");
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${active.exam_title}-${teacherMode ? "teacher" : "student"}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e: unknown) {
+      setError(getErrorMessage(e, "PDF export failed"));
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
+
   useEffect(() => {
     loadList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -219,6 +311,7 @@ export default function ExamBuilderPage() {
             items={items}
             selectedId={selectedId}
             onOpen={openExam}
+            onReuse={reuseExam}
             onDelete={deleteExam}
             onRefresh={loadList}
           />
@@ -250,6 +343,20 @@ export default function ExamBuilderPage() {
                 >
                   Print
                 </button>
+                <button
+                  onClick={downloadPdf}
+                  disabled={!active || downloadingPdf}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+                >
+                  {downloadingPdf ? "Downloading..." : "Download PDF"}
+                </button>
+                <button
+                  onClick={() => setShowEditor((v) => !v)}
+                  disabled={!active}
+                  className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-60"
+                >
+                  {showEditor ? "Close Editor" : "Edit Sections"}
+                </button>
               </div>
             </div>
           </div>
@@ -262,6 +369,14 @@ export default function ExamBuilderPage() {
           ) : null}
 
           <ExamPaperPreview exam={active} teacherMode={teacherMode} />
+
+          {active?.result_json && showEditor ? (
+            <ExamSectionEditor
+              result={active.result_json}
+              onSave={saveSectionEdits}
+              saving={savingEdit}
+            />
+          ) : null}
         </section>
       </div>
     </div>

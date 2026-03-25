@@ -31,6 +31,7 @@ export default function ExamList({
   items,
   selectedId,
   onOpen,
+  onReuse,
   onDelete,
   onRefresh,
 }: {
@@ -38,6 +39,7 @@ export default function ExamList({
   items: ExamListItem[];
   selectedId: string | null;
   onOpen: (id: string) => void;
+  onReuse: (id: string) => void;
   onDelete: (id: string) => void;
   onRefresh: () => void;
 }) {
@@ -94,6 +96,12 @@ export default function ExamList({
                     className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold hover:bg-slate-50"
                   >
                     Open
+                  </button>
+                  <button
+                    onClick={() => onReuse(item.id)}
+                    className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                  >
+                    Reuse
                   </button>
                   <button
                     onClick={() => onDelete(item.id)}
