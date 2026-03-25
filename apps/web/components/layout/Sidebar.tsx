@@ -12,7 +12,8 @@ import {
   FileText,
   CalendarDays,
   School,
-   BarChart3,
+  ScrollText,
+  BarChart3,
   CreditCard,
   Settings,
 } from "lucide-react";
@@ -36,6 +37,7 @@ const teacherNav: NavItem[] = [
    {
     href: "/planning", label: "Planning", icon: CalendarDays,
   },
+  { href: "/exam-builder", label: "Exam Builder", icon: ScrollText },
   { href: "/worksheets", label: "Worksheets", icon: FileText },
   { href: "/school", label: "School", icon: School },
   { href: "/settings", label: "Settings", icon: Settings },
