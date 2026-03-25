@@ -10,6 +10,7 @@ import {
   parseExamBuilderInput,
 } from "@/lib/exams/normalize";
 import { EXAM_MODEL } from "@/lib/exams/constants";
+import type { ExamRecord } from "@/lib/exams/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -201,23 +202,24 @@ export async function POST(req: NextRequest) {
       if (sourceErr) return jsonErr(sourceErr.message, 500);
       if (!source) return jsonErr("Source exam not found", 404);
 
-      const sourceResult = normalizeEditedExamResult(source.result_json, source.result_json);
+      const sourceExam = source as unknown as ExamRecord;
+      const sourceResult = normalizeEditedExamResult(sourceExam.result_json, sourceExam.result_json);
 
-      const cloneTitle = `${source.exam_title} (Copy)`;
+      const cloneTitle = `${sourceExam.exam_title} (Copy)`;
       sourceResult.examTitle = cloneTitle;
       sourceResult.printableHeader.examTitle = cloneTitle;
-      sourceResult.metadata.lifecycle.sourceExamId = source.id;
+      sourceResult.metadata.lifecycle.sourceExamId = sourceExam.id;
       sourceResult.metadata.lifecycle.reusable = true;
       sourceResult.metadata.lifecycle.editable = true;
       sourceResult.metadata.generation.generatedAt = new Date().toISOString();
 
       const cloneMetadata = {
-        ...(source.metadata ?? {}),
+        ...(sourceExam.metadata ?? {}),
         lifecycle: {
           status: "published",
           editable: true,
           reusable: true,
-          sourceExamId: source.id,
+          sourceExamId: sourceExam.id,
         },
       };
 
@@ -225,22 +227,22 @@ export async function POST(req: NextRequest) {
         .from("exams")
         .insert({
           user_id: user.id,
-          subject: source.subject,
-          topic_or_coverage: source.topic_or_coverage,
-          class_or_grade: source.class_or_grade,
-          school_level: source.school_level,
-          curriculum: source.curriculum,
-          exam_alignment: source.exam_alignment,
-          exam_type: source.exam_type,
-          duration_mins: source.duration_mins,
-          total_marks: source.total_marks,
-          objective_question_count: source.objective_question_count,
-          theory_question_count: source.theory_question_count,
-          difficulty_level: source.difficulty_level,
-          instructions: source.instructions,
-          special_notes: source.special_notes,
-          school_name: source.school_name,
-          exam_title_override: source.exam_title_override,
+          subject: sourceExam.subject,
+          topic_or_coverage: sourceExam.topic_or_coverage,
+          class_or_grade: sourceExam.class_or_grade,
+          school_level: sourceExam.school_level,
+          curriculum: sourceExam.curriculum,
+          exam_alignment: sourceExam.exam_alignment,
+          exam_type: sourceExam.exam_type,
+          duration_mins: sourceExam.duration_mins,
+          total_marks: sourceExam.total_marks,
+          objective_question_count: sourceExam.objective_question_count,
+          theory_question_count: sourceExam.theory_question_count,
+          difficulty_level: sourceExam.difficulty_level,
+          instructions: sourceExam.instructions,
+          special_notes: sourceExam.special_notes,
+          school_name: sourceExam.school_name,
+          exam_title_override: sourceExam.exam_title_override,
           exam_title: cloneTitle,
           result_json: sourceResult,
           metadata: cloneMetadata,
