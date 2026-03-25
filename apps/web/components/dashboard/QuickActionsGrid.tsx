@@ -18,6 +18,13 @@ const ACTIONS = [
     tone: "blue",
   },
   {
+    title: "Exam Builder",
+    description:
+      "Generate formal, timed, exam-standard papers with objective, theory, and marking guide sections.",
+    href: "/exam-builder",
+    tone: "emerald",
+  },
+  {
     title: "Open Library",
     description:
       "Review, reuse, and organize your saved lessons and teaching resources.",
