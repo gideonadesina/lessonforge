@@ -5,6 +5,13 @@ import { createServerClient } from "@supabase/ssr";
 
 import AppFrame from "@/components/layout/AppFrame";
 import ForgeGuideLauncher from "@/components/ForgeGuideLauncher";
+import { resolveAuthRoleContext } from "@/lib/auth/role-context";
+import {
+  ROLE_COOKIE_KEY,
+  normalizeRole,
+  resolvePreferredRole,
+  getRoleHomePath,
+} from "@/lib/auth/roles";
 import "../globals.css";
 
 async function createServerSupabase() {
@@ -38,6 +45,7 @@ export default async function AppLayout({
 }: {
   children: ReactNode;
 }) {
+  const cookieStore = await Promise.resolve(cookies());
   const supabase = await createServerSupabase();
   const { data, error } = await supabase.auth.getUser();
   const userMeta = (data?.user?.user_metadata as { app_role?: string; full_name?: string; name?: string } | null) ?? null;
@@ -47,17 +55,46 @@ export default async function AppLayout({
     redirect("/login");
   }
 
+  const metadataRole = normalizeRole(userMeta?.app_role ?? null);
+  const roleContext = await resolveAuthRoleContext({
+    userId: user.id,
+    email: user.email ?? null,
+    metadataRole,
+  });
+
+  if (!roleContext.availableRoles.length) {
+    redirect("/select-role");
+  }
+
+  const cookieRole = normalizeRole(cookieStore.get(ROLE_COOKIE_KEY)?.value ?? null);
+  const activeRole = resolvePreferredRole(roleContext.availableRoles, cookieRole, {
+    allowNullWhenMultiple: true,
+  });
+
+  if (roleContext.availableRoles.length > 1 && !activeRole) {
+    redirect("/select-role");
+  }
+
+  const resolvedRole =
+    activeRole ??
+    resolvePreferredRole(roleContext.availableRoles, metadataRole, {
+      allowNullWhenMultiple: false,
+    });
+
+  if (!resolvedRole) {
+    redirect("/select-role");
+  }
+
+  if (resolvedRole === "principal") {
+    redirect(getRoleHomePath("principal"));
+  }
+
   const userEmail = user.email ?? "";
-  const appRole = (userMeta?.app_role ?? "").toLowerCase();
   const userName =
    userMeta?.full_name ||
     userMeta?.name ||
     userEmail.split("@")[0] ||
     "User";
-
-    if (appRole === "principal") {
-    return <>{children}</>;
-  }
 
   return (
     <AppFrame userEmail={userEmail}>

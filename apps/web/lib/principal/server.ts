@@ -1,4 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
+import { normalizeRole } from "@/lib/auth/roles";
+import { resolveAuthRoleContext } from "@/lib/auth/role-context";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   isPrincipalRole,
@@ -88,13 +90,15 @@ export async function resolvePrincipalContext(
     return { ok: false, error: "Unauthorized", status: 401 };
   }
 
-  const rawAppRole = (user.user_metadata as Record<string, unknown> | null)
-    ?.app_role;
-  const appRole =
-    typeof rawAppRole === "string" ? rawAppRole.toLowerCase() : null;
-  const hasPrincipalAppRole = Boolean(
-    appRole && isPrincipalRole(appRole)
+  const appRole = normalizeRole(
+    (user.user_metadata as Record<string, unknown> | null)?.app_role
   );
+  const roleContext = await resolveAuthRoleContext({
+    userId: user.id,
+    email: user.email ?? null,
+    metadataRole: appRole,
+  });
+  const hasPrincipalAppRole = roleContext.hasPrincipalAccess;
 
   const memRes = await admin
     .from("school_members")
@@ -148,7 +152,7 @@ export async function resolvePrincipalContext(
   const isPrincipal = Boolean(
     principalMembership ||
       (school && school.created_by === user.id) ||
-      hasPrincipalAppRole
+      roleContext.hasPrincipalAccess
   );
 
   const isTeacherOnly = Boolean(teacherMembership && !isPrincipal);

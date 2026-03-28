@@ -1,20 +1,78 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import { Building2, GraduationCap } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import LessonForgeWordmark from "@/components/auth/LessonForgeWordmark";
 import RoleSelectionCard from "@/components/auth/RoleSelectionCard";
-import { ROLE_CONTENT, ROLE_STORAGE_KEY, type AppRole } from "@/lib/auth/roles";
+import {
+  ROLE_CONTENT,
+  getRoleHomePath,
+  persistActiveRole,
+  type AppRole,
+} from "@/lib/auth/roles";
+import { fetchRoleContext, switchRole as switchRoleApi } from "@/lib/auth/client";
+import { createBrowserSupabase } from "@/lib/supabase/browser";
 
 export default function SelectRolePage() {
   const router = useRouter();
+  const supabase = useMemo(() => createBrowserSupabase(), []);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loadingRoleContext, setLoadingRoleContext] = useState(true);
+  const [switchingRole, setSwitchingRole] = useState<AppRole | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
-  function chooseRole(role: AppRole) {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(ROLE_STORAGE_KEY, role);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!alive) return;
+        setIsAuthenticated(Boolean(data.session));
+      } finally {
+        if (alive) setLoadingRoleContext(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [supabase]);
+
+  async function chooseRole(role: AppRole) {
+    setMessage(null);
+    setSwitchingRole(role);
+    try {
+      persistActiveRole(role);
+
+      if (!loadingRoleContext && isAuthenticated) {
+        const roleContext = await fetchRoleContext();
+        if (roleContext.availableRoles.includes(role)) {
+          const result = await switchRoleApi(role);
+          window.location.href = result.homePath;
+          return;
+        }
+
+        if (!roleContext.availableRoles.length) {
+          const result = await switchRoleApi(role, { claimIfUnprovisioned: true });
+          window.location.href = result.homePath;
+          return;
+        }
+
+        setMessage(
+          `Your account does not have ${ROLE_CONTENT[role].label.toLowerCase()} access yet.`
+        );
+        router.push(getRoleHomePath(roleContext.activeRole ?? roleContext.availableRoles[0] ?? role));
+        return;
+      }
+
+      router.push(`/auth/${role}`);
+    } catch {
+      router.push(`/auth/${role}`);
+    } finally {
+      setSwitchingRole(null);
     }
-    router.push(`/auth/${role}`);
   }
 
   return (
@@ -40,15 +98,23 @@ export default function SelectRolePage() {
               title={ROLE_CONTENT.teacher.selectionTitle}
               description={ROLE_CONTENT.teacher.selectionDescription}
               icon={<GraduationCap className="h-6 w-6" aria-hidden="true" />}
+              busy={switchingRole === "teacher"}
               onClick={() => chooseRole("teacher")}
             />
             <RoleSelectionCard
               title={ROLE_CONTENT.principal.selectionTitle}
               description={ROLE_CONTENT.principal.selectionDescription}
               icon={<Building2 className="h-6 w-6" aria-hidden="true" />}
+              busy={switchingRole === "principal"}
               onClick={() => chooseRole("principal")}
             />
           </div>
+
+          {message ? (
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+              {message}
+            </div>
+          ) : null}
 
           <p className="mt-10 text-center text-xs leading-relaxed text-slate-500">
             By continuing, you agree to LessonForge terms and privacy standards.

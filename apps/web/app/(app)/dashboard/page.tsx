@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { signOutAndRedirect } from "@/lib/auth/logout";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { useProfile } from "@/lib/useProfile";
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
@@ -220,9 +221,10 @@ export default function DashboardPage() {
 
   async function logout() {
     setMsg(null);
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
+    await signOutAndRedirect({
+      signOut: () => supabase.auth.signOut(),
+      to: "/login",
+    });
   }
 
   async function deleteLesson(id: string) {

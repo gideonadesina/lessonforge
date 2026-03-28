@@ -10,7 +10,13 @@ import AuthHeader from "@/components/auth/AuthHeader";
 import AuthInput from "@/components/auth/AuthInput";
 import SocialLoginButton from "@/components/auth/SocialLoginButton";
 import type { AppRole } from "@/lib/auth/roles";
-import { ROLE_CONTENT, ROLE_STORAGE_KEY } from "@/lib/auth/roles";
+import {
+  ROLE_CONTENT,
+  clearPersistedActiveRole,
+  getRoleHomePath,
+  persistActiveRole,
+} from "@/lib/auth/roles";
+import { fetchRoleContext, getAuthErrorMessage, type RoleContextResponse } from "@/lib/auth/client";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
  
 type SocialProvider = "google" | "microsoft";
@@ -45,6 +51,36 @@ function hasOAuthCallbackParams() {
     searchParams.has("provider_token")
   );
 }
+
+function normalizeAuthErrorMessage(error: unknown, fallback: string) {
+  return getAuthErrorMessage(error, fallback);
+}
+
+function getNoAccountMessage() {
+  return "We couldn't find an account for this email yet. Please sign up first, then continue.";
+}
+
+function getUnavailableRoleMessage(requestedRoleLabel: string) {
+  return `You signed in successfully, but your account does not have ${requestedRoleLabel.toLowerCase()} access yet. Choose an available workspace to continue.`;
+}
+
+const SOCIAL_INTENT_STORAGE_KEY = "lessonforge:oauth-intent";
+
+function readSocialIntent(): Mode {
+  if (typeof window === "undefined") return "login";
+  const value = window.localStorage.getItem(SOCIAL_INTENT_STORAGE_KEY);
+  return value === "signup" ? "signup" : "login";
+}
+
+function writeSocialIntent(mode: Mode) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(SOCIAL_INTENT_STORAGE_KEY, mode);
+}
+
+function clearSocialIntent() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(SOCIAL_INTENT_STORAGE_KEY);
+}
  
 export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
   const router = useRouter();
@@ -66,11 +102,12 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
   const roleConfig = ROLE_CONTENT[role];
  
   const redirectAfterLogin = useCallback(
-    (targetRole: AppRole = role) => {
-      router.replace(ROLE_CONTENT[targetRole].postAuthPath);
+    (targetRole: AppRole) => {
+      persistActiveRole(targetRole);
+      router.replace(getRoleHomePath(targetRole));
       router.refresh();
     },
-    [role, router]
+    [router]
   );
  
   const ensureProfile = useCallback(
@@ -105,11 +142,11 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
     [supabase]
   );
  
-  const syncRoleForUser = useCallback(
-    async (user: User, preferredName: string, preferredRole: AppRole) => {
+  const ensureSignupProfile = useCallback(
+    async (user: User, preferredName: string) => {
       const nextMetadata: Record<string, unknown> = {
         ...(user.user_metadata ?? {}),
-        app_role: preferredRole,
+        app_role: role,
       };
  
       if (preferredName.trim()) {
@@ -124,9 +161,28 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
         console.warn("Unable to sync role metadata:", updateError.message);
       }
  
-      await ensureProfile(user, preferredName, preferredRole);
+      await ensureProfile(user, preferredName, role);
     },
-    [ensureProfile, supabase]
+    [ensureProfile, role, supabase]
+  );
+
+  const resolveRoleAfterAuth = useCallback(
+    async (
+      requestedRole: AppRole,
+      options: { allowUnprovisioned?: boolean } = {}
+    ): Promise<RoleContextResponse> => {
+      const roleContext = await fetchRoleContext();
+      if (!roleContext.availableRoles.length && !options.allowUnprovisioned) {
+        throw new Error("Your account is missing workspace access. Please complete onboarding.");
+      }
+
+      if (!roleContext.availableRoles.includes(requestedRole)) {
+        setMessage(getUnavailableRoleMessage(ROLE_CONTENT[requestedRole].label));
+      }
+
+      return roleContext;
+    },
+    []
   );
  
   const syncUserRoleAndRedirect = useCallback(
@@ -148,24 +204,49 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
           return;
         }
  
-        await syncRoleForUser(user, "", role);
- 
-        localStorage.setItem(ROLE_STORAGE_KEY, role);
-        redirectAfterLogin(role);
+        let roleContext = await resolveRoleAfterAuth(role, {
+          allowUnprovisioned: true,
+        });
+        if (!roleContext.availableRoles.length) {
+          const socialIntent = readSocialIntent();
+          if (socialIntent === "signup") {
+            await ensureSignupProfile(user, "");
+            roleContext = await resolveRoleAfterAuth(role);
+          } else {
+            clearPersistedActiveRole();
+            await supabase.auth.signOut({ scope: "local" });
+            clearSocialIntent();
+            setMode("signup");
+            setMessage(
+              `${getNoAccountMessage()} Use Sign up or social signup to create your account first.`
+            );
+            hasHandledSessionRef.current = false;
+            return;
+          }
+        }
+        const nextRole =
+          (roleContext.availableRoles.includes(role) ? role : roleContext.activeRole) ??
+          roleContext.availableRoles[0];
+        if (!nextRole) {
+          throw new Error("No workspace role is available for this account.");
+        }
+
+        clearSocialIntent();
+        redirectAfterLogin(nextRole);
       } catch (error: unknown) {
         hasHandledSessionRef.current = false;
-        setMessage(error instanceof Error ? error.message : "Unable to finish sign in.");
+        setMessage(normalizeAuthErrorMessage(error, "Unable to finish sign in."));
       } finally {
         setSyncingRole(false);
       }
     },
-    [role, redirectAfterLogin, supabase, syncRoleForUser]
+    [ensureSignupProfile, role, redirectAfterLogin, resolveRoleAfterAuth, supabase]
   );
  
   useEffect(() => {
     let active = true;
  
-    localStorage.setItem(ROLE_STORAGE_KEY, role);
+    persistActiveRole(role);
     if (!hasOAuthCallbackParams()) return;
  
     (async () => {
@@ -199,7 +280,8 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
     setSocialLoading(provider);
  
     try {
-      localStorage.setItem(ROLE_STORAGE_KEY, role);
+      persistActiveRole(role);
+      writeSocialIntent(mode);
  
       const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
       if (signOutError) {
@@ -220,9 +302,11 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
  
       if (error) {
         setMessage(error.message);
+        clearSocialIntent();
       }
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "Unable to sign in right now.");
+      clearSocialIntent();
     } finally {
       setSocialLoading(null);
     }
@@ -248,7 +332,7 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
     setEmailLoading(true);
  
     try {
-      localStorage.setItem(ROLE_STORAGE_KEY, role);
+      persistActiveRole(role);
  
       const {
         data: { session: activeSession },
@@ -282,14 +366,24 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
         }
  
         if (data.session && data.user) {
-          await syncRoleForUser(data.user, cleanName, role);
-          redirectAfterLogin(role);
+          await ensureSignupProfile(data.user, cleanName);
+          const roleContext = await resolveRoleAfterAuth(role);
+          const nextRole =
+            (roleContext.availableRoles.includes(role) ? role : roleContext.activeRole) ??
+            roleContext.availableRoles[0];
+          if (!nextRole) {
+            throw new Error("No workspace role is available for this account.");
+          }
+          redirectAfterLogin(nextRole);
           return;
         }
  
         setMode("login");
         setPassword("");
-        setMessage("Account created. Confirm your email if required, then sign in.");
+        setMessage(
+          "Account created. Check your email to confirm your account, then return to sign in."
+        );
+        clearSocialIntent();
         return;
       }
  
@@ -300,23 +394,40 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
  
       if (error) {
         const text = String(error.message || "Unable to sign in right now.");
+        const normalizedText = text.toLowerCase();
         if (text.toLowerCase().includes("email not confirmed")) {
           setMessage(
             "Email not confirmed. Please check your inbox or disable email confirmation in Supabase Auth settings."
           );
+        } else if (
+          normalizedText.includes("invalid login credentials") ||
+          normalizedText.includes("user not found") ||
+          normalizedText.includes("invalid credentials")
+        ) {
+          setMessage(getNoAccountMessage());
         } else {
           setMessage(text);
         }
         return;
       }
  
-      if (data.user) {
-        await syncRoleForUser(data.user, "", role);
+      if (!data.user) {
+        throw new Error("Unable to load your account after sign in.");
       }
- 
-      redirectAfterLogin(role);
+
+      clearSocialIntent();
+      const roleContext = await resolveRoleAfterAuth(role);
+      const nextRole =
+        (roleContext.availableRoles.includes(role) ? role : roleContext.activeRole) ??
+        roleContext.availableRoles[0];
+      if (!nextRole) {
+        throw new Error("No workspace role is available for this account.");
+      }
+
+      redirectAfterLogin(nextRole);
     } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "Unable to sign in right now.");
+      setMessage(normalizeAuthErrorMessage(error, "Unable to sign in right now."));
+      clearSocialIntent();
     } finally {
       setEmailLoading(false);
     }
@@ -332,7 +443,10 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
         <div className="mt-6 inline-flex rounded-xl border border-violet-100 bg-violet-50/60 p-1">
           <button
             type="button"
-            onClick={() => setMode("login")}
+            onClick={() => {
+              setMode("login");
+              clearSocialIntent();
+            }}
             className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
               mode === "login" ? "bg-violet-700 text-white" : "text-slate-700 hover:bg-white"
             }`}
@@ -341,7 +455,10 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
           </button>
           <button
             type="button"
-            onClick={() => setMode("signup")}
+            onClick={() => {
+              setMode("signup");
+              clearSocialIntent();
+            }}
             className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
               mode === "signup" ? "bg-violet-700 text-white" : "text-slate-700 hover:bg-white"
             }`}
@@ -463,12 +580,23 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
             {mode === "login" ? "Need an account?" : "Already have an account?"}{" "}
             <button
               type="button"
-              onClick={() => setMode((current) => (current === "login" ? "signup" : "login"))}
+              onClick={() =>
+                setMode((current) => {
+                  const nextMode = current === "login" ? "signup" : "login";
+                  clearSocialIntent();
+                  return nextMode;
+                })
+              }
               className="font-medium text-indigo-700 hover:text-indigo-600"
             >
               {mode === "login" ? "Sign up" : "Log in"}
             </button>
           </p>
+          {mode === "login" ? (
+            <p className="text-xs text-slate-500">
+              New to LessonForge? Create an account first, then come back to log in.
+            </p>
+          ) : null}
           <p>
             Not your role?{" "}
             <Link

@@ -2,14 +2,13 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { isAppRole, ROLE_STORAGE_KEY } from "@/lib/auth/roles";
+import { readStoredRole } from "@/lib/auth/roles";
 
 export default function LoginRedirectPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const savedRole = window.localStorage.getItem(ROLE_STORAGE_KEY);
-    const role = isAppRole(savedRole) ? savedRole : null;
+    const role = readStoredRole();
 
     if (role) {
       router.replace(`/auth/${role}`);

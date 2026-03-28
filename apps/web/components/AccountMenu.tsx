@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { signOutAndRedirect } from "@/lib/auth/logout";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 
 type Profile = {
@@ -10,11 +11,16 @@ type Profile = {
   email: string | null;
 };
 
+type SupabaseProfileRow = {
+  full_name?: string | null;
+  avatar_url?: string | null;
+  email?: string | null;
+};
+
 export default function AccountMenu() {
   const supabase = useMemo(() => createBrowserSupabase(), []);
   const [open, setOpen] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(false);
 
   // prevents setState after unmount
   const alive = useRef(true);
@@ -31,7 +37,6 @@ export default function AccountMenu() {
     if (profile) return; // already loaded
 
     (async () => {
-      setLoading(true);
       try {
         const { data, error: userErr } = await supabase.auth.getUser();
         if (userErr) throw userErr;
@@ -46,23 +51,31 @@ export default function AccountMenu() {
 
         if (profErr) throw profErr;
 
-        if (alive.current) setProfile((prof as any) ?? null);
-      } catch (err: any) {
+        if (alive.current) {
+          const row = (prof as SupabaseProfileRow | null) ?? null;
+          setProfile(
+            row
+              ? {
+                  full_name: row.full_name ?? null,
+                  avatar_url: row.avatar_url ?? null,
+                  email: row.email ?? null,
+                }
+              : null
+          );
+        }
+      } catch (err: unknown) {
         // ✅ ignore AbortError (happens in dev/fast refresh/navigation)
-        if (err?.name === "AbortError") return;
+        if (err instanceof DOMException && err.name === "AbortError") return;
         console.error("AccountMenu load profile error:", err);
-      } finally {
-        if (alive.current) setLoading(false);
       }
     })();
   }, [open, profile, supabase]);
 
   async function signOut() {
-    try {
-      await supabase.auth.signOut();
-    } finally {
-      window.location.href = "/";
-    }
+    await signOutAndRedirect({
+      signOut: () => supabase.auth.signOut(),
+      to: "/",
+    });
   }
 
   const initials = (profile?.full_name || profile?.email || "U")
