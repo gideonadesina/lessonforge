@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { signOutAndRedirect } from "@/lib/auth/logout";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 
 type Plan = "free" | "basic" | "pro";
@@ -71,8 +72,10 @@ export default function SettingsPage() {
     try {
       setLoggingOut(true);
       const supabase = createBrowserSupabase();
-      await supabase.auth.signOut();
-      window.location.href = "/login";
+      await signOutAndRedirect({
+        signOut: () => supabase.auth.signOut(),
+        to: "/login",
+      });
     } catch (err) {
       console.error(err);
       setLoggingOut(false);

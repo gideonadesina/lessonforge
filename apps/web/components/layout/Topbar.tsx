@@ -1,8 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import {
+  fetchRoleContext,
+  getAuthErrorMessage,
+  switchRole as switchRoleApi,
+} from "@/lib/auth/client";
+import {
+  clearPersistedActiveRole,
+  persistActiveRole,
+  ROLE_CONTENT,
+  type AppRole,
+} from "@/lib/auth/roles";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 
 export default function Topbar({
@@ -16,18 +27,68 @@ export default function Topbar({
   const isPrincipalArea = pathname.startsWith("/principal");
   const [loading, setLoading] = useState(false);
   const [plansOpen, setPlansOpen] = useState(false);
+  const [availableRoles, setAvailableRoles] = useState<AppRole[]>([]);
+  const [activeRole, setActiveRole] = useState<AppRole | null>(null);
+  const [switchingRole, setSwitchingRole] = useState<AppRole | null>(null);
+  const [roleError, setRoleError] = useState<string | null>(null);
+  const [roleMenuOpen, setRoleMenuOpen] = useState(false);
+  const roleMenuRef = useRef<HTMLDivElement | null>(null);
 
   const supabase = useMemo(() => createBrowserSupabase(), []);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const roleContext = await fetchRoleContext();
+        setAvailableRoles(roleContext.availableRoles);
+        setActiveRole(roleContext.activeRole);
+      } catch {
+        // Keep topbar resilient if role API is unavailable.
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    function onDocumentClick(event: MouseEvent) {
+      const target = event.target as Node;
+      if (roleMenuRef.current && !roleMenuRef.current.contains(target)) {
+        setRoleMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", onDocumentClick);
+    return () => document.removeEventListener("mousedown", onDocumentClick);
+  }, []);
 
   async function logout() {
     try {
       setLoading(true);
+      clearPersistedActiveRole();
       await supabase.auth.signOut();
       window.location.href = "/login";
     } finally {
       setLoading(false);
     }
   }
+
+  async function handleSwitchRole(nextRole: AppRole) {
+    if (switchingRole) return;
+    setRoleError(null);
+    setSwitchingRole(nextRole);
+    try {
+      const result = await switchRoleApi(nextRole);
+      persistActiveRole(nextRole);
+      setActiveRole(nextRole);
+      setRoleMenuOpen(false);
+      window.location.href = result.homePath;
+    } catch (error: unknown) {
+      setRoleError(getAuthErrorMessage(error, "Unable to switch role right now."));
+    } finally {
+      setSwitchingRole(null);
+    }
+  }
+
+  const canSwitchRole = availableRoles.length > 1;
 
   async function upgradePlan(tier: "basic" | "pro") {
     const [{ data: userData }, { data: sessionData }] = await Promise.all([
@@ -94,6 +155,51 @@ export default function Topbar({
 
         {/* RIGHT */}
          <div className="flex flex-wrap items-center gap-2">
+          {canSwitchRole && !isPrincipalArea ? (
+            <div ref={roleMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setRoleMenuOpen((current) => !current)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
+              >
+                {switchingRole ? "Switching..." : `Role: ${activeRole ? ROLE_CONTENT[activeRole].label : "Account"}`}
+              </button>
+              {roleMenuOpen ? (
+                <div className="absolute right-0 z-50 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-md">
+                  {availableRoles.map((candidateRole) => {
+                    const isActive = candidateRole === activeRole;
+                    const isSwitching = switchingRole === candidateRole;
+                    return (
+                      <button
+                        key={candidateRole}
+                        type="button"
+                        disabled={isActive || Boolean(switchingRole)}
+                        onClick={() => {
+                          void handleSwitchRole(candidateRole);
+                        }}
+                        className={[
+                          "flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-sm transition",
+                          isActive
+                            ? "cursor-default bg-violet-50 text-violet-700"
+                            : "text-slate-700 hover:bg-slate-50",
+                        ].join(" ")}
+                      >
+                        <span>{ROLE_CONTENT[candidateRole].label}</span>
+                        <span className="text-xs font-semibold">
+                          {isActive ? "Active" : isSwitching ? "Switching..." : "Switch"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {roleError ? (
+                    <div className="mt-1 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">
+                      {roleError}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {isPrincipalArea ? (
             <>
               <Link

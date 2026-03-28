@@ -2,12 +2,21 @@ import { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveAuthRoleContext } from "@/lib/auth/role-context";
+import {
+  ROLE_COOKIE_KEY,
+  getRoleHomePath,
+  normalizeRole,
+  resolvePreferredRole,
+} from "@/lib/auth/roles";
 import { isPrincipalRole, isMissingTableOrColumnError } from "@/lib/principal/utils";
 import PrincipalLayout from "@/components/principal/PrincipalLayout";
+import { cookies } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
 export default async function PrincipalRouteLayout({ children }: { children: ReactNode }) {
+  const cookieStore = await Promise.resolve(cookies());
   const supabase = await createServerSupabase();
   const {
     data: { user },
@@ -15,6 +24,40 @@ export default async function PrincipalRouteLayout({ children }: { children: Rea
 
   if (!user) {
     redirect("/login");
+  }
+
+  const metadataRole = normalizeRole(
+    (user.user_metadata as { app_role?: unknown } | null)?.app_role ?? null
+  );
+  const roleContext = await resolveAuthRoleContext({
+    userId: user.id,
+    email: user.email ?? null,
+    metadataRole,
+  });
+  if (!roleContext.availableRoles.length) {
+    redirect("/select-role");
+  }
+
+  const cookieRole = normalizeRole(cookieStore.get(ROLE_COOKIE_KEY)?.value ?? null);
+  const activeRole = resolvePreferredRole(roleContext.availableRoles, cookieRole, {
+    allowNullWhenMultiple: true,
+  });
+  if (roleContext.availableRoles.length > 1 && !activeRole) {
+    redirect("/select-role");
+  }
+
+  const resolvedRole =
+    activeRole ??
+    resolvePreferredRole(roleContext.availableRoles, metadataRole, {
+      allowNullWhenMultiple: false,
+    });
+
+  if (!resolvedRole) {
+    redirect("/select-role");
+  }
+
+  if (resolvedRole !== "principal") {
+    redirect(getRoleHomePath("teacher"));
   }
 
   const admin = createAdminClient();
@@ -47,10 +90,6 @@ export default async function PrincipalRouteLayout({ children }: { children: Rea
     membershipSchool = (membershipSchoolRes.data as { id: string; name: string | null; principal_name: string | null } | null) ?? null;
   }
 
-  const selectedPrincipalRole =
-    String((user.user_metadata as { app_role?: unknown } | null)?.app_role ?? "").toLowerCase() === "principal";
-
-
   const schoolRes = await admin
     .from("schools")
     
@@ -69,7 +108,7 @@ export default async function PrincipalRouteLayout({ children }: { children: Rea
   // 1. principals/admins/owners/headteachers
   // 2. users who already created a school
   // 3. users with no school yet, so they can start onboarding
-  const shouldBlockPrincipalArea = hasAnyMembership && !hasPrincipalMembership && !createdSchool && !selectedPrincipalRole;
+  const shouldBlockPrincipalArea = hasAnyMembership && !hasPrincipalMembership && !createdSchool;
   if (shouldBlockPrincipalArea) {
     redirect("/dashboard");
   }

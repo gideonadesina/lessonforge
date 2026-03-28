@@ -13,6 +13,17 @@ import {
   ShieldCheck,
   UserRound,
 } from "lucide-react";
+import {
+  fetchRoleContext,
+  getAuthErrorMessage,
+  switchRole as switchRoleApi,
+} from "@/lib/auth/client";
+import {
+  clearPersistedActiveRole,
+  persistActiveRole,
+  ROLE_CONTENT,
+  type AppRole,
+} from "@/lib/auth/roles";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
  
 type PrincipalTopbarProps = {
@@ -41,6 +52,10 @@ export default function PrincipalTopbar({
   const [quickOpen, setQuickOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [availableRoles, setAvailableRoles] = useState<AppRole[]>([]);
+  const [activeRole, setActiveRole] = useState<AppRole | null>(null);
+  const [switchingRole, setSwitchingRole] = useState<AppRole | null>(null);
+  const [roleError, setRoleError] = useState<string | null>(null);
  
   const quickRef = useRef<HTMLDivElement | null>(null);
   const profileRef = useRef<HTMLDivElement | null>(null);
@@ -59,19 +74,56 @@ export default function PrincipalTopbar({
     document.addEventListener("mousedown", onDocumentClick);
     return () => document.removeEventListener("mousedown", onDocumentClick);
   }, []);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const roleContext = await fetchRoleContext();
+        if (!alive) return;
+        setAvailableRoles(roleContext.availableRoles);
+        setActiveRole(roleContext.activeRole);
+      } catch {
+        // Keep menu usable even if role API is unavailable.
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
  
   async function logout() {
     try {
       setLoggingOut(true);
+      clearPersistedActiveRole();
       await supabase.auth.signOut();
       window.location.href = "/login";
     } finally {
       setLoggingOut(false);
     }
   }
+
+  async function handleSwitchRole(nextRole: AppRole) {
+    if (switchingRole) return;
+    setRoleError(null);
+    setSwitchingRole(nextRole);
+    try {
+      const result = await switchRoleApi(nextRole);
+      persistActiveRole(nextRole);
+      setActiveRole(nextRole);
+      setProfileOpen(false);
+      window.location.href = result.homePath;
+    } catch (error: unknown) {
+      setRoleError(getAuthErrorMessage(error, "Unable to switch role right now."));
+    } finally {
+      setSwitchingRole(null);
+    }
+  }
  
   const firstName = principalName.trim().split(" ")[0] || "Principal";
   const avatarInitial = firstName.charAt(0).toUpperCase() || "P";
+  const canSwitchRole = availableRoles.length > 1;
  
   return (
     <div className="rounded-3xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:px-5 md:py-4">
@@ -195,16 +247,51 @@ export default function PrincipalTopbar({
                   <p className="truncate text-xs text-slate-500">
                     {email || "No email"}
                   </p>
+                  <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-violet-700">
+                    {activeRole ? ROLE_CONTENT[activeRole].label : "Principal"}
+                  </p>
                 </div>
  
-                <button
-                  type="button"
-                  disabled
-                  className="mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-400"
-                >
-                  <UserRound className="h-4 w-4" />
-                  Switch role (coming soon)
-                </button>
+                {canSwitchRole ? (
+                  <div className="mt-2 rounded-xl border border-slate-200 bg-white p-1.5">
+                    <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      Switch workspace
+                    </div>
+                    {availableRoles.map((candidateRole) => {
+                      const isActive = candidateRole === activeRole;
+                      const isSwitching = switchingRole === candidateRole;
+                      return (
+                        <button
+                          key={candidateRole}
+                          type="button"
+                          disabled={isActive || Boolean(switchingRole)}
+                          onClick={() => {
+                            if (candidateRole === "principal") {
+                              setProfileOpen(false);
+                              return;
+                            }
+                            void handleSwitchRole(candidateRole);
+                          }}
+                          className={[
+                            "flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-sm transition",
+                            isActive
+                              ? "cursor-default bg-violet-50 text-violet-700"
+                              : "text-slate-700 hover:bg-slate-50",
+                            switchingRole ? "opacity-70" : "",
+                          ].join(" ")}
+                        >
+                          <span className="inline-flex items-center gap-2">
+                            <UserRound className="h-4 w-4" />
+                            {ROLE_CONTENT[candidateRole].label}
+                          </span>
+                          <span className="text-xs font-semibold">
+                            {isActive ? "Active" : isSwitching ? "Switching..." : "Switch"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
  
                 <Link
                   href="/settings"
@@ -221,8 +308,14 @@ export default function PrincipalTopbar({
                   className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
                 >
                   <ShieldCheck className="h-4 w-4" />
-                  Role center
+                  Workspace center
                 </Link>
+
+                {roleError ? (
+                  <div className="mx-2 my-1 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1.5 text-xs text-rose-700">
+                    {roleError}
+                  </div>
+                ) : null}
  
                 <button
                   type="button"
