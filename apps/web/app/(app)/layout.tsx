@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@supabase/ssr";
 
@@ -45,6 +45,8 @@ export default async function AppLayout({
 }: {
   children: ReactNode;
 }) {
+  const headerStore = await Promise.resolve(headers());
+  const pathname = headerStore.get("x-pathname") ?? "";
   const cookieStore = await Promise.resolve(cookies());
   const supabase = await createServerSupabase();
   const { data, error } = await supabase.auth.getUser();
@@ -85,7 +87,7 @@ export default async function AppLayout({
     redirect("/select-role");
   }
 
-  if (resolvedRole === "principal") {
+  if (resolvedRole === "principal" && !pathname.startsWith("/principal")) {
     redirect(getRoleHomePath("principal"));
   }
 
