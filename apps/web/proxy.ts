@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { ROLE_COOKIE_KEY, getRoleHomePath, normalizeRole } from "@/lib/auth/roles";
 
 const AUTH_PAGES = ["/login", "/forgot-password"];
 const PUBLIC_EXACT_PATHS = new Set<string>(["/", "/select-role"]);
@@ -49,8 +48,10 @@ function isProtectedPath(pathname: string) {
 }
 
 export async function proxy(request: NextRequest) {
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", request.nextUrl.pathname);
   const response = NextResponse.next({
-    request: { headers: request.headers },
+    request: { headers: requestHeaders },
   });
 
   const supabase = createServerClient(
@@ -74,7 +75,6 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser(); // refresh session cookies
   const pathname = request.nextUrl.pathname;
-  const activeRole = normalizeRole(request.cookies.get(ROLE_COOKIE_KEY)?.value ?? null);
 
   if (!user) {
     if (isProtectedPath(pathname)) {
@@ -89,20 +89,6 @@ export async function proxy(request: NextRequest) {
   if ((AUTH_PAGES.includes(pathname) || isAuthFlowPath(pathname)) && !isAuthCallbackPath(pathname, request)) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/select-role";
-    redirectUrl.search = "";
-    return NextResponse.redirect(redirectUrl);
-  }
-
-  if (activeRole === "principal" && TEACHER_PROTECTED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
-    const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = getRoleHomePath("principal");
-    redirectUrl.search = "";
-    return NextResponse.redirect(redirectUrl);
-  }
-
-  if (activeRole === "teacher" && pathname.startsWith("/principal")) {
-    const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = getRoleHomePath("teacher");
     redirectUrl.search = "";
     return NextResponse.redirect(redirectUrl);
   }
