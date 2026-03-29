@@ -86,7 +86,7 @@ export default function PrincipalPage() {
   if (forbidden) return <PrincipalForbiddenState />;
  
   return (
-    <div className="space-y-5 rounded-3xl bg-amber-50/70 p-4 md:p-6">
+    <div className="space-y-5 bg-amber-50/70 p-4 md:p-6">
       <PrincipalPageHeader
         eyebrow="LessonForge Executive Suite"
         title="Principal Command Center"

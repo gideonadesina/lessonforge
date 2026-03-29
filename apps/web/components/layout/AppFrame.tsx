@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 
@@ -11,7 +12,14 @@ export default function AppFrame({
   userEmail: string;
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+  const isPrincipalArea = pathname.startsWith("/principal");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Skip rendering shared Topbar/Sidebar in principal area - use PrincipalLayout instead
+  if (isPrincipalArea) {
+    return <>{children}</>;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">

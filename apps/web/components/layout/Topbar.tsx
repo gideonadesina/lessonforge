@@ -232,7 +232,7 @@ export default function Topbar({
               </button>
 
 
-          {/* Desktop/tablet (sm+) */}
+          
            {/* Desktop/tablet (sm+) */}
               <button
                 onClick={() => upgradePlan("basic")}

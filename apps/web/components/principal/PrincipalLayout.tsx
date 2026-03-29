@@ -99,7 +99,7 @@ export default function PrincipalLayout({
       />
 
       <div className={["transition-[padding] duration-300", collapsed ? "lg:pl-28" : "lg:pl-80"].join(" ")}>
-        <div className="mx-auto w-full max-w-[1400px] px-4 pb-8 pt-4">
+  <div className="mx-auto w-full max-w-[1400px] px-4 pt-4 md:px-6">
           <PrincipalTopbar
             onOpenMenu={() => setMobileOpen(true)}
             principalName={principalName}
@@ -108,7 +108,9 @@ export default function PrincipalLayout({
             notificationCount={notificationCount}
           />
         </div>
-        <main className="mx-auto w-full max-w-[1400px] px-4 pb-12">{children}</main>
+        <main className="mx-auto w-full max-w-[1400px] px-4 pb-12 pt-2 md:px-6">
+  {children}
+</main>
       </div>
     </div>
   );

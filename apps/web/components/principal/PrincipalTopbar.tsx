@@ -126,47 +126,39 @@ export default function PrincipalTopbar({
   const canSwitchRole = availableRoles.length > 1;
  
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:px-5 md:py-4">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
-        <div className="flex min-w-[260px] flex-1 items-center gap-3 xl:max-w-[360px]">
-          <button
-            type="button"
-            onClick={onOpenMenu}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 lg:hidden"
-            aria-label="Open menu"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
- 
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-slate-500">
-              {getGreetingByHour()},{" "}
-              <span className="font-semibold text-slate-700">{firstName}</span>{" "}
-              <span className="align-middle">👋</span>
-            </p>
- 
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <p className="max-w-full truncate text-base font-semibold text-slate-900">
-                {schoolName || "Your school workspace"}
-              </p>
-              <span className="inline-flex shrink-0 items-center rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
-                Principal
-              </span>
-            </div>
-          </div>
-        </div>
- 
-        <div className="min-w-0 flex-1 xl:px-2">
+    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:px-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+       <div className="flex items-center gap-3 min-w-0">
+  <button
+    type="button"
+    onClick={onOpenMenu}
+    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 lg:hidden"
+    aria-label="Open menu"
+  >
+    <Menu className="h-5 w-5" />
+  </button>
+
+  <div className="hidden md:flex flex-col leading-tight min-w-0">
+  <span className="text-sm font-bold text-violet-800 truncate">
+    {schoolName || "Your School"}
+  </span>
+  <span className="text-sm font-semibold text-slate-900 truncate">
+    {principalName}
+  </span>
+</div>
+</div>
+
+        <div className="min-w-0 flex-1">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
-              placeholder="Search teachers, lessons, worksheets"
+              placeholder="Search principal workspace..."
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-3 text-sm text-slate-700 outline-none transition focus:border-violet-400 focus:bg-white"
             />
           </div>
         </div>
- 
-        <div className="flex shrink-0 items-center justify-end gap-2 xl:ml-auto">
+
+        <div className="flex shrink-0 items-center justify-end gap-2">
           <button
             type="button"
             className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
@@ -179,7 +171,7 @@ export default function PrincipalTopbar({
               </span>
             ) : null}
           </button>
- 
+
           <div ref={quickRef} className="relative">
             <button
               type="button"
@@ -187,11 +179,10 @@ export default function PrincipalTopbar({
               className="inline-flex items-center gap-2 rounded-2xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-violet-700"
             >
               <Plus className="h-4 w-4 shrink-0" />
-              <span className="hidden sm:inline">Quick actions</span>
-              <span className="sm:hidden">Actions</span>
+              <span>Quick actions</span>
               <ChevronDown className="h-4 w-4 shrink-0" />
             </button>
- 
+
             {quickOpen ? (
               <div className="absolute right-0 z-40 mt-2 w-56 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
                 <Link
@@ -225,7 +216,7 @@ export default function PrincipalTopbar({
               </div>
             ) : null}
           </div>
- 
+
           <div ref={profileRef} className="relative">
             <button
               type="button"
@@ -237,7 +228,7 @@ export default function PrincipalTopbar({
               </span>
               <ChevronDown className="h-4 w-4 text-slate-500" />
             </button>
- 
+
             {profileOpen ? (
               <div className="absolute right-0 z-40 mt-2 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
                 <div className="rounded-xl bg-slate-50 px-3 py-2">
@@ -251,7 +242,7 @@ export default function PrincipalTopbar({
                     {activeRole ? ROLE_CONTENT[activeRole].label : "Principal"}
                   </p>
                 </div>
- 
+
                 {canSwitchRole ? (
                   <div className="mt-2 rounded-xl border border-slate-200 bg-white p-1.5">
                     <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -292,7 +283,7 @@ export default function PrincipalTopbar({
                     })}
                   </div>
                 ) : null}
- 
+
                 <Link
                   href="/settings"
                   onClick={() => setProfileOpen(false)}
@@ -301,7 +292,7 @@ export default function PrincipalTopbar({
                   <Settings className="h-4 w-4" />
                   Settings
                 </Link>
- 
+
                 <Link
                   href="/select-role"
                   onClick={() => setProfileOpen(false)}
@@ -316,7 +307,7 @@ export default function PrincipalTopbar({
                     {roleError}
                   </div>
                 ) : null}
- 
+
                 <button
                   type="button"
                   onClick={logout}
