@@ -40,8 +40,7 @@ export default function PricingPage() {
   async function handlePlanSelect(planId: (typeof TEACHER_PRICING_PLANS)[number]["id"]) {
     setBusyPlanId(planId);
     try {
-      const checkout = await initializeTeacherCheckout(planId);
-      window.location.href = checkout.redirectTo;
+      await initializeTeacherCheckout(planId);
     } catch (error) {
       console.error("Failed to start checkout:", error);
       alert("We could not start checkout right now. Please try again.");

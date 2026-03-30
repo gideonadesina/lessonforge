@@ -1,126 +1,175 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import crypto from "crypto";
- 
+import {
+  isValidTeacherPlanId,
+  type TeacherPlanId,
+} from "@/lib/billing/server-pricing";
+import {
+  processTeacherPayment,
+  type ProcessPaymentInput,
+} from "@/lib/billing/server-payment";
+import { createAdminClient } from "@/lib/supabase/admin";
+
 export const runtime = "nodejs";
- 
-type PaidTier = "basic" | "pro";
- 
-const BASIC_ALLOWANCE = 20;
-const PRO_ALLOWANCE = 50;
- 
+
 function verifyPaystackSignature(rawBody: string, signature: string | null) {
   const secret = process.env.PAYSTACK_SECRET_KEY;
   if (!secret || !signature) return false;
- 
+
   const hash = crypto.createHmac("sha512", secret).update(rawBody).digest("hex");
   return hash === signature;
 }
- 
-function normalizeTier(rawTier: unknown): PaidTier | null {
-  const tier = String(rawTier ?? "").toLowerCase().trim();
-  if (tier === "basic" || tier === "pro") return tier;
-  return null;
+
+function normalizeTeacherPlanId(rawPlan: unknown): TeacherPlanId | null {
+  if (!isValidTeacherPlanId(rawPlan)) return null;
+  return rawPlan as TeacherPlanId;
 }
- 
-function inferTierFromAmount(rawAmount: unknown, rawCurrency: unknown): PaidTier | null {
-  const amount = Number(rawAmount);
-  if (!Number.isFinite(amount) || amount <= 0) return null;
- 
-  const currency = String(rawCurrency ?? "NGN").toUpperCase();
- 
-  // Your current initialize pricing:
-  // NGN => basic: 200000, pro: 500000
-  // USD => basic: 200, pro: 500
-  if (currency === "NGN") {
-    if (amount >= 500000) return "pro";
-    if (amount >= 200000) return "basic";
-    return null;
-  }
- 
-  if (currency === "USD") {
-    if (amount >= 500) return "pro";
-    if (amount >= 200) return "basic";
-  }
- 
-  return null;
-}
- 
-async function resolveTierForUser(userId: string, data: any): Promise<PaidTier> {
+
+async function resolvePlanForUser(userId: string, data: any): Promise<TeacherPlanId> {
   const admin = createAdminClient();
- 
+
   const { data: existing } = await admin
     .from("profiles")
-    .select("plan, is_pro")
+    .select("plan")
     .eq("id", userId)
     .maybeSingle();
- 
-  const fromMetadata = normalizeTier(data?.metadata?.tier);
+
+  // Try to get plan from metadata first
+  const fromMetadata = normalizeTeacherPlanId(data?.metadata?.plan);
   if (fromMetadata) return fromMetadata;
- 
-  const fromExisting = normalizeTier(existing?.plan);
+
+  // Fall back to existing plan in database
+  const fromExisting = normalizeTeacherPlanId(existing?.plan);
   if (fromExisting) return fromExisting;
- 
-  if (existing?.is_pro === true) return "pro";
- 
-  const fromAmount = inferTierFromAmount(data?.amount, data?.currency);
-  return fromAmount ?? "basic";
+
+  // Default to basic if unable to determine
+  return "basic";
 }
- 
+
+/**
+ * Update profile metadata and plan info after payment.
+ * Separate from credit grant to avoid overwriting balance.
+ */
+async function updateProfileMetadata(
+  userId: string,
+  plan: TeacherPlanId,
+  paystackData: any
+) {
+  const admin = createAdminClient();
+
+  await admin
+    .from("profiles")
+    .update({
+      plan,
+      is_pro: plan !== "basic",
+      pro_expires_at:
+        plan !== "basic"
+          ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+          : null,
+      paystack_subscription_code:
+        paystackData?.subscription?.subscription_code ?? null,
+      paystack_customer_code: paystackData?.customer?.customer_code ?? null,
+      paystack_email: paystackData?.customer?.email ?? null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", userId);
+}
+
 export async function POST(req: Request) {
   try {
     const rawBody = await req.text();
     const signature = req.headers.get("x-paystack-signature");
- 
+
+    // Verify Paystack webhook signature
     if (!verifyPaystackSignature(rawBody, signature)) {
-      return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+      console.warn("Webhook signature verification failed");
+      return NextResponse.json(
+        { received: true, warning: "Invalid signature" },
+        { status: 200 }
+      );
     }
- 
+
     const event = JSON.parse(rawBody);
- 
-    if (event?.event === "charge.success") {
-      const data = event?.data ?? {};
-      const userId = String(data?.metadata?.user_id ?? "").trim();
- 
-      if (!userId) {
-        return NextResponse.json(
-          { received: true, warning: "Missing user_id in metadata" },
-          { status: 200 }
-        );
-      }
- 
-      const tier = await resolveTierForUser(userId, data);
-      const allowance = tier === "pro" ? PRO_ALLOWANCE : BASIC_ALLOWANCE;
- 
-      const admin = createAdminClient();
-      const { error } = await admin
-        .from("profiles")
-        .update({
-          plan: tier,
-          is_pro: tier === "pro",
-          pro_expires_at:
-            tier === "pro"
-              ? new Date(Date.now() + 32 * 24 * 60 * 60 * 1000).toISOString()
-              : null,
-          credits_monthly_allowance: allowance,
-          credits_balance: allowance,
-          credits_reset_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          paystack_email: data?.customer?.email ?? null,
-          paystack_subscription_code: data?.subscription?.subscription_code ?? null,
-          paystack_customer_code: data?.customer?.customer_code ?? null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", userId);
- 
-      if (error) {
-        console.error("Webhook profile update error:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
-      }
+
+    // Only process charge.success events
+    if (event?.event !== "charge.success") {
+      return NextResponse.json({ received: true }, { status: 200 });
     }
- 
-    return NextResponse.json({ received: true }, { status: 200 });
+
+    const paystackData = event?.data ?? {};
+    const reference = String(paystackData?.reference ?? "").trim();
+    const userId = String(paystackData?.metadata?.user_id ?? "").trim();
+
+    // Validate required fields
+    if (!reference) {
+      console.warn("Webhook: missing payment reference");
+      return NextResponse.json(
+        { received: true, warning: "Missing reference" },
+        { status: 200 }
+      );
+    }
+
+    if (!userId) {
+      console.warn("Webhook: missing user_id in metadata");
+      return NextResponse.json(
+        { received: true, warning: "Missing user_id" },
+        { status: 200 }
+      );
+    }
+
+    // Skip if not a success payment
+    if (paystackData?.status !== "success") {
+      console.warn(`Webhook: payment not successful for reference ${reference}`);
+      return NextResponse.json(
+        { received: true, warning: "Payment not successful" },
+        { status: 200 }
+      );
+    }
+
+    // Resolve the plan
+    const plan = await resolvePlanForUser(userId, paystackData);
+
+    // Process payment with idempotency
+    const paymentResult = await processTeacherPayment({
+      reference,
+      userId,
+      plan,
+      amount: paystackData?.amount,
+      currency: paystackData?.currency,
+      paystackCustomerCode: paystackData?.customer?.customer_code,
+      paystackSubscriptionCode: paystackData?.subscription?.subscription_code,
+      paystackEmail: paystackData?.customer?.email,
+      payerPayload: paystackData,
+      flow: "teacher_webhook",
+    } as ProcessPaymentInput);
+
+    if (!paymentResult.ok) {
+      console.error(`Webhook: payment processing failed for reference ${reference}:`, paymentResult.error);
+      // Return 200 anyway (webhook ack) but log the error
+      return NextResponse.json({ received: true, error: paymentResult.error }, { status: 200 });
+    }
+
+    // Update profile metadata (plan, expiry, paystack codes)
+    await updateProfileMetadata(userId, plan, paystackData);
+
+    console.log(
+      `Webhook: successfully processed payment ${reference} for user ${userId}, awarded ${paymentResult.creditsAwarded} credits`
+    );
+
+    return NextResponse.json({
+      received: true,
+      reference,
+      creditsAwarded: paymentResult.creditsAwarded,
+      alreadyProcessed: paymentResult.alreadyProcessed,
+    });
   } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Webhook processing failed";
     console.error("Webhook error:", error);
-    return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
+    // Always return 200 for webhook acks (let Paystack know we received it)
+    return NextResponse.json(
+      { received: true, error: message },
+      { status: 200 }
+    );
   }
- }
+}

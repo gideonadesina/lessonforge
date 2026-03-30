@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { signOutAndRedirect } from "@/lib/auth/logout";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { useProfile } from "@/lib/useProfile";
+import { useToast } from "@/components/ui/ToastProvider";
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import ForgeGuideStrip from "@/components/dashboard/ForgeGuideStrip";
 import QuickActionsGrid from "@/components/dashboard/QuickActionsGrid";
@@ -34,6 +35,7 @@ type LessonRow = {
   curriculum: string | null;
   created_at: string;
 };
+
 type SchoolMembershipApiResponse = {
   ok: boolean;
   data?: {
@@ -70,7 +72,9 @@ function getErrorMessage(error: unknown) {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = useMemo(() => createBrowserSupabase(), []);
+  const { showToast } = useToast();
 
   const { profile, creditsRemaining, planLabel } = useProfile();
 
@@ -78,7 +82,9 @@ export default function DashboardPage() {
   const [lessons, setLessons] = useState<LessonRow[]>([]);
   const [worksheetsCount, setWorksheetsCount] = useState(0);
   const [schemeRows, setSchemeRows] = useState<SchemeOfWorkRow[]>([]);
-  const [academicEvents, setAcademicEvents] = useState<AcademicCalendarRow[]>([]);
+  const [academicEvents, setAcademicEvents] = useState<AcademicCalendarRow[]>(
+    []
+  );
 
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
@@ -86,6 +92,7 @@ export default function DashboardPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [schoolMembershipLoading, setSchoolMembershipLoading] = useState(true);
   const [hasSchoolMembership, setHasSchoolMembership] = useState(false);
+  const [copiedReferral, setCopiedReferral] = useState(false);
 
   const teacherName =
     (profile as any)?.full_name ||
@@ -93,8 +100,7 @@ export default function DashboardPage() {
     userEmail?.split("@")[0] ||
     "Teacher";
 
-
-    const loadSchoolMembership = useCallback(async () => {
+  const loadSchoolMembership = useCallback(async () => {
     setSchoolMembershipLoading(true);
     try {
       const {
@@ -124,6 +130,15 @@ export default function DashboardPage() {
     }
   }, [supabase]);
 
+  useEffect(() => {
+    if (searchParams.get("payment") === "success") {
+      showToast("🎉 Credits added successfully!");
+
+      const next = new URL(window.location.href);
+      next.searchParams.delete("payment");
+      window.history.replaceState({}, "", next.toString());
+    }
+  }, [searchParams, showToast]);
 
   useEffect(() => {
     (window as any).__FORGE_CONTEXT__ = {
@@ -134,8 +149,9 @@ export default function DashboardPage() {
       recentLessons: lessons.slice(0, 5),
     };
   }, [teacherName, creditsRemaining, planLabel, lessons]);
-   useEffect(() => {
-     void loadSchoolMembership();
+
+  useEffect(() => {
+    void loadSchoolMembership();
   }, [loadSchoolMembership]);
 
   useEffect(() => {
@@ -152,7 +168,6 @@ export default function DashboardPage() {
           error: authError,
         } = await supabase.auth.getUser();
 
-    
         if (!alive) return;
 
         if (authError) {
@@ -166,16 +181,19 @@ export default function DashboardPage() {
 
         setUserEmail(user.email ?? null);
 
-        const [lessonsRes, worksheetsRes, schemeRes, eventsRes] = await Promise.all([
-          supabase
-            .from("lessons")
-            .select("id, subject, topic, grade, curriculum, created_at")
-            .order("created_at", { ascending: false })
-            .limit(200),
-          supabase.from("worksheets").select("id", { count: "exact", head: true }),
-          listSchemeOfWork(supabase, user.id),
-          listAcademicEvents(supabase, user.id),
-        ]);
+        const [lessonsRes, worksheetsRes, schemeRes, eventsRes] =
+          await Promise.all([
+            supabase
+              .from("lessons")
+              .select("id, subject, topic, grade, curriculum, created_at")
+              .order("created_at", { ascending: false })
+              .limit(200),
+            supabase
+              .from("worksheets")
+              .select("id", { count: "exact", head: true }),
+            listSchemeOfWork(supabase, user.id),
+            listAcademicEvents(supabase, user.id),
+          ]);
 
         if (!alive) return;
 
@@ -187,7 +205,10 @@ export default function DashboardPage() {
         }
 
         if (worksheetsRes.error) {
-          console.warn("Failed to load worksheets count:", worksheetsRes.error.message);
+          console.warn(
+            "Failed to load worksheets count:",
+            worksheetsRes.error.message
+          );
           setWorksheetsCount(0);
         } else {
           setWorksheetsCount(worksheetsRes.count ?? 0);
@@ -300,7 +321,9 @@ export default function DashboardPage() {
       if (a.week_number !== b.week_number) {
         return a.week_number - b.week_number;
       }
-      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      return (
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
     });
 
     const thisWeekTopic =
@@ -365,6 +388,36 @@ export default function DashboardPage() {
 
   const isOutOfCredits = creditsRemaining <= 0;
   const isLowCredits = creditsRemaining > 0 && creditsRemaining <= 5;
+
+  const referralCode =
+    (profile as any)?.referral_code ||
+    ((profile as any)?.id
+      ? String((profile as any).id).slice(0, 6).toUpperCase()
+      : null);
+
+  const referralLink = referralCode
+    ? `https://lessonforge.app/signup?ref=${encodeURIComponent(referralCode)}`
+    : "";
+
+  async function copyReferralLink() {
+    if (!referralLink) return;
+
+    try {
+      await navigator.clipboard.writeText(referralLink);
+      setCopiedReferral(true);
+      showToast("🔗 Referral link copied!");
+      setTimeout(() => setCopiedReferral(false), 2000);
+    } catch {
+      showToast("Could not copy referral link.");
+    }
+  }
+
+  const whatsappReferralLink = referralLink
+    ? `https://wa.me/?text=${encodeURIComponent(
+        `I’ve been using LessonForge to create lesson packs faster. Sign up with my link: ${referralLink}`
+      )}`
+    : "#";
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <DashboardHeader />
@@ -383,13 +436,18 @@ export default function DashboardPage() {
             {msg}
           </div>
         ) : null}
-          {isOutOfCredits ? (
+
+        {isOutOfCredits ? (
           <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900 shadow-sm">
             <p className="font-semibold">You are out of credits.</p>
             <p className="mt-1">
-              New generation actions are blocked, but your dashboard and saved content remain available.
+              New generation actions are blocked, but your dashboard and saved
+              content remain available.
             </p>
-            <Link href="/settings" className="mt-3 inline-flex rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-semibold text-rose-900">
+            <Link
+              href="/settings"
+              className="mt-3 inline-flex rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-semibold text-rose-900"
+            >
               Recharge / Upgrade
             </Link>
           </div>
@@ -397,32 +455,40 @@ export default function DashboardPage() {
 
         {isLowCredits ? (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
-            Credits are running low ({creditsRemaining} left). Plan a manual recharge soon to avoid interruptions.
+            Credits are running low ({creditsRemaining} left). Plan a manual
+            recharge soon to avoid interruptions.
           </div>
         ) : null}
 
-
-            {!schoolMembershipLoading && !hasSchoolMembership ? (
+        {!schoolMembershipLoading && !hasSchoolMembership ? (
           <section className="rounded-2xl border border-violet-200 bg-violet-50/50 p-4 shadow-sm">
             <div className="mb-3">
-              <h2 className="text-sm font-bold text-slate-900">Join your school workspace</h2>
+              <h2 className="text-sm font-bold text-slate-900">
+                Join your school workspace
+              </h2>
               <p className="mt-1 text-xs text-slate-600">
-                Enter your school code from your principal to activate your teacher seat.
+                Enter your school code from your principal to activate your
+                teacher seat.
               </p>
             </div>
-            <SchoolCodeInput redirectTo="/dashboard" onJoined={loadSchoolMembership} />
+            <SchoolCodeInput
+              redirectTo="/dashboard"
+              onJoined={loadSchoolMembership}
+            />
           </section>
         ) : null}
-
 
         <QuickActionsGrid />
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-sm font-bold text-slate-900">Planning reminders</h2>
+              <h2 className="text-sm font-bold text-slate-900">
+                Planning reminders
+              </h2>
               <p className="mt-1 text-xs text-slate-600">
-                Weekly topics and upcoming school events from your Planning tools.
+                Weekly topics and upcoming school events from your Planning
+                tools.
               </p>
             </div>
 
@@ -489,8 +555,13 @@ export default function DashboardPage() {
                     {planningReminders.upcomingEvent.title}
                   </div>
                   <div className="mt-1 text-xs text-slate-600">
-                    {formatEventDate(planningReminders.upcomingEvent.event_date)} •{" "}
-                    {formatEventType(planningReminders.upcomingEvent.event_type)}
+                    {formatEventDate(
+                      planningReminders.upcomingEvent.event_date
+                    )}{" "}
+                    •{" "}
+                    {formatEventType(
+                      planningReminders.upcomingEvent.event_type
+                    )}
                   </div>
                 </div>
               ) : (

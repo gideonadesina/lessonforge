@@ -1,6 +1,7 @@
 import "./globals.css";
 import Script from "next/script";
 import type { Metadata, Viewport } from "next";
+import { ToastProvider } from "@/components/ui/ToastProvider";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://lessonforge.app"),
@@ -27,7 +28,7 @@ export const metadata: Metadata = {
   ],
 
   icons: {
-    icon: "/favicon.png", // ✅ favicon from public folder
+    icon: "/favicon.png",
   },
 
   openGraph: {
@@ -37,7 +38,6 @@ export const metadata: Metadata = {
     url: "https://lessonforge.app",
     siteName: "LessonForge",
     type: "website",
-    // If you don't have /public/og.png yet, comment this images block out for now.
     images: [
       {
         url: "/og.png",
@@ -53,7 +53,6 @@ export const metadata: Metadata = {
     title: "LessonForge – AI Lesson Plan Generator for Teachers",
     description:
       "Generate lesson notes, slides, quizzes, and classroom activities in seconds.",
-    // If you don't have /public/og.png yet, comment this images line out for now.
     images: ["/og.png"],
   },
 
@@ -69,12 +68,11 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const GA_ID = process.env.NEXT_PUBLIC_GA_ID; // add in .env
+  const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
 
   return (
     <html lang="en">
-           <body className="min-h-screen antialiased bg-[#FAF9F6]">
-        {/* ✅ Google Analytics */}
+      <body className="min-h-screen bg-[#FAF9F6] antialiased">
         {GA_ID && (
           <>
             <Script
@@ -92,8 +90,10 @@ export default function RootLayout({
           </>
         )}
 
-        {children}
+        <ToastProvider>
+          {children}
+        </ToastProvider>
       </body>
     </html>
   );
- }
+}

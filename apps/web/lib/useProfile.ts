@@ -8,15 +8,15 @@ import { formatNaira, TEACHER_PRICING_PLANS } from "@/lib/billing/pricing";
 export type Plan = "free" | "basic" | "pro" | "pro_plus" | "ultra_pro";
 
 export type Profile = {
+  id: string;
   full_name: string | null;
   avatar_url: string | null;
   email: string | null;
   app_role: AppRole | null;
-
- 
   plan: Plan;
   credits_balance: number;
- 
+  referral_code: string | null;
+  referred_by: string | null;
 };
 
 export function getPlanInfo(plan: Plan) {
@@ -41,7 +41,7 @@ function normalizePlan(plan: string | null): Plan {
   ) {
     return p;
   }
-  
+
   return "free";
 }
 
@@ -71,31 +71,34 @@ export function useProfile() {
           return;
         }
 
-       
         const { data: prof, error: profErr } = await supabase
           .from("profiles")
-          .select("full_name, avatar_url, email, plan, credits_balance")
+          .select(
+            "id, full_name, avatar_url, email, plan, credits_balance, referral_code, referred_by"
+          )
           .eq("id", user.id)
           .single();
 
         if (profErr) throw profErr;
 
-         const normalizedPlan = normalizePlan(prof?.plan ?? null);
+        const normalizedPlan = normalizePlan(prof?.plan ?? null);
 
         const normalized: Profile = {
+          id: prof?.id ?? user.id,
           full_name: prof?.full_name ?? null,
           avatar_url: prof?.avatar_url ?? null,
-          email: prof?.email ?? null,
-                    app_role: roleFromUserMetadata(user.user_metadata),
-
+          email: prof?.email ?? user.email ?? null,
+          app_role: roleFromUserMetadata(user.user_metadata),
           plan: normalizedPlan,
           credits_balance: Number(prof?.credits_balance ?? 0),
-          
+          referral_code: prof?.referral_code ?? null,
+          referred_by: prof?.referred_by ?? null,
         };
 
         if (alive.current) setProfile(normalized);
       } catch (err: unknown) {
-        const isAbortError = err instanceof DOMException && err.name === "AbortError";
+        const isAbortError =
+          err instanceof DOMException && err.name === "AbortError";
         if (!isAbortError) console.error("useProfile error:", err);
       } finally {
         if (alive.current) setLoading(false);
@@ -103,19 +106,17 @@ export function useProfile() {
     })();
   }, [supabase]);
 
- 
   const planInfo = getPlanInfo(profile?.plan ?? "free");
 
   return {
     profile,
     loading,
-
-   
     plan: profile?.plan ?? "free",
     role: profile?.app_role ?? null,
     planLabel: planInfo.label,
     planPriceLabel: planInfo.priceLabel,
-
     creditsRemaining: profile?.credits_balance ?? 0,
+    referralCode: profile?.referral_code ?? null,
+    referredBy: profile?.referred_by ?? null,
   };
 }

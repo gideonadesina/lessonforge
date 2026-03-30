@@ -1,110 +1,155 @@
 import { NextResponse } from "next/server";
 import { paystackHeaders } from "@/lib/paystack";
 import { createAdminClient } from "@/lib/supabase/admin";
- 
-type PaidTier = "basic" | "pro";
- 
-const BASIC_ALLOWANCE = 20;
-const PRO_ALLOWANCE = 50;
- 
-function normalizeTier(rawTier: unknown): PaidTier | null {
-  const tier = String(rawTier ?? "").toLowerCase().trim();
-  if (tier === "basic" || tier === "pro") return tier;
-  return null;
+import {
+  isValidTeacherPlanId,
+  type TeacherPlanId,
+} from "@/lib/billing/server-pricing";
+import {
+  processTeacherPayment,
+  type ProcessPaymentInput,
+} from "@/lib/billing/server-payment";
+
+function normalizeTeacherPlanId(rawPlan: unknown): TeacherPlanId | null {
+  if (!isValidTeacherPlanId(rawPlan)) return null;
+  return rawPlan as TeacherPlanId;
 }
- 
-function inferTierFromAmount(rawAmount: unknown, rawCurrency: unknown): PaidTier | null {
-  const amount = Number(rawAmount);
-  if (!Number.isFinite(amount) || amount <= 0) return null;
- 
-  const currency = String(rawCurrency ?? "NGN").toUpperCase();
- 
-  if (currency === "NGN") {
-    if (amount >= 500000) return "pro";
-    if (amount >= 200000) return "basic";
-    return null;
-  }
- 
-  if (currency === "USD") {
-    if (amount >= 500) return "pro";
-    if (amount >= 200) return "basic";
-  }
- 
-  return null;
-}
- 
-async function resolveTierForUser(userId: string, data: any): Promise<PaidTier> {
+
+async function resolvePlanForUser(userId: string, data: any): Promise<TeacherPlanId> {
   const admin = createAdminClient();
- 
+
   const { data: existing } = await admin
     .from("profiles")
-    .select("plan, is_pro")
+    .select("plan")
     .eq("id", userId)
     .maybeSingle();
- 
-  const fromMetadata = normalizeTier(data?.metadata?.tier);
+
+  // Try to get plan from metadata first
+  const fromMetadata = normalizeTeacherPlanId(data?.metadata?.plan);
   if (fromMetadata) return fromMetadata;
- 
-  const fromExisting = normalizeTier(existing?.plan);
+
+  // Fall back to existing plan in database
+  const fromExisting = normalizeTeacherPlanId(existing?.plan);
   if (fromExisting) return fromExisting;
- 
-  if (existing?.is_pro === true) return "pro";
- 
-  const fromAmount = inferTierFromAmount(data?.amount, data?.currency);
-  return fromAmount ?? "basic";
+
+  // Default to basic if unable to determine
+  return "basic";
 }
- 
+
+/**
+ * Update profile metadata and plan info after payment.
+ * Separate from credit grant to avoid overwriting balance.
+ */
+async function updateProfileMetadata(
+  userId: string,
+  plan: TeacherPlanId,
+  paystackData: any
+) {
+  const admin = createAdminClient();
+
+  await admin
+    .from("profiles")
+    .update({
+      plan,
+      is_pro: plan !== "basic",
+      pro_expires_at:
+        plan !== "basic"
+          ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+          : null,
+      paystack_subscription_code:
+        paystackData?.subscription?.subscription_code ?? null,
+      paystack_customer_code: paystackData?.customer?.customer_code ?? null,
+      paystack_email: paystackData?.customer?.email ?? null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", userId);
+}
+
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const reference = String(searchParams.get("reference") ?? "").trim();
- 
-  if (!reference) {
-    return NextResponse.json({ error: "Missing reference" }, { status: 400 });
-  }
- 
-  const res = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
-    headers: paystackHeaders(),
-  });
- 
-  const json = await res.json();
- 
-  if (!res.ok || !json?.status) {
-    return NextResponse.json({ error: "Verify failed", details: json }, { status: 400 });
-  }
- 
-  if (json?.data?.status === "success") {
-    const userId = String(json?.data?.metadata?.user_id ?? "").trim();
- 
-    if (userId) {
-      const tier = await resolveTierForUser(userId, json?.data);
-      const allowance = tier === "pro" ? PRO_ALLOWANCE : BASIC_ALLOWANCE;
- 
-      const admin = createAdminClient();
-      const { error } = await admin.from("profiles").upsert(
-        {
-          id: userId,
-          plan: tier,
-          is_pro: tier === "pro",
-          pro_expires_at:
-            tier === "pro"
-              ? new Date(Date.now() + 32 * 24 * 60 * 60 * 1000).toISOString()
-              : null,
-          credits_monthly_allowance: allowance,
-          credits_balance: allowance,
-          credits_reset_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          paystack_subscription_code: json?.data?.subscription?.subscription_code ?? null,
-          paystack_customer_code: json?.data?.customer?.customer_code ?? null,
-          paystack_email: json?.data?.customer?.email ?? null,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "id" }
-      );
- 
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
-      }
+  try {
+    const { searchParams } = new URL(req.url);
+    const reference = String(searchParams.get("reference") ?? "").trim();
+
+    if (!reference) {
+      return NextResponse.json({ error: "Missing reference" }, { status: 400 });
     }
+
+    // Verify with Paystack
+    const res = await fetch(
+      `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
+      {
+        headers: paystackHeaders(),
+      }
+    );
+
+    const json = await res.json();
+
+    if (!res.ok || !json?.status) {
+      return NextResponse.json(
+        { error: "Verify failed", details: json },
+        { status: 400 }
+      );
+    }
+
+    if (json?.data?.status !== "success") {
+      return NextResponse.json(
+        { error: "Payment was not successful" },
+        { status: 400 }
+      );
+    }
+
+    const paystackData = json.data ?? {};
+    const userId = String(paystackData?.metadata?.user_id ?? "").trim();
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Missing user_id in payment metadata" },
+        { status: 400 }
+      );
+    }
+
+    // Resolve the plan
+    const plan = await resolvePlanForUser(userId, paystackData);
+
+    // Process payment with idempotency
+    const paymentResult = await processTeacherPayment({
+      reference,
+      userId,
+      plan,
+      amount: paystackData?.amount,
+      currency: paystackData?.currency,
+      paystackCustomerCode: paystackData?.customer?.customer_code,
+      paystackSubscriptionCode: paystackData?.subscription?.subscription_code,
+      paystackEmail: paystackData?.customer?.email,
+      payerPayload: paystackData,
+      flow: "teacher_checkout",
+    } as ProcessPaymentInput);
+
+    if (!paymentResult.ok) {
+      return NextResponse.json(
+        { error: paymentResult.error },
+        { status: 500 }
+      );
+    }
+
+    // Update profile metadata (plan, expiry, paystack codes)
+    await updateProfileMetadata(userId, plan, paystackData);
+
+    // Return success with credit info
+    return NextResponse.json({
+      ok: true,
+      reference,
+      userId,
+      plan,
+      creditsAwarded: paymentResult.creditsAwarded,
+      previousBalance: paymentResult.previousBalance,
+      newBalance: paymentResult.newBalance,
+      alreadyProcessed: paymentResult.alreadyProcessed,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Verification failed";
+    console.error("Paystack verify error:", error);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
- 
-  return NextResponse.json({ ok: true, data: json.data });
 }

@@ -1,10 +1,10 @@
 "use client";
- 
+
 import type { User } from "@supabase/supabase-js";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
- 
+
 import AuthCard from "@/components/auth/AuthCard";
 import AuthHeader from "@/components/auth/AuthHeader";
 import AuthInput from "@/components/auth/AuthInput";
@@ -18,19 +18,19 @@ import {
 } from "@/lib/auth/roles";
 import { fetchRoleContext, getAuthErrorMessage, type RoleContextResponse } from "@/lib/auth/client";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
- 
+
 type SocialProvider = "google" | "microsoft";
 type Mode = "login" | "signup";
- 
+
 type RoleAuthScreenProps = {
   role: AppRole;
 };
- 
+
 function isMissingRoleColumnError(message: string) {
   const normalized = message.toLowerCase();
   return normalized.includes("column") && normalized.includes("role");
 }
- 
+
 function isProfilePermissionError(message: string) {
   const normalized = message.toLowerCase();
   return (
@@ -40,7 +40,7 @@ function isProfilePermissionError(message: string) {
     normalized.includes("not authenticated")
   );
 }
- 
+
 function hasOAuthCallbackParams() {
   if (typeof window === "undefined") return false;
   const searchParams = new URLSearchParams(window.location.search);
@@ -65,6 +65,7 @@ function getUnavailableRoleMessage(requestedRoleLabel: string) {
 }
 
 const SOCIAL_INTENT_STORAGE_KEY = "lessonforge:oauth-intent";
+const REFERRAL_STORAGE_KEY = "lessonforge:referral-code";
 
 function readSocialIntent(): Mode {
   if (typeof window === "undefined") return "login";
@@ -81,26 +82,43 @@ function clearSocialIntent() {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(SOCIAL_INTENT_STORAGE_KEY);
 }
- 
+
+function readStoredReferralCode() {
+  if (typeof window === "undefined") return null;
+  const value = window.localStorage.getItem(REFERRAL_STORAGE_KEY);
+  return value?.trim() || null;
+}
+
+function writeStoredReferralCode(code: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(REFERRAL_STORAGE_KEY, code.trim());
+}
+
+function clearStoredReferralCode() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(REFERRAL_STORAGE_KEY);
+}
+
 export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = useMemo(() => createBrowserSupabase(), []);
- 
+
   const [mode, setMode] = useState<Mode>("login");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
- 
+
   const [message, setMessage] = useState<string | null>(null);
   const [emailLoading, setEmailLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState<SocialProvider | null>(null);
   const [syncingRole, setSyncingRole] = useState(false);
- 
+
   const hasHandledSessionRef = useRef(false);
- 
+
   const roleConfig = ROLE_CONTENT[role];
- 
+
   const redirectAfterLogin = useCallback(
     (targetRole: AppRole) => {
       persistActiveRole(targetRole);
@@ -109,24 +127,26 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
     },
     [router]
   );
- 
+
   const ensureProfile = useCallback(
     async (user: User, preferredName: string, preferredRole: AppRole) => {
       const metadata = (user.user_metadata ?? {}) as Record<string, unknown>;
       const profileBase = {
         id: user.id,
         email: user.email ?? "",
-        full_name: preferredName.trim() || (typeof metadata.full_name === "string" ? metadata.full_name : ""),
+        full_name:
+          preferredName.trim() ||
+          (typeof metadata.full_name === "string" ? metadata.full_name : ""),
         updated_at: new Date().toISOString(),
       };
- 
+
       const upsertWithRole = await supabase.from("profiles").upsert({
         ...profileBase,
         role: preferredRole,
       });
- 
+
       if (!upsertWithRole.error) return;
- 
+
       if (isMissingRoleColumnError(upsertWithRole.error.message)) {
         const fallback = await supabase.from("profiles").upsert(profileBase);
         if (fallback.error && !isProfilePermissionError(fallback.error.message)) {
@@ -134,36 +154,81 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
         }
         return;
       }
- 
+
       if (!isProfilePermissionError(upsertWithRole.error.message)) {
         throw upsertWithRole.error;
       }
     },
     [supabase]
   );
- 
+
+  const applyStoredReferralToProfile = useCallback(
+    async (user: User) => {
+      const storedRef = readStoredReferralCode();
+      if (!storedRef) return;
+
+      const { data: prof, error } = await supabase
+        .from("profiles")
+        .select("id, referral_code, referred_by")
+        .eq("id", user.id)
+        .single();
+
+      if (error) {
+        console.warn("Unable to read profile for referral sync:", error.message);
+        return;
+      }
+
+      if (
+        prof?.referral_code &&
+        prof.referral_code.trim().toUpperCase() === storedRef.toUpperCase()
+      ) {
+        clearStoredReferralCode();
+        return;
+      }
+
+      if (!prof?.referred_by) {
+        const { error: updateError } = await supabase
+          .from("profiles")
+          .update({
+            referred_by: storedRef.toUpperCase(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", user.id);
+
+        if (updateError) {
+          console.warn("Unable to save referral code:", updateError.message);
+          return;
+        }
+      }
+
+      clearStoredReferralCode();
+    },
+    [supabase]
+  );
+
   const ensureSignupProfile = useCallback(
     async (user: User, preferredName: string) => {
       const nextMetadata: Record<string, unknown> = {
         ...(user.user_metadata ?? {}),
         app_role: role,
       };
- 
+
       if (preferredName.trim()) {
         nextMetadata.full_name = preferredName.trim();
       }
- 
+
       const { error: updateError } = await supabase.auth.updateUser({
         data: nextMetadata,
       });
- 
+
       if (updateError) {
         console.warn("Unable to sync role metadata:", updateError.message);
       }
- 
+
       await ensureProfile(user, preferredName, role);
+      await applyStoredReferralToProfile(user);
     },
-    [ensureProfile, role, supabase]
+    [applyStoredReferralToProfile, ensureProfile, role, supabase]
   );
 
   const resolveRoleAfterAuth = useCallback(
@@ -184,29 +249,30 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
     },
     []
   );
- 
+
   const syncUserRoleAndRedirect = useCallback(
     async (userId?: string) => {
       if (hasHandledSessionRef.current) return;
       hasHandledSessionRef.current = true;
       setSyncingRole(true);
       setMessage(null);
- 
+
       try {
         const {
           data: { user },
           error: userError,
         } = await supabase.auth.getUser();
- 
+
         if (userError) throw userError;
         if (!user || (userId && user.id !== userId)) {
           hasHandledSessionRef.current = false;
           return;
         }
- 
+
         let roleContext = await resolveRoleAfterAuth(role, {
           allowUnprovisioned: true,
         });
+
         if (!roleContext.availableRoles.length) {
           const socialIntent = readSocialIntent();
           if (socialIntent === "signup") {
@@ -224,9 +290,13 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
             return;
           }
         }
+
+        await applyStoredReferralToProfile(user);
+
         const nextRole =
           (roleContext.availableRoles.includes(role) ? role : roleContext.activeRole) ??
           roleContext.availableRoles[0];
+
         if (!nextRole) {
           throw new Error("No workspace role is available for this account.");
         }
@@ -240,49 +310,56 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
         setSyncingRole(false);
       }
     },
-    [ensureSignupProfile, role, redirectAfterLogin, resolveRoleAfterAuth, supabase]
+    [applyStoredReferralToProfile, ensureSignupProfile, role, redirectAfterLogin, resolveRoleAfterAuth, supabase]
   );
- 
+
+  useEffect(() => {
+    const ref = searchParams.get("ref");
+    if (ref && ref.trim()) {
+      writeStoredReferralCode(ref.trim().toUpperCase());
+    }
+  }, [searchParams]);
+
   useEffect(() => {
     let active = true;
- 
+
     persistActiveRole(role);
     if (!hasOAuthCallbackParams()) return;
- 
+
     (async () => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
- 
+
       if (active && session?.user) {
         await syncUserRoleAndRedirect(session.user.id);
       }
     })();
- 
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!session?.user) return;
- 
+
       if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
         await syncUserRoleAndRedirect(session.user.id);
       }
     });
- 
+
     return () => {
       active = false;
       subscription.unsubscribe();
     };
   }, [role, supabase, syncUserRoleAndRedirect]);
- 
+
   async function handleSocialSignIn(provider: SocialProvider) {
     setMessage(null);
     setSocialLoading(provider);
- 
+
     try {
       persistActiveRole(role);
       writeSocialIntent(mode);
- 
+
       const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
       if (signOutError) {
         console.warn(
@@ -290,8 +367,8 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
           signOutError.message
         );
       }
- 
-      const redirectTo = `${window.location.origin}/auth/${role}`;
+
+      const redirectTo = `${window.location.origin}/auth/${role}${window.location.search}`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: provider === "google" ? "google" : "azure",
         options: {
@@ -299,7 +376,7 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
           queryParams: { prompt: "select_account" },
         },
       });
- 
+
       if (error) {
         setMessage(error.message);
         clearSocialIntent();
@@ -311,33 +388,33 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
       setSocialLoading(null);
     }
   }
- 
+
   async function handleEmailAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage(null);
- 
+
     const cleanName = fullName.trim();
     const cleanEmail = email.trim().toLowerCase();
- 
+
     if (!cleanEmail || !password || (mode === "signup" && !cleanName)) {
       setMessage("Please complete all required fields.");
       return;
     }
- 
+
     if (password.length < 6) {
       setMessage("Password must be at least 6 characters.");
       return;
     }
- 
+
     setEmailLoading(true);
- 
+
     try {
       persistActiveRole(role);
- 
+
       const {
         data: { session: activeSession },
       } = await supabase.auth.getSession();
- 
+
       if (
         activeSession?.user?.email &&
         activeSession.user.email.toLowerCase() !== cleanEmail
@@ -347,7 +424,7 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
           console.warn("Unable to clear previous session before sign in:", signOutError.message);
         }
       }
- 
+
       if (mode === "signup") {
         const { data, error } = await supabase.auth.signUp({
           email: cleanEmail,
@@ -359,12 +436,12 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
             },
           },
         });
- 
+
         if (error) {
           setMessage(error.message);
           return;
         }
- 
+
         if (data.session && data.user) {
           await ensureSignupProfile(data.user, cleanName);
           const roleContext = await resolveRoleAfterAuth(role);
@@ -377,7 +454,7 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
           redirectAfterLogin(nextRole);
           return;
         }
- 
+
         setMode("login");
         setPassword("");
         setMessage(
@@ -386,12 +463,12 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
         clearSocialIntent();
         return;
       }
- 
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
       });
- 
+
       if (error) {
         const text = String(error.message || "Unable to sign in right now.");
         const normalizedText = text.toLowerCase();
@@ -410,7 +487,7 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
         }
         return;
       }
- 
+
       if (!data.user) {
         throw new Error("Unable to load your account after sign in.");
       }
@@ -432,14 +509,14 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
       setEmailLoading(false);
     }
   }
- 
+
   const isBusy = emailLoading || Boolean(socialLoading) || syncingRole;
- 
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#FAF9F6] p-4 sm:p-6">
       <AuthCard>
         <AuthHeader role={role} />
- 
+
         <div className="mt-6 inline-flex rounded-xl border border-violet-100 bg-violet-50/60 p-1">
           <button
             type="button"
@@ -466,7 +543,7 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
             Sign up
           </button>
         </div>
- 
+
         <div className="mt-6 space-y-3">
           <SocialLoginButton
             provider="google"
@@ -479,7 +556,7 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
             onClick={() => handleSocialSignIn("microsoft")}
           />
         </div>
- 
+
         <div className="my-6 flex items-center gap-3">
           <div className="h-px flex-1 bg-slate-200" />
           <span className="text-xs uppercase tracking-[0.1em] text-slate-500">
@@ -487,7 +564,7 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
           </span>
           <div className="h-px flex-1 bg-slate-200" />
         </div>
- 
+
         <form onSubmit={handleEmailAuth} className="space-y-4">
           {mode === "signup" ? (
             <AuthInput
@@ -501,7 +578,7 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
               required
             />
           ) : null}
- 
+
           <AuthInput
             label="Email"
             type="email"
@@ -512,7 +589,7 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
             disabled={isBusy}
             required
           />
- 
+
           <div className="space-y-2">
             <label htmlFor="auth-password" className="block text-sm font-medium text-slate-700">
               Password
@@ -539,7 +616,7 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
                 {showPassword ? "Hide" : "Show"}
               </button>
             </div>
- 
+
             {mode === "login" ? (
               <div className="flex justify-end">
                 <Link
@@ -551,7 +628,7 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
               </div>
             ) : null}
           </div>
- 
+
           <button
             type="submit"
             disabled={isBusy}
@@ -562,19 +639,19 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
                 ? "Creating account..."
                 : "Signing in..."
               : syncingRole
-                ? "Finishing setup..."
-                : mode === "signup"
-                  ? `Create ${roleConfig.label} account`
-                  : `Sign in as ${roleConfig.label}`}
+              ? "Finishing setup..."
+              : mode === "signup"
+              ? `Create ${roleConfig.label} account`
+              : `Sign in as ${roleConfig.label}`}
           </button>
         </form>
- 
+
         {message ? (
           <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
             {message}
           </div>
         ) : null}
- 
+
         <div className="mt-6 space-y-2 text-center text-sm text-slate-600">
           <p>
             {mode === "login" ? "Need an account?" : "Already have an account?"}{" "}

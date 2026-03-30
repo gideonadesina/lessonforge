@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { paystackHeaders, appUrl } from "@/lib/paystack";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@supabase/supabase-js";
+import {
+  isValidTeacherPlanId,
+  getPlanPaystackAmount,
+  getPlanCredits,
+} from "@/lib/billing/server-pricing";
 
 export async function POST(req: Request) {
   try {
@@ -29,28 +34,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { currency = "NGN", tier } = (await req.json()) as {
+    const { currency = "NGN", plan } = (await req.json()) as {
       currency?: "NGN" | "USD";
-      tier: "basic" | "pro";
+      plan: unknown;
     };
 
- if (tier !== "basic" && tier !== "pro") {
-      return NextResponse.json({ error: "Invalid tier" }, { status: 400 });
-    }
-  const isNGN = currency === "NGN";
-    const amountMajor =
-      tier === "pro"
-        ? Number(isNGN ? process.env.TEACHER_PLAN_PRICE_PRO_NGN ?? 5000 : process.env.TEACHER_PLAN_PRICE_PRO_USD ?? 50)
-        : Number(isNGN ? process.env.TEACHER_PLAN_PRICE_BASIC_NGN ?? 2000 : process.env.TEACHER_PLAN_PRICE_BASIC_USD ?? 20);
-    const creditsAllowance =
-      tier === "pro"
-        ? Number(process.env.TEACHER_PLAN_CREDITS_PRO ?? 50)
-        : Number(process.env.TEACHER_PLAN_CREDITS_BASIC ?? 20);
-if (!Number.isFinite(amountMajor) || amountMajor <= 0) {
-      return NextResponse.json({ error: "Invalid configured amount for selected tier" }, { status: 500 });
+ if (!isValidTeacherPlanId(plan)) {
+      return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
     }
 
-    const amountMinor = Math.round(amountMajor * 100);
+    // Get pricing and credits from centralized config
+    const amountMinor = getPlanPaystackAmount(plan, currency);
+    const creditsAllowance = getPlanCredits(plan);
+
+ if (!Number.isFinite(amountMinor) || amountMinor <= 0) {
+      return NextResponse.json({ error: "Invalid pricing for selected plan" }, { status: 500 });
+    }
     const admin = createAdminClient();
     await admin.from("profiles").upsert(
       {
@@ -71,9 +70,8 @@ if (!Number.isFinite(amountMajor) || amountMajor <= 0) {
         metadata: {
           purpose: "teacher_plan_purchase",
           user_id: user.id,
-          tier,
+          plan,
           currency,
-          expected_amount_major: amountMajor,
           expected_amount_minor: amountMinor,
           credits_allowance: creditsAllowance,
           initiated_at: new Date().toISOString(),
@@ -81,21 +79,21 @@ if (!Number.isFinite(amountMajor) || amountMajor <= 0) {
       }),
     });
 
-
     const json = await res.json();
-
- 
 
     if (!res.ok || !json?.status) {
       return NextResponse.json({ error: "Paystack init failed", details: json }, { status: 400 });
     }
+
+    // Convert minor units back to major for response
+    const amountMajor = currency === "NGN" ? amountMinor / 100 : amountMinor / 100;
 
     return NextResponse.json({
       authorization_url: json.data.authorization_url,
       reference: json.data.reference,
       amount: amountMajor,
       currency,
-      tier,
+      plan,
     });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
