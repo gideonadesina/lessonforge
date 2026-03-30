@@ -262,6 +262,7 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
           data: { user },
           error: userError,
         } = await supabase.auth.getUser();
+        
 
         if (userError) throw userError;
         if (!user || (userId && user.id !== userId)) {
@@ -269,40 +270,11 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
           return;
         }
 
-        let roleContext = await resolveRoleAfterAuth(role, {
-          allowUnprovisioned: true,
-        });
+        // 🚀 FAST PATH: skip heavy role checks, go straight in
+clearSocialIntent();
+redirectAfterLogin(role);
+return;
 
-        if (!roleContext.availableRoles.length) {
-          const socialIntent = readSocialIntent();
-          if (socialIntent === "signup") {
-            await ensureSignupProfile(user, "");
-            roleContext = await resolveRoleAfterAuth(role);
-          } else {
-            clearPersistedActiveRole();
-            await supabase.auth.signOut({ scope: "local" });
-            clearSocialIntent();
-            setMode("signup");
-            setMessage(
-              `${getNoAccountMessage()} Use Sign up or social signup to create your account first.`
-            );
-            hasHandledSessionRef.current = false;
-            return;
-          }
-        }
-
-        await applyStoredReferralToProfile(user);
-
-        const nextRole =
-          (roleContext.availableRoles.includes(role) ? role : roleContext.activeRole) ??
-          roleContext.availableRoles[0];
-
-        if (!nextRole) {
-          throw new Error("No workspace role is available for this account.");
-        }
-
-        clearSocialIntent();
-        redirectAfterLogin(nextRole);
       } catch (error: unknown) {
         hasHandledSessionRef.current = false;
         setMessage(normalizeAuthErrorMessage(error, "Unable to finish sign in."));
@@ -353,41 +325,33 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
   }, [role, supabase, syncUserRoleAndRedirect]);
 
   async function handleSocialSignIn(provider: SocialProvider) {
-    setMessage(null);
-    setSocialLoading(provider);
+  setMessage(null);
+  setSocialLoading(provider);
 
-    try {
-      persistActiveRole(role);
-      writeSocialIntent(mode);
+  try {
+    persistActiveRole(role);
+    writeSocialIntent(mode);
 
-      const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
-      if (signOutError) {
-        console.warn(
-          "Unable to clear previous session before social sign in:",
-          signOutError.message
-        );
-      }
+    const redirectTo = `${window.location.origin}/auth/${role}`;
 
-      const redirectTo = `${window.location.origin}/auth/${role}${window.location.search}`;
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: provider === "google" ? "google" : "azure",
-        options: {
-          redirectTo,
-          queryParams: { prompt: "select_account" },
-        },
-      });
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: provider === "google" ? "google" : "azure",
+      options: {
+        redirectTo,
+      },
+    });
 
-      if (error) {
-        setMessage(error.message);
-        clearSocialIntent();
-      }
-    } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "Unable to sign in right now.");
+    if (error) {
+      setMessage(error.message);
       clearSocialIntent();
-    } finally {
-      setSocialLoading(null);
     }
+  } catch (error: unknown) {
+    setMessage(error instanceof Error ? error.message : "Unable to sign in right now.");
+    clearSocialIntent();
+  } finally {
+    setSocialLoading(null);
   }
+}
 
   async function handleEmailAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -419,10 +383,6 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
         activeSession?.user?.email &&
         activeSession.user.email.toLowerCase() !== cleanEmail
       ) {
-        const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
-        if (signOutError) {
-          console.warn("Unable to clear previous session before sign in:", signOutError.message);
-        }
       }
 
       if (mode === "signup") {
