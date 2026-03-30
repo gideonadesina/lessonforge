@@ -15,6 +15,8 @@ import {
   type AppRole,
 } from "@/lib/auth/roles";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { LESSON_PACK_CREDIT_COST } from "@/lib/billing/pricing";
+import { useProfile } from "@/lib/useProfile";
 
 export default function Topbar({
   userEmail,
@@ -26,7 +28,6 @@ export default function Topbar({
    const pathname = usePathname();
   const isPrincipalArea = pathname.startsWith("/principal");
   const [loading, setLoading] = useState(false);
-  const [plansOpen, setPlansOpen] = useState(false);
   const [availableRoles, setAvailableRoles] = useState<AppRole[]>([]);
   const [activeRole, setActiveRole] = useState<AppRole | null>(null);
   const [switchingRole, setSwitchingRole] = useState<AppRole | null>(null);
@@ -35,6 +36,7 @@ export default function Topbar({
   const roleMenuRef = useRef<HTMLDivElement | null>(null);
 
   const supabase = useMemo(() => createBrowserSupabase(), []);
+  const { creditsRemaining, loading: profileLoading } = useProfile();
 
   useEffect(() => {
     void (async () => {
@@ -89,39 +91,6 @@ export default function Topbar({
   }
 
   const canSwitchRole = availableRoles.length > 1;
-
-  async function upgradePlan(tier: "basic" | "pro") {
-    const [{ data: userData }, { data: sessionData }] = await Promise.all([
-      supabase.auth.getUser(),
-      supabase.auth.getSession(),
-    ]);
-    const user = userData.user;
-    const token = sessionData.session?.access_token;
-    if (!user || !token) return;
-
-    const res = await fetch("/api/paystack/initialize", {
-      method: "POST",
-     headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        
-        currency: "NGN",
-        tier,
-      }),
-    });
-
-    const json = await res.json();
-
-    if (!res.ok) {
-      console.log(json);
-      alert(json?.error || "Payment init failed");
-      return;
-    }
-
-    window.location.href = json.authorization_url;
-  }
 
   return (
     <>
@@ -223,30 +192,15 @@ export default function Topbar({
             </>
           ) : (
             <>
-              {/* ✅ Mobile: show Upgrade button that opens a modal (works on iOS) */}
-              <button
-                onClick={() => setPlansOpen(true)}
-                className="sm:hidden rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+              <div className="inline-flex items-center rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 sm:text-sm">
+                {profileLoading ? "Credits..." : `${creditsRemaining} credits`}
+              </div>
+              <Link
+                href="/pricing"
+                className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700"
               >
                 Upgrade
-              </button>
-
-
-          
-           {/* Desktop/tablet (sm+) */}
-              <button
-                onClick={() => upgradePlan("basic")}
-                className="hidden rounded-xl border bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50 sm:inline-flex"
-              >
-                Basic ₦2,000/mo
-              </button>
-
-              <button
-                onClick={() => upgradePlan("pro")}
-                className="hidden rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 sm:inline-flex"
-              >
-                Pro ₦5,000/mo
-              </button>
+              </Link>
             </>
           )}
 
@@ -284,45 +238,11 @@ export default function Topbar({
           ))}
         </div>
       ) : null}
-      
-
-      {/* ✅ Upgrade Modal (mobile) */}
-      {plansOpen && !isPrincipalArea && (
-        <>
-          <button
-            className="fixed inset-0 z-50 bg-black/40"
-            aria-label="Close upgrade modal"
-            onClick={() => setPlansOpen(false)}
-          />
-          <div className="fixed left-0 right-0 bottom-0 z-50 rounded-t-3xl bg-white p-4 shadow-xl">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-semibold text-slate-900">Upgrade Plan</div>
-              <button
-                className="h-10 w-10 rounded-xl border border-slate-200 bg-white"
-                onClick={() => setPlansOpen(false)}
-                aria-label="Close"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="mt-3 grid gap-2">
-              <button
-                onClick={() => upgradePlan("basic")}
-                className="w-full rounded-xl border bg-white px-4 py-3 text-sm font-semibold hover:bg-slate-50"
-              >
-                Basic ₦2,000
-              </button>
-              <button
-                onClick={() => upgradePlan("pro")}
-                className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800"
-              >
-                Pro ₦5,000
-              </button>
-            </div>
-          </div>
-        </>
-      )}
+      {!isPrincipalArea ? (
+        <p className="mt-2 text-xs text-slate-500">
+          1 lesson pack uses {LESSON_PACK_CREDIT_COST} credits.
+        </p>
+      ) : null}
     </>
   );
 }

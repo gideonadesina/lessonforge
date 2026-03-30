@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { roleFromUserMetadata, type AppRole } from "@/lib/auth/roles";
+import { formatNaira, TEACHER_PRICING_PLANS } from "@/lib/billing/pricing";
 
-export type Plan = "free" | "basic" | "pro";
+export type Plan = "free" | "basic" | "pro" | "pro_plus" | "ultra_pro";
 
 export type Profile = {
   full_name: string | null;
@@ -19,14 +20,27 @@ export type Profile = {
 };
 
 export function getPlanInfo(plan: Plan) {
-  if (plan === "basic") return { label: "Basic", priceLabel: "₦2,000 per recharge" };
-  if (plan === "pro") return { label: "Pro", priceLabel: "₦5,000/ per recharge" };
+  const matchedPlan = TEACHER_PRICING_PLANS.find((entry) => entry.id === plan);
+  if (matchedPlan) {
+    return {
+      label: matchedPlan.name,
+      priceLabel: `${formatNaira(matchedPlan.priceNaira)} per top-up`,
+    };
+  }
   return { label: "Free Trial", priceLabel: "₦0" };
 }
 
 function normalizePlan(plan: string | null): Plan {
   const p = (plan ?? "free").toLowerCase();
-  if (p === "free" || p === "basic" || p === "pro") return p;
+  if (
+    p === "free" ||
+    p === "basic" ||
+    p === "pro" ||
+    p === "pro_plus" ||
+    p === "ultra_pro"
+  ) {
+    return p;
+  }
   
   return "free";
 }

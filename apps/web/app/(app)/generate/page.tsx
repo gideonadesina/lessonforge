@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { useProfile } from "@/lib/useProfile";
+import TeacherPaywallModal from "@/components/billing/TeacherPaywallModal";
+import { LESSON_PACK_CREDIT_COST } from "@/lib/billing/pricing";
 
 type VocabularyItem = {
   word?: string;
@@ -163,8 +165,9 @@ export default function GeneratePage() {
 
   const [result, setResult] = useState<Generated | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
+  const [showPaywall, setShowPaywall] = useState(false);
 
-  const outOfCredits = !profileLoading && creditsRemaining <= 0;
+  const hasInsufficientCredits = !profileLoading && creditsRemaining < LESSON_PACK_CREDIT_COST;
 
   useEffect(() => {
     (window as any).__FORGE_CONTEXT__ = {
@@ -201,8 +204,11 @@ export default function GeneratePage() {
   ]);
 
   async function onGenerate() {
-    if (outOfCredits) {
-      setError("No credits remaining. Recharge to continue generating new content.");
+    if (hasInsufficientCredits) {
+      setShowPaywall(true);
+      setError(
+        `You need at least ${LESSON_PACK_CREDIT_COST} credits to generate one lesson pack.`
+      );
       return;
     }
 
@@ -241,6 +247,9 @@ export default function GeneratePage() {
       const json = await res.json();
 
       if (!res.ok) {
+        if (res.status === 402) {
+          setShowPaywall(true);
+        }
         throw new Error(json?.error || json?.message || "Generation failed");
       }
 
@@ -623,19 +632,30 @@ export default function GeneratePage() {
         </p>
       </div>
 
-      {outOfCredits ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
-          <p className="font-semibold">Credits exhausted on {planLabel} plan.</p>
-          <p className="mt-1">
-            New generation is blocked, but your saved content stays accessible in
-            Library and Dashboard.
+      {hasInsufficientCredits ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <p className="font-semibold">
+            You currently have {creditsRemaining} credits on the {planLabel} plan.
           </p>
-          <Link
-            href="/settings"
-            className="mt-3 inline-flex rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-semibold text-rose-900"
-          >
-            Recharge / Upgrade
-          </Link>
+          <p className="mt-1">
+            You need {LESSON_PACK_CREDIT_COST} credits for one lesson pack. Upgrade when ready to
+            keep generating.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link
+              href="/pricing"
+              className="inline-flex rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-700"
+            >
+              View Pricing / Upgrade
+            </Link>
+            <button
+              type="button"
+              onClick={() => setShowPaywall(true)}
+              className="inline-flex rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+            >
+              Learn more
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -713,7 +733,7 @@ export default function GeneratePage() {
             onClick={onGenerate}
             disabled={
               loading ||
-              outOfCredits ||
+              hasInsufficientCredits ||
               !curriculum.trim() ||
               !schoolLevel.trim() ||
               !subject.trim() ||
@@ -1292,6 +1312,11 @@ export default function GeneratePage() {
           ) : null}
         </div>
       )}
+      <TeacherPaywallModal
+        open={showPaywall}
+        onClose={() => setShowPaywall(false)}
+        remainingCredits={creditsRemaining}
+      />
     </div>
   );
 }

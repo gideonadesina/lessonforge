@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { useProfile } from "@/lib/useProfile";
+import { LESSON_PACK_CREDIT_COST } from "@/lib/billing/pricing";
 
 type ProfileMeta = {
   full_name?: string | null;
@@ -111,11 +112,20 @@ export default function DashboardHeader() {
             >
               Open Library
             </Link>
+            <Link
+              href="/pricing"
+              className="inline-flex items-center justify-center rounded-2xl border border-violet-200 bg-violet-50 px-5 py-3 text-sm font-semibold text-violet-700 transition hover:bg-violet-100"
+            >
+              Upgrade
+            </Link>
 
             <div className="ml-auto flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-sm font-bold text-white shadow-md">
               {initial}
             </div>
           </div>
+          <p className="text-xs text-slate-500">
+            1 lesson pack uses {LESSON_PACK_CREDIT_COST} credits.
+          </p>
         </div>
       </div>
     </section>
