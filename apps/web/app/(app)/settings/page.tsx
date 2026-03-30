@@ -1,10 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { signOutAndRedirect } from "@/lib/auth/logout";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
-
-type Plan = "free" | "basic" | "pro";
+import { LESSON_PACK_CREDIT_COST } from "@/lib/billing/pricing";
+import type { Plan } from "@/lib/useProfile";
 
 type Profile = {
   email: string | null;
@@ -14,13 +15,23 @@ type Profile = {
 
 function normalizePlan(plan: string | null): Plan {
   const p = (plan ?? "free").toLowerCase();
-  if (p === "basic" || p === "pro" || p === "free") return p;
+  if (
+    p === "basic" ||
+    p === "pro" ||
+    p === "pro_plus" ||
+    p === "ultra_pro" ||
+    p === "free"
+  ) {
+    return p;
+  }
   return "free";
 }
 
 function getPlanDisplay(plan: Plan) {
   if (plan === "basic") return { label: "Basic", colorClass: "text-slate-900" };
   if (plan === "pro") return { label: "Pro", colorClass: "text-green-600" };
+  if (plan === "pro_plus") return { label: "Pro Plus", colorClass: "text-violet-700" };
+  if (plan === "ultra_pro") return { label: "Ultra Pro", colorClass: "text-violet-700" };
   return { label: "Free Trial", colorClass: "text-slate-900" };
 }
 
@@ -91,7 +102,7 @@ export default function SettingsPage() {
   }
 
   const planInfo = getPlanDisplay(profile?.plan ?? "free");
-  const isPro = profile?.plan === "pro";
+  const isPaidPlan = profile?.plan !== "free";
 
   return (
      <div className="space-y-6">
@@ -131,22 +142,26 @@ export default function SettingsPage() {
       <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
         <h2 className="font-semibold text-slate-900 mb-4">Billing</h2>
 
-        {isPro ? (
-          <div className="text-green-600 text-sm font-medium">
-            You are on Pro plan.
+        {isPaidPlan ? (
+          <div className="space-y-3">
+            <div className="text-green-600 text-sm font-medium">
+              Your {planInfo.label} plan is active.
+            </div>
+            <div className="text-xs text-slate-500">
+              1 lesson pack uses {LESSON_PACK_CREDIT_COST} credits.
+            </div>
           </div>
         ) : (
           <div className="space-y-3">
             <div className="text-sm text-slate-600">
-              Upgrade to Pro to get more lesson generations.
+              Upgrade to get more credits for lesson generation.
             </div>
-
-            <button
-              onClick={() => (window.location.href = "/pricing")}
-              className="bg-violet-600 text-white px-4 py-2 rounded-xl hover:bg-violet-700 text-sm font-semibold"
+            <Link
+              href="/pricing"
+              className="inline-flex bg-violet-600 text-white px-4 py-2 rounded-xl hover:bg-violet-700 text-sm font-semibold"
             >
-              Upgrade to Pro
-            </button>
+              View Pricing
+            </Link>
           </div>
         )}
       </div>
