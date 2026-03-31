@@ -38,8 +38,10 @@ export default function LibraryPage() {
   const [sort, setSort] = useState<SortMode>("newest");
 
   const [active, setActive] = useState<LessonRow | null>(null);
+  const [activeWithPayload, setActiveWithPayload] = useState<LessonRow | null>(null);
   
   const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
+  const [isLoadingLessonContent, setIsLoadingLessonContent] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -54,11 +56,12 @@ export default function LibraryPage() {
       if (userErr || !user) throw new Error("Session expired. Please login again.");
       setEmail(user.email ?? "");
 
-      // ✅ FIX: select result_json (and keep content as fallback if it exists in some env)
+      // ✅ FIX: Fetch only summary fields for list view, not large result_json
       const { data, error: fetchErr } = await supabase
         .from("lessons")
-        .select("id, subject, topic, grade, curriculum, result_json, content, created_at")
-        .order("created_at", { ascending: false });
+        .select("id, subject, topic, grade, curriculum, created_at")
+        .order("created_at", { ascending: false })
+        .limit(200);
 
       if (fetchErr) throw fetchErr;
 
@@ -74,6 +77,31 @@ export default function LibraryPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Fetch full lesson data (with result_json) when modal opens
+  useEffect(() => {
+    if (!active) {
+      setActiveWithPayload(null);
+      return;
+    }
+
+    (async () => {
+      try {
+        const { data: fullLesson, error } = await supabase
+          .from("lessons")
+          .select("id, subject, topic, grade, curriculum, result_json, content, created_at")
+          .eq("id", active.id)
+          .single();
+
+        if (!error && fullLesson) {
+          setActiveWithPayload(fullLesson as LessonRow);
+        }
+      } catch {
+        // If fetch fails, use the basic active data
+        setActiveWithPayload(active);
+      }
+    })();
+  }, [active?.id, supabase]);
 
   function safeRender(value: any): React.ReactNode {
   if (value === null || value === undefined) return null;
@@ -947,7 +975,7 @@ export default function LibraryPage() {
       {/* Modal */}
       {active ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-xl">
+          <div className="w-[96vw] max-w-6xl h-[92vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
            <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-4">
   <div>
     <div className="text-lg font-bold text-slate-900">{active.topic || "Lesson"}</div>
@@ -1011,23 +1039,22 @@ export default function LibraryPage() {
 </div>
             <div className="max-h-[70vh] overflow-auto p-4">
             {(() => {
-  const gen = getGeneratedFromRow(active);
+  const gen = getGeneratedFromRow(activeWithPayload);
 
-  if (!gen) {
-    return (
-      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-        This lesson has no saved content yet. It was likely created before auto-save was fixed.
-        You can delete it and generate again.
-      </div>
-    );
-  }
+  if (isLoadingLessonContent) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+      Loading lesson content...
+    </div>
+  );
+}
 
-  return <LessonPreview gen={gen} fallbackSubject={active?.subject ?? ""} fallbackTopic={active?.topic ?? ""} />;
+  return <LessonPreview gen={gen} fallbackSubject={activeWithPayload?.subject ?? ""} fallbackTopic={activeWithPayload?.topic ?? ""} />;
 })()}
 
 
               {/* ✅ Small helpful message if the row is truly missing payload */}
-              {!getLessonPayload(active) ? (
+              {!isLoadingLessonContent && !getLessonPayload(activeWithPayload) ? (
                 <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
                   This lesson row has no saved content yet. It was likely created before auto-save was fixed.
                   You can delete it and generate again.

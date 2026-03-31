@@ -508,21 +508,29 @@ export async function GET(req: NextRequest) {
       const storedMode = normalizeContentMode(data.content_mode);
       const visualMode = getVisualMode(storedMode, worksheet);
  
-      let visuals: WorksheetVisual[] = [];
-      if (withVisuals && visualMode && process.env.OPENAI_API_KEY) {
-        const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-        let prompts = dedupeKeepOrder(extractVisualPromptsFromWorksheet(worksheet));
-        if (prompts.length === 0) {
-          prompts = getFallbackVisualPrompts(visualMode, data.subject, data.topic);
-        }
-        visuals = await generateWorksheetVisuals(client, {
-          mode: visualMode,
-          prompts,
-          subject: data.subject,
-          topic: data.topic,
-          grade: data.grade,
-        });
-      }
+     let visuals: WorksheetVisual[] = [];
+
+if (data.file_url) {
+  visuals = [
+    {
+      label: data.title ?? `${data.subject ?? ""}: ${data.topic ?? ""}`.trim(),
+      imageDataUrl: data.file_url,
+    },
+  ];
+} else if (withVisuals && visualMode && process.env.OPENAI_API_KEY) {
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  let prompts = dedupeKeepOrder(extractVisualPromptsFromWorksheet(worksheet));
+  if (prompts.length === 0) {
+    prompts = getFallbackVisualPrompts(visualMode, data.subject, data.topic);
+  }
+  visuals = await generateWorksheetVisuals(client, {
+    mode: visualMode,
+    prompts,
+    subject: data.subject,
+    topic: data.topic,
+    grade: data.grade,
+  });
+}
  
       const generated = {
         title: data.title ?? `${data.subject ?? ""}: ${data.topic ?? ""}`.trim(),
@@ -771,7 +779,20 @@ export async function POST(req: NextRequest) {
         grade,
       });
     }
- 
+    
+   const primaryVisual = visuals.find(
+  (visual) =>
+    typeof visual.imageDataUrl === "string" && visual.imageDataUrl.trim().length > 0
+);
+
+const savedFileUrl = primaryVisual?.imageDataUrl ?? null;
+
+const savedFileType = savedFileUrl ? "image/png" : null;
+
+const savedFileName = savedFileUrl
+  ? `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`
+  : null;
+
     // 4) Save row
     const { data: saved, error: saveErr } = await supabase
       .from("worksheets")
@@ -792,9 +813,9 @@ export async function POST(req: NextRequest) {
         class_name: body.className?.trim() || null,
         worksheet_date: body.worksheetDate || null,
         source,
-        file_url: null,
-        file_name: null,
-        file_type: null,
+        file_url: savedFileUrl,
+        file_name: savedFileName,
+        file_type: savedFileType,
         print_layout: printLayout,
         content_mode: contentMode,
       })
@@ -930,14 +951,22 @@ export async function PATCH(req: NextRequest) {
     if (error) return jsonErr(error.message, 500);
     if (!data) return jsonErr("Worksheet not found", 404);
  
-    const generated = {
-      title: data.title ?? `${data.subject ?? ""}: ${data.topic ?? ""}`.trim(),
-      instructions: Array.isArray(data.instructions) ? data.instructions : [],
-      worksheet: data.worksheet ?? "",
-      answerKey: data.answer_key ?? "",
-      contentMode: normalizeContentMode(data.content_mode),
-      visuals: [] as WorksheetVisual[],
-    };
+  const generated = {
+  title: data.title ?? `${data.subject ?? ""}: ${data.topic ?? ""}`.trim(),
+  instructions: Array.isArray(data.instructions) ? data.instructions : [],
+  worksheet: data.worksheet ?? "",
+  answerKey: data.answer_key ?? "",
+  contentMode: normalizeContentMode(data.content_mode),
+  visuals:
+    data.file_url
+      ? [
+          {
+            label: data.title ?? `${data.subject ?? ""}: ${data.topic ?? ""}`.trim(),
+            imageDataUrl: data.file_url,
+          },
+        ]
+      : ([] as WorksheetVisual[]),
+};
  
     return jsonOk({ saved: data, generated }, 200);
   } catch (e: unknown) {

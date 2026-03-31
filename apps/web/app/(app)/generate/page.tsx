@@ -159,6 +159,7 @@ export default function GeneratePage() {
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loadingStep, setLoadingStep] = useState<string | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
@@ -217,6 +218,26 @@ export default function GeneratePage() {
     setError(null);
     setSaveMsg(null);
     setResult(null);
+
+    // Simulate progress through steps
+    const steps = [
+      "Preparing your lesson...",
+      "Generating lesson plan...",
+      "Generating lesson notes...",
+      "Building slides...",
+      "Preparing images...",
+      "Saving to library...",
+      "Almost done...",
+    ];
+    
+    setLoadingStep(steps[0]);
+    let stepIndex = 0;
+    const stepInterval = setInterval(() => {
+      stepIndex++;
+      if (stepIndex < steps.length) {
+        setLoadingStep(steps[stepIndex]);
+      }
+    }, 2000);
 
     try {
       const {
@@ -295,6 +316,8 @@ export default function GeneratePage() {
     } finally {
       setLoading(false);
       setSaving(false);
+      setLoadingStep(null);
+      clearInterval(stepInterval);
       router.refresh();
     }
   }
@@ -746,7 +769,9 @@ export default function GeneratePage() {
             {loading ? "Generating..." : "Generate Lesson Pack"}
           </button>
 
-          {saving ? (
+          {loading && loadingStep ? (
+            <span className="text-sm text-slate-700 animate-pulse">{loadingStep}</span>
+          ) : saving ? (
             <span className="text-sm text-slate-700">Saving to Library…</span>
           ) : saveMsg ? (
             <span className="text-sm text-emerald-700">{saveMsg}</span>

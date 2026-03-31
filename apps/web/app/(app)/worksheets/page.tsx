@@ -1134,23 +1134,27 @@ export default function WorksheetsPage() {
                     />
                   </Field>
                 </div>
-              ) : active?.generated?.worksheet ? (
+              ) : active?.generated?.worksheet || (Array.isArray(active?.generated?.visuals) && active.generated.visuals.length > 0) ? (
                 <>
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs font-semibold text-slate-900">Worksheet</div>
-                    <button
-                      onClick={() => copy(active.generated?.worksheet ?? "")}
-                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100"
-                    >
-                      Copy
-                    </button>
-                  </div>
+                  {active?.generated?.worksheet ? (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-semibold text-slate-900">Worksheet</div>
+                        <button
+                          onClick={() => copy(active.generated?.worksheet ?? "")}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100"
+                        >
+                          Copy
+                        </button>
+                      </div>
  
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="whitespace-pre-wrap text-sm leading-6 text-slate-900">
-                      {active.generated.worksheet}
-                    </div>
-                  </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="whitespace-pre-wrap text-sm leading-6 text-slate-900">
+                          {active.generated.worksheet}
+                        </div>
+                      </div>
+                    </>
+                  ) : null}
  
                   {Array.isArray(active?.generated?.visuals) && active.generated.visuals.length > 0 ? (
                     <div className="rounded-xl border border-slate-200 bg-white p-3">
