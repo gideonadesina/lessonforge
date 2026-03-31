@@ -75,6 +75,60 @@ export default function LibraryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function safeRender(value: any): React.ReactNode {
+  if (value === null || value === undefined) return null;
+
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return (
+      <ul className="list-disc pl-6 space-y-1">
+        {value.map((item, i) => (
+          <li key={i}>{safeRender(item)}</li>
+        ))}
+      </ul>
+    );
+  }
+
+  if (typeof value === "object") {
+    if ("question" in value || "markingGuide" in value) {
+      return (
+        <div className="space-y-2">
+          {"question" in value ? (
+            <div className="text-sm text-slate-800">
+              {safeRender(value.question)}
+            </div>
+          ) : null}
+
+          {"markingGuide" in value ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="text-xs font-semibold text-slate-700">Marking Guide</div>
+              <div className="mt-1 text-sm text-slate-700">
+                {safeRender(value.markingGuide)}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-2">
+        {Object.entries(value).map(([key, val]) => (
+          <div key={key}>
+            <div className="text-xs font-semibold text-slate-600 uppercase">{key}</div>
+            <div className="text-sm text-slate-800">{safeRender(val)}</div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return String(value);
+}
+
   function LessonPreview({
   gen,
   fallbackSubject,
@@ -118,7 +172,7 @@ export default function LibraryPage() {
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Title
               </div>
-              <div className="mt-1 text-sm text-slate-800">{lessonPlan.title}</div>
+              <div className="mt-1 text-sm text-slate-800">{safeRender(lessonPlan.title)}</div>
             </div>
           ) : null}
 
@@ -129,9 +183,9 @@ export default function LibraryPage() {
                 Performance Objectives
               </div>
               <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
-                {lessonPlan.performanceObjectives.map((item: string, i: number) => (
-                  <li key={i}>{item}</li>
-                ))}
+               {lessonPlan.performanceObjectives.map((item: any, i: number) => (
+  <li key={i}>{safeRender(item)}</li>
+))}
               </ul>
             </div>
           ) : null}
@@ -143,8 +197,8 @@ export default function LibraryPage() {
                 Instructional Materials
               </div>
               <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
-                {lessonPlan.instructionalMaterials.map((item: string, i: number) => (
-                  <li key={i}>{item}</li>
+                {lessonPlan.instructionalMaterials.map((item: any, i: number) => (
+                  <li key={i}>{safeRender(item)}</li>
                 ))}
               </ul>
             </div>
@@ -156,7 +210,7 @@ export default function LibraryPage() {
                 Previous Knowledge
               </div>
               <div className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
-                {lessonPlan.previousKnowledge}
+                {safeRender(lessonPlan.previousKnowledge)}
               </div>
             </div>
           ) : null}
@@ -166,9 +220,9 @@ export default function LibraryPage() {
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Introduction
               </div>
-              <div className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
-                {lessonPlan.introduction}
-              </div>
+             <div className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
+  {safeRender(lessonPlan.introduction)}
+</div>
             </div>
           ) : null}
 
@@ -184,27 +238,27 @@ export default function LibraryPage() {
                   className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2"
                 >
                   <div className="font-semibold text-slate-900">
-                    Step {step?.step ?? i + 1}: {step?.title || "Lesson Step"}
+                    Step {step?.step ?? i + 1}: {safeRender(step?.title || "Lesson Step")}
                   </div>
 
                   {step?.teacherActivity ? (
                     <div className="text-sm text-slate-800">
                       <span className="font-semibold">Teacher Activity:</span>{" "}
-                      {step.teacherActivity}
+                      {safeRender(step.teacherActivity)}
                     </div>
                   ) : null}
 
                   {step?.learnerActivity ? (
                     <div className="text-sm text-slate-800">
                       <span className="font-semibold">Learner Activity:</span>{" "}
-                      {step.learnerActivity}
+                      {safeRender(step.learnerActivity)}
                     </div>
                   ) : null}
 
                   {step?.concretisedLearningPoint ? (
                     <div className="text-sm text-slate-800">
                       <span className="font-semibold">Learning Point:</span>{" "}
-                      {step.concretisedLearningPoint}
+                      {safeRender(step.concretisedLearningPoint)}
                     </div>
                   ) : null}
                 </div>
@@ -218,9 +272,9 @@ export default function LibraryPage() {
                 Evaluation
               </div>
               <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
-                {lessonPlan.evaluation.map((item: string, i: number) => (
-                  <li key={i}>{item}</li>
-                ))}
+                {lessonPlan.evaluation.map((item: any, i: number) => (
+  <li key={i}>{safeRender(item)}</li>
+))}
               </ul>
             </div>
           ) : null}
@@ -231,8 +285,8 @@ export default function LibraryPage() {
                 Assignment
               </div>
               <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
-                {lessonPlan.assignment.map((item: string, i: number) => (
-                  <li key={i}>{item}</li>
+                {lessonPlan.assignment.map((item: any, i: number) => (
+                  <li key={i}>{safeRender(item)}</li>
                 ))}
               </ul>
             </div>
@@ -245,9 +299,9 @@ export default function LibraryPage() {
                 Real-life Connection
               </div>
               <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
-                {lessonPlan.realLifeConnection.map((item: string, i: number) => (
-                  <li key={i}>{item}</li>
-                ))}
+               {lessonPlan.realLifeConnection.map((item: any, i: number) => (
+  <li key={i}>{safeRender(item)}</li>
+))}
               </ul>
             </div>
           ) : null}
@@ -259,7 +313,7 @@ export default function LibraryPage() {
         <section className="rounded-2xl border border-slate-200 bg-white p-4">
           <h3 className="text-sm font-bold text-slate-900">Lesson Notes</h3>
           <div className="mt-2 whitespace-pre-wrap text-sm text-slate-800 leading-relaxed">
-            {gen.lessonNotes}
+            {safeRender(gen.lessonNotes)}
           </div>
         </section>
       ) : null}
@@ -332,7 +386,7 @@ export default function LibraryPage() {
                   {bullets.length ? (
                     <ul className="list-disc pl-6 space-y-2 text-slate-800 font-medium">
                       {bullets.map((b, j) => (
-                        <li key={j}>{b}</li>
+                        <li key={j}>{safeRender(b)}</li>
                       ))}
                     </ul>
                   ) : (
@@ -373,7 +427,7 @@ export default function LibraryPage() {
               return (
                 <div key={i} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="font-semibold text-slate-900">
-                    {i + 1}. {q?.q || q?.question || "Question"}
+                    {i + 1}. {safeRender(q?.q || q?.question || "Question")}
                   </div>
 
                   <div className="mt-3 space-y-2">
@@ -382,7 +436,7 @@ export default function LibraryPage() {
                         <span className="font-bold text-violet-700 min-w-[22px]">
                           {String.fromCharCode(65 + j)}.
                         </span>
-                        <span>{opt}</span>
+                        <span>{safeRender(opt)}</span>
                       </div>
                     ))}
                   </div>
@@ -401,13 +455,13 @@ export default function LibraryPage() {
             {theory.map((q, i) => (
               <div key={i} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="font-semibold text-slate-900">
-                  {i + 1}. {q?.q || q?.question || "Question"}
+                  {i + 1}. {safeRender(q?.q || q?.question || "Question")}
                 </div>
 
                 {q?.markingGuide ? (
                   <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
                     <div className="text-xs font-semibold text-slate-700">Marking Guide</div>
-                    <div className="mt-1 text-sm text-slate-700">{q.markingGuide}</div>
+                    <div className="mt-1 text-sm text-slate-700">{safeRender(q.markingGuide)}</div>
                   </div>
                 ) : null}
               </div>
@@ -421,9 +475,9 @@ export default function LibraryPage() {
         <section className="rounded-2xl border border-slate-200 bg-white p-4">
           <h3 className="text-sm font-bold text-slate-900">Real-life Applications</h3>
           <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
-            {liveApps.map((x, i) => (
-              <li key={i}>{x}</li>
-            ))}
+           {liveApps.map((x: any, i: number) => (
+  <li key={i}>{safeRender(x)}</li>
+))}
           </ul>
         </section>
       ) : null}
@@ -1047,3 +1101,4 @@ function timeAgo(iso: string) {
   const days = Math.floor(hrs / 24);
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
+

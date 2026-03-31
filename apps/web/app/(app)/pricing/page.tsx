@@ -1,12 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import {
   LESSON_PACK_CREDIT_COST,
   NEW_USER_FREE_CREDITS,
   TEACHER_PRICING_PLANS,
   estimateLessonPacks,
+  getCreditUsageNote,
 } from "@/lib/billing/pricing";
 import { initializeTeacherCheckout } from "@/lib/billing/checkout";
 import TeacherPricingPlanCard from "@/components/billing/TeacherPricingPlanCard";
@@ -15,7 +15,7 @@ const FAQ_ITEMS = [
   {
     question: "What is a credit?",
     answer:
-      "A credit is the unit LessonForge uses for lesson generation. One complete lesson pack consumes 4 credits.",
+      "A credit is the unit LessonForge uses for content generation. Lesson Pack = 4 credits • Worksheet = 1 credit • Exam Builder = 1 credit",
   },
   {
     question: "How many free credits do I get?",
@@ -27,9 +27,9 @@ const FAQ_ITEMS = [
       "Generation is paused until you top up. Your existing lessons, library content, and dashboard data stay available.",
   },
   {
-    question: "Do principals/schools have separate pricing?",
+    question: "Does my school need separate pricing?",
     answer:
-      "Yes. Schools can activate principal billing for teacher slots and workspace-wide management.",
+      "Yes. Schools can activate principal/school billing. View school plans at the Principal Pricing page.",
   },
 ] as const;
 
@@ -37,7 +37,7 @@ export default function PricingPage() {
   const [busyPlanId, setBusyPlanId] = useState<string | null>(null);
   const freeLessonPacks = estimateLessonPacks(NEW_USER_FREE_CREDITS);
 
-  async function handlePlanSelect(planId: (typeof TEACHER_PRICING_PLANS)[number]["id"]) {
+  async function handleTeacherPlanSelect(planId: (typeof TEACHER_PRICING_PLANS)[number]["id"]) {
     setBusyPlanId(planId);
     try {
       await initializeTeacherCheckout(planId);
@@ -72,17 +72,14 @@ export default function PricingPage() {
             key={plan.id}
             plan={plan}
             loading={busyPlanId === plan.id}
-            onSelect={handlePlanSelect}
+            onSelect={handleTeacherPlanSelect}
           />
         ))}
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-sm">
-        <p>
-          <span className="font-semibold text-slate-900">1 Lesson Pack = </span>
-          <span className="font-bold text-violet-700">{LESSON_PACK_CREDIT_COST} credits</span>
-        </p>
-        <p className="mt-1">
+        <p className="font-semibold text-slate-900">{getCreditUsageNote()}</p>
+        <p className="mt-2">
           <span className="font-semibold text-slate-900">New users get </span>
           <span className="font-bold text-violet-700">{NEW_USER_FREE_CREDITS} free credits</span>
           <span> ({freeLessonPacks} free lesson packs)</span>
@@ -98,24 +95,6 @@ export default function PricingPage() {
               <p className="mt-2 text-sm leading-relaxed text-slate-600">{item.answer}</p>
             </article>
           ))}
-        </div>
-      </section>
-
-      <section className="rounded-3xl border border-violet-100 bg-violet-50/60 p-6 shadow-sm">
-        <div className="max-w-3xl">
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900">
-            School-wide access for principals and administrators
-          </h2>
-          <p className="mt-2 text-sm leading-relaxed text-slate-600">
-            Deploy LessonForge across departments, pay for teacher slots, and coordinate a shared
-            planning standard for your school team.
-          </p>
-          <Link
-            href="/principal"
-            className="mt-4 inline-flex rounded-2xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700"
-          >
-            Get School Access
-          </Link>
         </div>
       </section>
     </div>

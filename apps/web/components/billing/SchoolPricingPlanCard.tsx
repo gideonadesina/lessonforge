@@ -1,18 +1,18 @@
 "use client";
 
-import { type TeacherPlanConfig, formatNaira } from "@/lib/billing/pricing";
+import { type SchoolPlanConfig, formatNaira } from "@/lib/billing/pricing";
 
-type TeacherPricingPlanCardProps = {
-  plan: TeacherPlanConfig;
-  onSelect: (planId: TeacherPlanConfig["id"]) => void;
+type SchoolPricingPlanCardProps = {
+  plan: SchoolPlanConfig;
+  onSelect: (planId: SchoolPlanConfig["id"]) => void;
   loading?: boolean;
 };
 
-export default function TeacherPricingPlanCard({
+export default function SchoolPricingPlanCard({
   plan,
   onSelect,
   loading = false,
-}: TeacherPricingPlanCardProps) {
+}: SchoolPricingPlanCardProps) {
   return (
     <article
       className={[
@@ -22,7 +22,7 @@ export default function TeacherPricingPlanCard({
     >
       {plan.highlighted ? (
         <span className="absolute right-4 top-4 rounded-full bg-violet-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white">
-          Most Popular
+          Recommended
         </span>
       ) : null}
 
@@ -31,9 +31,10 @@ export default function TeacherPricingPlanCard({
         {formatNaira(plan.priceNaira)}
       </div>
       <p className="mt-1 text-xs text-slate-500">/month</p>
-      
+
       <div className="mt-4 space-y-1 border-t border-slate-100 pt-4">
-        <p className="text-sm text-slate-600">{plan.credits} credits/month</p>
+        <p className="text-sm text-slate-600">Up to {plan.teachers} teachers</p>
+        <p className="text-sm text-slate-600">{plan.credits} shared credits/month</p>
         <p className="text-sm font-medium text-violet-700">Up to {plan.lessonPacks} Lesson Packs</p>
       </div>
 
@@ -58,7 +59,7 @@ export default function TeacherPricingPlanCard({
           loading ? "cursor-not-allowed opacity-70" : "",
         ].join(" ")}
       >
-        {loading ? "Preparing checkout..." : plan.ctaLabel}
+        {loading ? "Processing..." : plan.ctaLabel}
       </button>
     </article>
   );

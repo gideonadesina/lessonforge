@@ -54,7 +54,10 @@ const NAV_SECTIONS: NavSection[] = [
   },
   {
     title: "Billing",
-    items: [{ label: "Subscription / Billing", href: "/principal/billing", icon: CreditCard }],
+    items: [
+      { label: "School Pricing", href: "/principal/pricing", icon: CreditCard },
+      { label: "Subscription / Billing", href: "/principal/billing", icon: CreditCard },
+    ],
   },
 ];
  

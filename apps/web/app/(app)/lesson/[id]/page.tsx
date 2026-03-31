@@ -148,6 +148,68 @@ export default function LessonPage() {
     a.remove();
   }
 
+  function safeRender(value: any): React.ReactNode {
+  if (value === null || value === undefined) return null;
+
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return (
+      <ul className="list-disc pl-6 space-y-1">
+        {value.map((item, i) => (
+          <li key={i}>{safeRender(item)}</li>
+        ))}
+      </ul>
+    );
+  }
+
+  if (typeof value === "object") {
+    if ("question" in value || "markingGuide" in value) {
+      return (
+        <div className="space-y-2">
+          {"question" in value ? (
+            <div className="text-sm text-slate-800">
+              {safeRender(value.question)}
+            </div>
+          ) : null}
+
+          {"markingGuide" in value ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="text-xs font-semibold text-slate-700">
+                Marking Guide
+              </div>
+              <div className="mt-1 text-sm text-slate-700">
+                {safeRender(value.markingGuide)}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-2">
+        {Object.entries(value).map(([key, val]) => (
+          <div key={key}>
+            <div className="text-xs font-semibold uppercase text-slate-600">
+              {key}
+            </div>
+            <div className="text-sm text-slate-800">{safeRender(val)}</div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return String(value);
+}
+
   function buildLessonStructureText() {
     if (!row) return "";
 
@@ -471,7 +533,7 @@ export default function LessonPage() {
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Title
               </div>
-              <div className="mt-1 text-sm text-slate-800">{lessonPlan.title}</div>
+              <div className="mt-1 text-sm text-slate-800">{safeRender(lessonPlan.title)}</div>
             </div>
           ) : null}
 
@@ -482,9 +544,9 @@ export default function LessonPage() {
                 Performance Objectives
               </div>
               <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
-                {lessonPlan.performanceObjectives.map((item: string, i: number) => (
-                  <li key={i}>{item}</li>
-                ))}
+              {lessonPlan.performanceObjectives.map((item: any, i: number) => (
+  <li key={i}>{safeRender(item)}</li>
+))}
               </ul>
             </div>
           ) : null}
@@ -496,9 +558,9 @@ export default function LessonPage() {
                 Instructional Materials
               </div>
               <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
-                {lessonPlan.instructionalMaterials.map((item: string, i: number) => (
-                  <li key={i}>{item}</li>
-                ))}
+                {lessonPlan.instructionalMaterials.map((item: any, i: number) => (
+  <li key={i}>{safeRender(item)}</li>
+))}
               </ul>
             </div>
           ) : null}
@@ -509,7 +571,7 @@ export default function LessonPage() {
                 Previous Knowledge
               </div>
               <div className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
-                {lessonPlan.previousKnowledge}
+                {safeRender(lessonPlan.previousKnowledge)}
               </div>
             </div>
           ) : null}
@@ -520,7 +582,7 @@ export default function LessonPage() {
                 Introduction
               </div>
               <div className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
-                {lessonPlan.introduction}
+               {safeRender(lessonPlan.introduction)}
               </div>
             </div>
           ) : null}
@@ -537,27 +599,27 @@ export default function LessonPage() {
                   className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2"
                 >
                   <div className="font-semibold text-slate-900">
-                    Step {step?.step ?? i + 1}: {step?.title || "Lesson Step"}
+                    Step {step?.step ?? i + 1}: {safeRender(step?.title || "Lesson Step")}
                   </div>
 
                   {step?.teacherActivity ? (
                     <div className="text-sm text-slate-800">
                       <span className="font-semibold">Teacher Activity:</span>{" "}
-                      {step.teacherActivity}
+                      {safeRender(step.teacherActivity)}
                     </div>
                   ) : null}
 
                   {step?.learnerActivity ? (
                     <div className="text-sm text-slate-800">
                       <span className="font-semibold">Learner Activity:</span>{" "}
-                      {step.learnerActivity}
+                      {safeRender(step.learnerActivity)}
                     </div>
                   ) : null}
 
                   {step?.concretisedLearningPoint ? (
                     <div className="text-sm text-slate-800">
                       <span className="font-semibold">Learning Point:</span>{" "}
-                      {step.concretisedLearningPoint}
+                      {safeRender(step.concretisedLearningPoint)}
                     </div>
                   ) : null}
                 </div>
@@ -571,9 +633,9 @@ export default function LessonPage() {
                 Evaluation
               </div>
               <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
-                {lessonPlan.evaluation.map((item: string, i: number) => (
-                  <li key={i}>{item}</li>
-                ))}
+                {lessonPlan.evaluation.map((item: any, i: number) => (
+  <li key={i}>{safeRender(item)}</li>
+))}
               </ul>
             </div>
           ) : null}
@@ -584,9 +646,9 @@ export default function LessonPage() {
                 Assignment
               </div>
               <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
-                {lessonPlan.assignment.map((item: string, i: number) => (
-                  <li key={i}>{item}</li>
-                ))}
+               {lessonPlan.assignment.map((item: any, i: number) => (
+  <li key={i}>{safeRender(item)}</li>
+))}
               </ul>
             </div>
           ) : null}
@@ -598,9 +660,9 @@ export default function LessonPage() {
                 Real-life Connection
               </div>
               <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
-                {lessonPlan.realLifeConnection.map((item: string, i: number) => (
-                  <li key={i}>{item}</li>
-                ))}
+                {lessonPlan.realLifeConnection.map((item: any, i: number) => (
+  <li key={i}>{safeRender(item)}</li>
+))}
               </ul>
             </div>
           ) : null}
@@ -610,7 +672,7 @@ export default function LessonPage() {
       <section className="rounded-2xl border bg-white p-5">
         <h2 className="mb-3 text-xl font-semibold">Lesson Notes</h2>
         <div className="whitespace-pre-wrap leading-relaxed text-slate-900">
-          {result?.lessonNotes || "No lesson notes found."}
+          {result?.lessonNotes ? safeRender(result.lessonNotes) : "No lesson notes found."}
         </div>
       </section>
 
@@ -619,9 +681,9 @@ export default function LessonPage() {
     <h2 className="mb-4 text-xl font-semibold">References</h2>
 
     <ul className="list-disc pl-6 space-y-1 text-sm text-slate-800">
-      {result.references.map((ref: string, i: number) => (
-        <li key={i}>{ref}</li>
-      ))}
+     {result.references.map((ref: any, i: number) => (
+  <li key={i}>{safeRender(ref)}</li>
+))}
     </ul>
   </section>
 ) : null}
@@ -687,9 +749,9 @@ export default function LessonPage() {
 
                   {bullets.length ? (
                     <ul className="list-disc pl-6 space-y-1">
-                      {bullets.map((b: string, j: number) => (
-                        <li key={j}>{b}</li>
-                      ))}
+                     {bullets.map((b: any, j: number) => (
+  <li key={j}>{safeRender(b)}</li>
+))}
                     </ul>
                   ) : (
                     <p className="text-sm text-slate-700">No bullet points.</p>
@@ -710,7 +772,7 @@ export default function LessonPage() {
 
                   {s?.interactivePrompt ? (
                     <div className="mt-3 rounded-xl border bg-yellow-50 p-3 text-sm">
-                      <b>👩🏽‍🏫 Classroom Activity:</b> {s.interactivePrompt}
+                     <b>👩🏽‍🏫 Classroom Activity:</b> {safeRender(s.interactivePrompt)}
                     </div>
                   ) : null}
                 </div>
@@ -730,12 +792,12 @@ export default function LessonPage() {
             {mcq.map((q: any, i: number) => (
               <div key={i} className="rounded-xl border p-4 bg-slate-50">
                 <div className="mb-2 font-semibold">
-                  {i + 1}. {q?.q || "Question"}
+                  {i + 1}. {safeRender(q?.q || q?.question || "Question")}
                 </div>
                 <ul className="list-disc pl-6 space-y-1">
                   {(Array.isArray(q?.options) ? q.options : []).map(
                     (opt: string, j: number) => (
-                      <li key={j}>{opt}</li>
+                      <li key={j}>{safeRender(opt)}</li>
                     )
                   )}
                 </ul>
@@ -754,11 +816,11 @@ export default function LessonPage() {
             {theory.map((t: any, i: number) => (
               <div key={i} className="rounded-xl border p-4 bg-slate-50">
                 <div className="font-semibold">
-                  {i + 1}. {t?.q || "Theory question"}
+                  {i + 1}. {safeRender(t?.q || t?.question || "Theory question")}
                 </div>
                 {t?.markingGuide ? (
                   <div className="mt-2 text-sm text-slate-700">
-                    <b>Marking guide:</b> {t.markingGuide}
+                    <b>Marking guide:</b> {safeRender(t.markingGuide)}
                   </div>
                 ) : null}
               </div>
@@ -770,9 +832,9 @@ export default function LessonPage() {
           <div className="mt-6 space-y-2">
             <h3 className="text-lg font-semibold">Real-life Applications</h3>
             <ul className="list-disc pl-6 space-y-1">
-              {liveApps.map((item, i) => (
-                <li key={i}>{item}</li>
-              ))}
+             {liveApps.map((item: any, i: number) => (
+  <li key={i}>{safeRender(item)}</li>
+))}
             </ul>
           </div>
         ) : null}
