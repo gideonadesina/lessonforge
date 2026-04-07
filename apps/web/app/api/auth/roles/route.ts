@@ -68,32 +68,46 @@ async function bootstrapInitialRole(input: {
     updated_at: new Date().toISOString(),
   };
 
-  const withRole = await admin.from("profiles").upsert({
-    ...profileBase,
-    role: input.nextRole,
-  });
-  if (withRole.error && !isMissingTableOrColumnError(withRole.error)) {
-    throw new Error(withRole.error.message);
+  // Step 1: Create or update the profile without role first
+  console.log(`Bootstrapping role ${input.nextRole} for user ${input.userId}`);
+  const profileUpsert = await admin.from("profiles").upsert(profileBase);
+  if (profileUpsert.error) {
+    console.error("Failed to upsert profile during bootstrap:", profileUpsert.error.message);
+    throw new Error(`Profile creation failed: ${profileUpsert.error.message}`);
   }
+  console.log("Profile upsert successful");
 
-  if (withRole.error && isMissingTableOrColumnError(withRole.error)) {
-    const fallback = await admin.from("profiles").upsert(profileBase);
-    if (fallback.error && !isMissingTableOrColumnError(fallback.error)) {
-      throw new Error(fallback.error.message);
+  // Step 2: Try to update the role column if it exists
+  const roleUpdate = await admin
+    .from("profiles")
+    .update({ role: input.nextRole })
+    .eq("id", input.userId);
+  if (roleUpdate.error) {
+    if (isMissingTableOrColumnError(roleUpdate.error)) {
+      console.log("Role column not available, skipping role update in profiles");
+    } else {
+      console.error("Failed to update role in profiles during bootstrap:", roleUpdate.error.message);
     }
+  } else {
+    console.log("Role updated in profiles");
   }
 
+  // Step 3: Update app_role if possible
   const profileAppRolePatch = await admin
     .from("profiles")
     .update({ app_role: input.nextRole })
     .eq("id", input.userId);
-  if (
-    profileAppRolePatch.error &&
-    !isMissingTableOrColumnError(profileAppRolePatch.error)
-  ) {
-    throw new Error(profileAppRolePatch.error.message);
+  if (profileAppRolePatch.error) {
+    if (isMissingTableOrColumnError(profileAppRolePatch.error)) {
+      console.log("app_role column not available, skipping app_role update");
+    } else {
+      console.error("Failed to update app_role in profiles during bootstrap:", profileAppRolePatch.error.message);
+    }
+  } else {
+    console.log("app_role updated in profiles");
   }
 
+  // Step 4: Update auth metadata
   const metadataPatch: Record<string, unknown> = {
     ...(metadata ?? {}),
     app_role: input.nextRole,
@@ -106,7 +120,9 @@ async function bootstrapInitialRole(input: {
     user_metadata: metadataPatch,
   });
   if (authUpdate.error) {
-    throw new Error(authUpdate.error.message);
+    console.error("Failed to update auth metadata during bootstrap:", authUpdate.error.message);
+  } else {
+    console.log("Auth metadata updated");
   }
 }
 
@@ -128,9 +144,10 @@ export async function GET(req: NextRequest) {
     );
 
     return NextResponse.json({ ok: true, data: payload }, { status: 200 });
-  } catch (error: unknown) {
+   } catch (error: unknown) {
     const message =
-      error instanceof Error ? error.message : "Failed to load role context";
+      error instanceof Error ? error.message : "Failed to switch role";
+    console.error("POST /api/auth/roles failed:", error);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

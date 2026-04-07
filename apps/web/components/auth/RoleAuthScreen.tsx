@@ -16,7 +16,12 @@ import {
   getRoleHomePath,
   persistActiveRole,
 } from "@/lib/auth/roles";
-import { fetchRoleContext, getAuthErrorMessage, type RoleContextResponse } from "@/lib/auth/client";
+import {
+  fetchRoleContext,
+  getAuthErrorMessage,
+  switchRole as switchRoleApi,
+  type RoleContextResponse,
+} from "@/lib/auth/client";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 
 type SocialProvider = "google" | "microsoft";
@@ -118,15 +123,6 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
   const hasHandledSessionRef = useRef(false);
 
   const roleConfig = ROLE_CONTENT[role];
-
-  const redirectAfterLogin = useCallback(
-    (targetRole: AppRole) => {
-      persistActiveRole(targetRole);
-      router.replace(getRoleHomePath(targetRole));
-      router.refresh();
-    },
-    [router]
-  );
 
   const ensureProfile = useCallback(
     async (user: User, preferredName: string, preferredRole: AppRole) => {
@@ -231,24 +227,25 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
     [applyStoredReferralToProfile, ensureProfile, role, supabase]
   );
 
-  const resolveRoleAfterAuth = useCallback(
-    async (
-      requestedRole: AppRole,
-      options: { allowUnprovisioned?: boolean } = {}
-    ): Promise<RoleContextResponse> => {
-      const roleContext = await fetchRoleContext();
-      if (!roleContext.availableRoles.length && !options.allowUnprovisioned) {
-        throw new Error("Your account is missing workspace access. Please complete onboarding.");
-      }
+const resolveRoleAfterAuth = useCallback(
+  async (
+    requestedRole: AppRole,
+    options: { allowUnprovisioned?: boolean } = {}
+  ): Promise<RoleContextResponse> => {
+    const roleContext = await fetchRoleContext();
 
-      if (!roleContext.availableRoles.includes(requestedRole)) {
-        setMessage(getUnavailableRoleMessage(ROLE_CONTENT[requestedRole].label));
-      }
-
+    if (!roleContext.availableRoles.length) {
       return roleContext;
-    },
-    []
-  );
+    }
+
+    if (!roleContext.availableRoles.includes(requestedRole)) {
+      setMessage(getUnavailableRoleMessage(ROLE_CONTENT[requestedRole].label));
+    }
+
+    return roleContext;
+  },
+  []
+);
 
   const syncUserRoleAndRedirect = useCallback(
     async (userId?: string) => {
@@ -262,7 +259,6 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
           data: { user },
           error: userError,
         } = await supabase.auth.getUser();
-        
 
         if (userError) throw userError;
         if (!user || (userId && user.id !== userId)) {
@@ -270,11 +266,31 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
           return;
         }
 
-        // 🚀 FAST PATH: skip heavy role checks, go straight in
-clearSocialIntent();
-redirectAfterLogin(role);
-return;
+        const roleContext = await resolveRoleAfterAuth(role, {
+          allowUnprovisioned: true,
+        });
 
+        if (!roleContext.availableRoles.length) {
+          const { homePath } = await switchRoleApi(role, {
+            claimIfUnprovisioned: true,
+          });
+          persistActiveRole(role);
+          clearSocialIntent();
+          router.replace(homePath);
+          router.refresh();
+          return;
+        }
+
+        if (roleContext.availableRoles.includes(role)) {
+          const { homePath } = await switchRoleApi(role);
+          persistActiveRole(role);
+          clearSocialIntent();
+          router.replace(homePath);
+          router.refresh();
+          return;
+        }
+
+        return;
       } catch (error: unknown) {
         hasHandledSessionRef.current = false;
         setMessage(normalizeAuthErrorMessage(error, "Unable to finish sign in."));
@@ -282,7 +298,7 @@ return;
         setSyncingRole(false);
       }
     },
-    [applyStoredReferralToProfile, ensureSignupProfile, role, redirectAfterLogin, resolveRoleAfterAuth, supabase]
+    [applyStoredReferralToProfile, ensureSignupProfile, role, resolveRoleAfterAuth, supabase]
   );
 
   useEffect(() => {
@@ -405,13 +421,29 @@ return;
         if (data.session && data.user) {
           await ensureSignupProfile(data.user, cleanName);
           const roleContext = await resolveRoleAfterAuth(role);
+
+          if (!roleContext.availableRoles.length) {
+            const { homePath } = await switchRoleApi(role, {
+              claimIfUnprovisioned: true,
+            });
+            persistActiveRole(role);
+            clearSocialIntent();
+           window.location.href = homePath;
+return;
+          }
+
           const nextRole =
             (roleContext.availableRoles.includes(role) ? role : roleContext.activeRole) ??
             roleContext.availableRoles[0];
           if (!nextRole) {
             throw new Error("No workspace role is available for this account.");
           }
-          redirectAfterLogin(nextRole);
+
+          const { homePath } = await switchRoleApi(nextRole);
+          persistActiveRole(nextRole);
+          clearSocialIntent();
+          router.replace(homePath);
+          router.refresh();
           return;
         }
 
@@ -454,6 +486,17 @@ return;
 
       clearSocialIntent();
       const roleContext = await resolveRoleAfterAuth(role);
+
+      if (!roleContext.availableRoles.length) {
+        const { homePath } = await switchRoleApi(role, {
+          claimIfUnprovisioned: true,
+        });
+        persistActiveRole(role);
+        router.replace(homePath);
+        router.refresh();
+        return;
+      }
+
       const nextRole =
         (roleContext.availableRoles.includes(role) ? role : roleContext.activeRole) ??
         roleContext.availableRoles[0];
@@ -461,7 +504,10 @@ return;
         throw new Error("No workspace role is available for this account.");
       }
 
-      redirectAfterLogin(nextRole);
+      const { homePath } = await switchRoleApi(nextRole);
+      persistActiveRole(nextRole);
+      router.replace(homePath);
+      router.refresh();
     } catch (error: unknown) {
       setMessage(normalizeAuthErrorMessage(error, "Unable to sign in right now."));
       clearSocialIntent();
