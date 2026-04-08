@@ -102,7 +102,7 @@ export default function LessonPage() {
       numberOfSlides: meta?.numberOfSlides ?? "",
       durationMins: meta?.durationMins ?? "",
       lessonPlan: result?.lessonPlan ?? null,
-      lessonNotes: result?.lessonNotes ?? "",
+      lessonNotes: result?.lessonNotes ?? {},
       references: result?.references ?? [],
       slides: Array.isArray(result?.slides) ? result.slides : [],
       quiz: result?.quiz ?? {},
@@ -632,11 +632,29 @@ export default function LessonPage() {
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Evaluation
               </div>
-              <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
+              <div className="mt-2 space-y-3">
                 {lessonPlan.evaluation.map((item: any, i: number) => (
-  <li key={i}>{safeRender(item)}</li>
-))}
-              </ul>
+                  <div key={i} className="rounded-lg border border-slate-200 p-3">
+                    {typeof item === "object" && item?.question ? (
+                      <>
+                        <p className="text-sm font-medium text-slate-800">{item.question}</p>
+                        {item.questionType && (
+                          <p className="mt-1 text-xs text-slate-600 uppercase">
+                            Type: {item.questionType}
+                          </p>
+                        )}
+                        {item.markingGuide && (
+                          <p className="mt-2 text-sm text-slate-700">
+                            <span className="font-medium">Marking Guide:</span> {item.markingGuide}
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-sm text-slate-800">{safeRender(item)}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           ) : null}
 
@@ -671,9 +689,108 @@ export default function LessonPage() {
 
       <section className="rounded-2xl border bg-white p-5">
         <h2 className="mb-3 text-xl font-semibold">Lesson Notes</h2>
-        <div className="whitespace-pre-wrap leading-relaxed text-slate-900">
-          {result?.lessonNotes ? safeRender(result.lessonNotes) : "No lesson notes found."}
-        </div>
+        {result?.lessonNotes ? (
+          typeof result.lessonNotes === "string" ? (
+            <div className="whitespace-pre-wrap leading-relaxed text-slate-900">
+              {safeRender(result.lessonNotes)}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {result.lessonNotes.introduction && (
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">Introduction</p>
+                  <p className="mt-1 text-sm text-slate-700 leading-relaxed">
+                    {result.lessonNotes.introduction}
+                  </p>
+                </div>
+              )}
+              {result.lessonNotes.keyConcepts?.length ? (
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">Key Concepts</p>
+                  <div className="mt-2 space-y-3">
+                    {result.lessonNotes.keyConcepts.map((concept: any, i: number) => (
+                      <div key={i} className="border-l-2 border-violet-200 pl-3">
+                        <p className="text-sm font-medium text-slate-800">
+                          {concept.subheading || `Concept ${i + 1}`}
+                        </p>
+                        {concept.content && (
+                          <p className="mt-1 text-sm text-slate-700">{concept.content}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {result.lessonNotes.workedExamples?.length ? (
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">Worked Examples</p>
+                  <div className="mt-2 space-y-4">
+                    {result.lessonNotes.workedExamples.map((example: any, i: number) => (
+                      <div key={i} className="rounded-lg border border-slate-200 p-3">
+                        <p className="text-sm font-medium text-slate-800">
+                          {example.title || `Example ${i + 1}`}
+                        </p>
+                        {example.problem && (
+                          <p className="mt-1 text-sm text-slate-700">
+                            <span className="font-medium">Problem:</span> {example.problem}
+                          </p>
+                        )}
+                        {example.steps?.length ? (
+                          <div className="mt-2">
+                            <p className="text-sm font-medium text-slate-800">Steps:</p>
+                            <ol className="mt-1 list-decimal pl-5 space-y-1 text-sm text-slate-700">
+                              {example.steps.map((step: any, j: number) => (
+                                <li key={j}>{step}</li>
+                              ))}
+                            </ol>
+                          </div>
+                        ) : null}
+                        {example.finalAnswer && (
+                          <p className="mt-2 text-sm text-slate-700">
+                            <span className="font-medium">Final Answer:</span> {example.finalAnswer}
+                          </p>
+                        )}
+                        {example.explanation && (
+                          <p className="mt-2 text-sm text-slate-700">
+                            <span className="font-medium">Explanation:</span> {example.explanation}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {result.lessonNotes.summaryPoints?.length ? (
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">Summary Points</p>
+                  <ul className="mt-2 list-disc pl-5 space-y-1 text-sm text-slate-700">
+                    {result.lessonNotes.summaryPoints.map((point: any, i: number) => (
+                      <li key={i}>{point}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {result.lessonNotes.keyVocabulary?.length ? (
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">Key Vocabulary</p>
+                  <div className="mt-2 space-y-2">
+                    {result.lessonNotes.keyVocabulary.map((item: any, i: number) => (
+                      <div key={i} className="flex gap-2 text-sm">
+                        <span className="font-medium text-slate-800 min-w-0 flex-1">
+                          {item.word}
+                        </span>
+                        <span className="text-slate-600">:</span>
+                        <span className="text-slate-700 flex-1">{item.meaning}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )
+        ) : (
+          <p className="text-sm text-slate-500">No lesson notes found.</p>
+        )}
       </section>
 
       {Array.isArray(result?.references) && result.references.length ? (

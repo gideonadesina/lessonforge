@@ -299,11 +299,27 @@ export default function LibraryPage() {
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Evaluation
               </div>
-              <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
+              <div className="mt-2 space-y-2">
                 {lessonPlan.evaluation.map((item: any, i: number) => (
-  <li key={i}>{safeRender(item)}</li>
-))}
-              </ul>
+                  <div key={i} className="rounded border border-slate-200 p-2">
+                    {typeof item === "object" && item?.question ? (
+                      <>
+                        <p className="text-sm font-medium text-slate-800">{item.question}</p>
+                        {item.questionType && (
+                          <p className="text-xs text-slate-600 uppercase">Type: {item.questionType}</p>
+                        )}
+                        {item.markingGuide && (
+                          <p className="mt-1 text-sm text-slate-700">
+                            <span className="font-medium">Guide:</span> {item.markingGuide}
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-sm text-slate-800">{safeRender(item)}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           ) : null}
 
@@ -340,8 +356,95 @@ export default function LibraryPage() {
       {gen?.lessonNotes ? (
         <section className="rounded-2xl border border-slate-200 bg-white p-4">
           <h3 className="text-sm font-bold text-slate-900">Lesson Notes</h3>
-          <div className="mt-2 whitespace-pre-wrap text-sm text-slate-800 leading-relaxed">
-            {safeRender(gen.lessonNotes)}
+          <div className="mt-2">
+            {typeof gen.lessonNotes === "string" ? (
+              <div className="whitespace-pre-wrap text-sm text-slate-800 leading-relaxed">
+                {safeRender(gen.lessonNotes)}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {gen.lessonNotes.introduction && (
+                  <div>
+                    <p className="text-xs font-semibold text-slate-700 uppercase">Introduction</p>
+                    <p className="mt-1 text-sm text-slate-800 leading-relaxed">
+                      {gen.lessonNotes.introduction}
+                    </p>
+                  </div>
+                )}
+                {gen.lessonNotes.keyConcepts?.length ? (
+                  <div>
+                    <p className="text-xs font-semibold text-slate-700 uppercase">Key Concepts</p>
+                    <div className="mt-2 space-y-2">
+                      {gen.lessonNotes.keyConcepts.map((concept: any, i: number) => (
+                        <div key={i} className="border-l-2 border-violet-200 pl-2">
+                          <p className="text-sm font-medium text-slate-800">
+                            {concept.subheading || `Concept ${i + 1}`}
+                          </p>
+                          {concept.content && (
+                            <p className="mt-1 text-sm text-slate-700">{concept.content}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {gen.lessonNotes.workedExamples?.length ? (
+                  <div>
+                    <p className="text-xs font-semibold text-slate-700 uppercase">Worked Examples</p>
+                    <div className="mt-2 space-y-3">
+                      {gen.lessonNotes.workedExamples.map((example: any, i: number) => (
+                        <div key={i} className="rounded border border-slate-200 p-2">
+                          <p className="text-sm font-medium text-slate-800">
+                            {example.title || `Example ${i + 1}`}
+                          </p>
+                          {example.problem && (
+                            <p className="mt-1 text-sm text-slate-700">
+                              <span className="font-medium">Problem:</span> {example.problem}
+                            </p>
+                          )}
+                          {example.steps?.length ? (
+                            <ol className="mt-1 list-decimal pl-5 text-sm text-slate-700">
+                              {example.steps.map((step: any, j: number) => (
+                                <li key={j}>{step}</li>
+                              ))}
+                            </ol>
+                          ) : null}
+                          {example.finalAnswer && (
+                            <p className="mt-1 text-sm text-slate-700">
+                              <span className="font-medium">Answer:</span> {example.finalAnswer}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {gen.lessonNotes.summaryPoints?.length ? (
+                  <div>
+                    <p className="text-xs font-semibold text-slate-700 uppercase">Summary Points</p>
+                    <ul className="mt-2 list-disc pl-5 text-sm text-slate-800">
+                      {gen.lessonNotes.summaryPoints.map((point: any, i: number) => (
+                        <li key={i}>{point}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {gen.lessonNotes.keyVocabulary?.length ? (
+                  <div>
+                    <p className="text-xs font-semibold text-slate-700 uppercase">Key Vocabulary</p>
+                    <div className="mt-2 space-y-1">
+                      {gen.lessonNotes.keyVocabulary.map((item: any, i: number) => (
+                        <div key={i} className="flex gap-2 text-sm">
+                          <span className="font-medium text-slate-800">{item.word}</span>
+                          <span className="text-slate-600">:</span>
+                          <span className="text-slate-700">{item.meaning}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )}
           </div>
         </section>
       ) : null}
@@ -724,10 +827,59 @@ export default function LibraryPage() {
     }
 
     if (gen?.lessonNotes) {
-      lines.push("LESSON NOTES");
-      lines.push("-".repeat(12));
-      lines.push(String(gen.lessonNotes));
-      lines.push("");
+      if (typeof gen.lessonNotes === "string") {
+        lines.push("LESSON NOTES");
+        lines.push("-".repeat(12));
+        lines.push(String(gen.lessonNotes));
+        lines.push("");
+      } else {
+        if (gen.lessonNotes.introduction) {
+          lines.push("LESSON NOTES INTRODUCTION");
+          lines.push("-".repeat(25));
+          lines.push(gen.lessonNotes.introduction);
+          lines.push("");
+        }
+        if (gen.lessonNotes.keyConcepts?.length) {
+          lines.push("KEY CONCEPTS");
+          lines.push("-".repeat(13));
+          gen.lessonNotes.keyConcepts.forEach((concept: any, i: number) => {
+            lines.push(`${i + 1}. ${concept.subheading || "Concept"}`);
+            if (concept.content) lines.push(`   ${concept.content}`);
+            lines.push("");
+          });
+        }
+        if (gen.lessonNotes.workedExamples?.length) {
+          lines.push("WORKED EXAMPLES");
+          lines.push("-".repeat(15));
+          gen.lessonNotes.workedExamples.forEach((example: any, i: number) => {
+            lines.push(`${i + 1}. ${example.title || "Example"}`);
+            if (example.problem) lines.push(`   Problem: ${example.problem}`);
+            if (example.steps?.length) {
+              lines.push("   Steps:");
+              example.steps.forEach((step: any, j: number) => lines.push(`     ${j + 1}. ${step}`));
+            }
+            if (example.finalAnswer) lines.push(`   Final Answer: ${example.finalAnswer}`);
+            if (example.explanation) lines.push(`   Explanation: ${example.explanation}`);
+            lines.push("");
+          });
+        }
+        if (gen.lessonNotes.summaryPoints?.length) {
+          lines.push("SUMMARY POINTS");
+          lines.push("-".repeat(14));
+          gen.lessonNotes.summaryPoints.forEach((point: any, i: number) => {
+            lines.push(`${i + 1}. ${point}`);
+          });
+          lines.push("");
+        }
+        if (gen.lessonNotes.keyVocabulary?.length) {
+          lines.push("KEY VOCABULARY");
+          lines.push("-".repeat(14));
+          gen.lessonNotes.keyVocabulary.forEach((item: any, i: number) => {
+            lines.push(`${i + 1}. ${item.word || ""}: ${item.meaning || ""}`);
+          });
+          lines.push("");
+        }
+      }
     }
 
     if (slides.length) {

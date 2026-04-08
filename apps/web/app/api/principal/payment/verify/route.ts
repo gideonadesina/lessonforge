@@ -9,8 +9,9 @@ import {
   getBearerTokenFromHeaders,
   resolvePrincipalContext,
 } from "@/lib/principal/server";
+import { NEW_USER_FREE_CREDITS } from "@/lib/billing/pricing";
  
-type PaidTier = "basic" | "pro";
+type PaidTier = "starter" | "growth" | "full_school";
  
 type FinalizeInput = Parameters<
   typeof finalizePrincipalActivationFromPaystackData
@@ -49,14 +50,16 @@ type PaymentTransactionRow = {
   updated_at: string;
 };
  
-const BASIC_ALLOWANCE = 20;
-const PRO_ALLOWANCE = 50;
-const TRIAL_CREDITS = 3;
+const STARTER_ALLOWANCE = 120;
+const GROWTH_ALLOWANCE = 280;
+const FULL_SCHOOL_ALLOWANCE = 560;
  
-const BASIC_PRICE_KOBO = 200000; // ₦2,000
-const PRO_PRICE_KOBO = 500000; // ₦5,000
-const BASIC_PRICE_CENTS = 200; // $2.00
-const PRO_PRICE_CENTS = 500; // $5.00
+const STARTER_PRICE_KOBO = 2500000; // ₦25,000
+const GROWTH_PRICE_KOBO = 5500000; // ₦55,000
+const FULL_SCHOOL_PRICE_KOBO = 9500000; // ₦95,000
+const STARTER_PRICE_CENTS = 2500; // $25.00
+const GROWTH_PRICE_CENTS = 5500; // $55.00
+const FULL_SCHOOL_PRICE_CENTS = 9500; // $95.00
  
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ ok: false, error: message }, { status });
@@ -69,7 +72,7 @@ function getErrorMessage(error: unknown, fallback = "Verify failed") {
  
 function normalizeTier(rawTier: unknown): PaidTier | null {
   const tier = String(rawTier ?? "").trim().toLowerCase();
-  return tier === "basic" || tier === "pro" ? tier : null;
+  return tier === "starter" || tier === "growth" || tier === "full_school" ? tier : null;
 }
  
 function normalizeTransactionData(rawData: VerifiedPaystackDataRaw): FinalizeInput {
@@ -93,14 +96,16 @@ function inferTierFromAmount(rawAmount: unknown, rawCurrency: unknown): PaidTier
   const currency = String(rawCurrency ?? "NGN").trim().toUpperCase();
  
   if (currency === "NGN") {
-    if (amount >= PRO_PRICE_KOBO) return "pro";
-    if (amount >= BASIC_PRICE_KOBO) return "basic";
+    if (amount >= FULL_SCHOOL_PRICE_KOBO) return "full_school";
+    if (amount >= GROWTH_PRICE_KOBO) return "growth";
+    if (amount >= STARTER_PRICE_KOBO) return "starter";
     return null;
   }
  
   if (currency === "USD") {
-    if (amount >= PRO_PRICE_CENTS) return "pro";
-    if (amount >= BASIC_PRICE_CENTS) return "basic";
+    if (amount >= FULL_SCHOOL_PRICE_CENTS) return "full_school";
+    if (amount >= GROWTH_PRICE_CENTS) return "growth";
+    if (amount >= STARTER_PRICE_CENTS) return "starter";
     return null;
   }
  
@@ -116,11 +121,11 @@ function toJson(value: unknown): unknown {
 }
  
 function buildProfileUpgradePatch(tier: PaidTier, data: FinalizeInput) {
-  const allowance = tier === "pro" ? PRO_ALLOWANCE : BASIC_ALLOWANCE;
+  const allowance = tier === "full_school" ? FULL_SCHOOL_ALLOWANCE : tier === "growth" ? GROWTH_ALLOWANCE : STARTER_ALLOWANCE;
  
   return {
     plan: tier,
-    is_pro: tier === "pro",
+    is_pro: tier === "full_school" || tier === "growth",
     credits_balance: allowance,
     credits_monthly_allowance: 0, // manual renewal mode
     credits_reset_at: null,
@@ -161,8 +166,8 @@ async function ensureProfileExists(userId: string, email: string | null) {
       paystack_email: email,
       plan: "free",
       is_pro: false,
-      free_credits: TRIAL_CREDITS,
-      credits_balance: TRIAL_CREDITS,
+      free_credits: NEW_USER_FREE_CREDITS,
+      credits_balance: NEW_USER_FREE_CREDITS,
       credits_monthly_allowance: 0,
       credits_reset_at: null,
       pro_expires_at: null,
@@ -198,9 +203,9 @@ async function resolveTierForUser(
   const fromExistingPlan = normalizeTier(existing?.plan);
   if (fromExistingPlan) return fromExistingPlan;
  
-  if (existing?.is_pro === true) return "pro";
+  if (existing?.is_pro === true) return "growth";
  
-  return "basic";
+  return "starter";
 }
  
 async function getPaymentTransactionByReference(reference: string) {
@@ -313,7 +318,7 @@ async function markPaymentTransactionProcessed(params: {
   return data[0] as PaymentTransactionRow;
 }
  
-async function applyLegacyProfileUpgrade(userId: string, data: FinalizeInput) {
+async function applyPrincipalProfileUpgrade(userId: string, data: FinalizeInput) {
   if (!isSuccessfulPayment(data)) {
     throw new Error("Payment was not successful");
   }
@@ -396,9 +401,9 @@ export async function GET(req: Request) {
         activation: toJson(activation),
       } as Record<string, unknown>;
     } else {
-      const upgrade = await applyLegacyProfileUpgrade(authenticatedUserId, data);
+      const upgrade = await applyPrincipalProfileUpgrade(authenticatedUserId, data);
       resultSnapshot = {
-        type: "legacy_profile_upgrade",
+        type: "principal_profile_upgrade",
         reference,
         payment: toJson(data),
         upgrade: toJson(upgrade),

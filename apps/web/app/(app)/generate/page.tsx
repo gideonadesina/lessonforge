@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { useProfile } from "@/lib/useProfile";
 import TeacherPaywallModal from "@/components/billing/TeacherPaywallModal";
+import GenerationProgress from "@/components/generation/GenerationProgress";
+import { useGenerationProgress } from "@/components/generation/useGenerationProgress";
 import { LESSON_PACK_CREDIT_COST } from "@/lib/billing/pricing";
 
 type VocabularyItem = {
@@ -13,36 +15,83 @@ type VocabularyItem = {
   simpleMeaning?: string;
 };
 
+type LessonVocabularyItem = {
+  word?: string;
+  meaning?: string;
+};
+
 type LessonStep = {
-  step?: number;
-  title?: string;
   stepNumber?: number;
   stepTitle?: string;
+  step?: number;
+  title?: string;
   timeMinutes?: number;
   teacherActivity?: string;
   learnerActivity?: string;
+  guidedQuestions?: string[];
   teachingMethod?: string;
   assessmentCheck?: string;
   concretisedLearningPoint?: string;
 };
 
-type EvaluationItem =
-  | string
-  | {
-      question?: string;
-      markingGuide?: string;
-    };
+type EvaluationItem = {
+  question?: string;
+  q?: string;
+  questionType?: string;
+  markingGuide?: string;
+};
 
 type TheoryItem = {
-  q?: string;
   question?: string;
+  q?: string;
   markingGuide?: string;
+};
+
+type KeyConcept = {
+  subheading?: string;
+  content?: string;
+};
+
+type WorkedExample = {
+  title?: string;
+  problem?: string;
+  steps?: string[];
+  finalAnswer?: string;
+  explanation?: string;
+};
+
+type LessonNotes = {
+  introduction?: string;
+  keyConcepts?: KeyConcept[];
+  workedExamples?: WorkedExample[];
+  realLifeApplications?: string[];
+  summaryPoints?: string[];
+  exitTicket?: string[];
+  keyVocabulary?: LessonVocabularyItem[];
+};
+
+type SubjectEnrichment = {
+  isCalculationBased?: boolean;
+  coreFormulas?: Array<{
+    name?: string;
+    formula?: string;
+    meaning?: string;
+    units?: string;
+  }>;
+  symbolsAndUnits?: Array<{
+    symbol?: string;
+    meaning?: string;
+    unit?: string;
+  }>;
+  calculationRules?: string[];
+  extraWorkedExamples?: WorkedExample[];
+  commonCalculationMistakes?: string[];
 };
 
 type Generated = {
   lessonPlan?: {
-    title?: string;
     lessonTitle?: string;
+    title?: string;
     performanceObjectives?: string[];
     successCriteria?: string[];
     instructionalMaterials?: string[];
@@ -58,35 +107,47 @@ type Generated = {
       supportForAverageLearners?: string;
       challengeForAdvancedLearners?: string;
     };
-    evaluation?: EvaluationItem[];
+    evaluation?: Array<EvaluationItem | string>;
     exitTicket?: string[];
     assignment?: string[];
     boardSummary?: string[];
-    realLifeConnection?: string[];
     realLifeApplications?: string[];
+    realLifeConnection?: string[];
   };
   meta?: {
     subject?: string;
     topic?: string;
     grade?: string;
     curriculum?: string;
+    examAlignment?: string;
     schoolLevel?: string;
     numberOfSlides?: number;
     durationMins?: number;
+    lessonType?: string;
+    academicDepth?: string;
   };
-  objectives?: string[];
-  lessonNotes?: string;
+  lessonNotes?: LessonNotes | string;
+  subjectEnrichment?: SubjectEnrichment;
   references?: string[];
   slides?: Array<{
+    slideNumber?: number;
+    slideType?: string;
     title?: string;
     bullets?: string[];
+    teacherPrompt?: string;
+    studentTask?: string;
     image?: string;
     imageQuery?: string;
     videoQuery?: string;
     interactivePrompt?: string;
   }>;
   quiz?: {
-    mcq?: Array<{ q?: string; options?: string[]; answerIndex?: number }>;
+    mcq?: Array<{
+      q?: string;
+      options?: string[];
+      answerIndex?: number;
+      explanation?: string;
+    }>;
     theory?: TheoryItem[];
   };
   liveApplications?: string[];
@@ -104,7 +165,11 @@ const CURRICULUM_OPTIONS = [
   "Turkish Curriculum",
 ];
 
-const SCHOOL_LEVEL_OPTIONS = ["EYFS / Nursery", "Primary", "Secondary"];
+const SCHOOL_LEVEL_OPTIONS = [
+  { label: "EYFS / Nursery", value: "EYFS" },
+  { label: "Primary", value: "Primary" },
+  { label: "Secondary", value: "Secondary" },
+];
 
 function youtubeSearchUrl(query: string) {
   const q = (query || "").trim();
@@ -159,7 +224,8 @@ export default function GeneratePage() {
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [loadingStep, setLoadingStep] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const { steps, currentStepIndex, progress, completeProgress } = useGenerationProgress(isGenerating);
 
   const [error, setError] = useState<string | null>(null);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
@@ -214,30 +280,11 @@ export default function GeneratePage() {
     }
 
     setLoading(true);
+    setIsGenerating(true);
     setSaving(false);
     setError(null);
     setSaveMsg(null);
     setResult(null);
-
-    // Simulate progress through steps
-    const steps = [
-      "Preparing your lesson...",
-      "Generating lesson plan...",
-      "Generating lesson notes...",
-      "Building slides...",
-      "Preparing images...",
-      "Saving to library...",
-      "Almost done...",
-    ];
-    
-    setLoadingStep(steps[0]);
-    let stepIndex = 0;
-    const stepInterval = setInterval(() => {
-      stepIndex++;
-      if (stepIndex < steps.length) {
-        setLoadingStep(steps[stepIndex]);
-      }
-    }, 2000);
 
     try {
       const {
@@ -276,7 +323,8 @@ export default function GeneratePage() {
 
       const generated = json.data as Generated;
       setResult(generated);
-      console.log("GENERATED DATA:", generated);
+      completeProgress();
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       const {
         data: { user },
@@ -311,13 +359,13 @@ export default function GeneratePage() {
       }
 
       setSaveMsg("✅ Auto-saved to Library");
+      setIsGenerating(false);
     } catch (e: any) {
       setError(e?.message || "Something went wrong");
+      setIsGenerating(false);
     } finally {
       setLoading(false);
       setSaving(false);
-      setLoadingStep(null);
-      clearInterval(stepInterval);
       router.refresh();
     }
   }
@@ -445,6 +493,12 @@ export default function GeneratePage() {
         if (step?.timeMinutes) lines.push(`Time: ${step.timeMinutes} minutes`);
         if (step?.teacherActivity) lines.push(`Teacher Activity: ${step.teacherActivity}`);
         if (step?.learnerActivity) lines.push(`Learner Activity: ${step.learnerActivity}`);
+        if (step?.guidedQuestions?.length) {
+          lines.push("Guided Questions:");
+          step.guidedQuestions.forEach((question, j) => {
+            lines.push(`  ${j + 1}. ${question}`);
+          });
+        }
         if (step?.teachingMethod) lines.push(`Teaching Method: ${step.teachingMethod}`);
         if (step?.assessmentCheck) lines.push(`Assessment Check: ${step.assessmentCheck}`);
         if (step?.concretisedLearningPoint) {
@@ -508,13 +562,13 @@ export default function GeneratePage() {
       lines.push("EVALUATION");
       lines.push("-".repeat(10));
       lessonPlan.evaluation.forEach((item, i) => {
-        if (typeof item === "string") {
-          lines.push(`${i + 1}. ${item}`);
-        } else {
-          lines.push(`${i + 1}. ${item?.question ?? "Question"}`);
-          if (item?.markingGuide) {
+        if (typeof item === "object" && item?.question) {
+          lines.push(`${i + 1}. ${item.question}`);
+          if (item.markingGuide) {
             lines.push(`   Marking Guide: ${item.markingGuide}`);
           }
+        } else if (typeof item === "string") {
+          lines.push(`${i + 1}. ${item}`);
         }
       });
       lines.push("");
@@ -548,17 +602,86 @@ export default function GeneratePage() {
     }
 
     if (result.lessonNotes) {
-      lines.push("LESSON NOTES");
-      lines.push("-".repeat(12));
-      lines.push(String(result.lessonNotes));
-      lines.push("");
+      if (typeof result.lessonNotes === "string") {
+        lines.push("LESSON NOTES");
+        lines.push("-".repeat(12));
+        lines.push(String(result.lessonNotes));
+        lines.push("");
+      } else {
+        if (result.lessonNotes.introduction) {
+          lines.push("LESSON NOTES INTRODUCTION");
+          lines.push("-".repeat(25));
+          lines.push(result.lessonNotes.introduction);
+          lines.push("");
+        }
+        if (result.lessonNotes.keyConcepts?.length) {
+          lines.push("KEY CONCEPTS");
+          lines.push("-".repeat(13));
+          result.lessonNotes.keyConcepts.forEach((concept, i) => {
+            lines.push(`${i + 1}. ${concept.subheading || "Concept"}`);
+            if (concept.content) lines.push(`   ${concept.content}`);
+            lines.push("");
+          });
+        }
+        if (result.lessonNotes.workedExamples?.length) {
+          lines.push("WORKED EXAMPLES");
+          lines.push("-".repeat(15));
+          result.lessonNotes.workedExamples.forEach((example, i) => {
+            lines.push(`${i + 1}. ${example.title || "Example"}`);
+            if (example.problem) lines.push(`   Problem: ${example.problem}`);
+            if (example.steps?.length) {
+              lines.push("   Steps:");
+              example.steps.forEach((step, j) => lines.push(`     ${j + 1}. ${step}`));
+            }
+            if (example.finalAnswer) lines.push(`   Final Answer: ${example.finalAnswer}`);
+            if (example.explanation) lines.push(`   Explanation: ${example.explanation}`);
+            lines.push("");
+          });
+        }
+        if (result.lessonNotes.summaryPoints?.length) {
+          lines.push("SUMMARY POINTS");
+          lines.push("-".repeat(14));
+          result.lessonNotes.summaryPoints.forEach((point, i) => {
+            lines.push(`${i + 1}. ${point}`);
+          });
+          lines.push("");
+        }
+        if (result.lessonNotes.exitTicket?.length) {
+          lines.push("EXIT TICKET QUESTIONS");
+          lines.push("-".repeat(20));
+          result.lessonNotes.exitTicket.forEach((item, i) => {
+            lines.push(`${i + 1}. ${item}`);
+          });
+          lines.push("");
+        }
+        if (result.lessonNotes.realLifeApplications?.length) {
+          lines.push("LESSON NOTES - REAL-LIFE APPLICATIONS");
+          lines.push("-".repeat(31));
+          result.lessonNotes.realLifeApplications.forEach((item, i) => {
+            lines.push(`${i + 1}. ${item}`);
+          });
+          lines.push("");
+        }
+        if (result.lessonNotes.keyVocabulary?.length) {
+          lines.push("KEY VOCABULARY");
+          lines.push("-".repeat(14));
+          result.lessonNotes.keyVocabulary.forEach((item, i) => {
+            lines.push(`${i + 1}. ${item.word || ""}: ${item.meaning || ""}`);
+          });
+          lines.push("");
+        }
+      }
     }
 
     if (slides.length) {
       lines.push("SLIDE STRUCTURE");
       lines.push("-".repeat(15));
       slides.forEach((slide, i) => {
-        lines.push(`${i + 1}. ${slide?.title ?? `Slide ${i + 1}`}`);
+        const slideNumber = slide?.slideNumber ?? i + 1;
+        const slideType = slide?.slideType ? ` (${slide.slideType})` : "";
+        lines.push(`${slideNumber}. ${slide?.title ?? `Slide ${slideNumber}`}${slideType}`);
+        if (slide?.teacherPrompt) lines.push(`Teacher Prompt: ${slide.teacherPrompt}`);
+        if (slide?.studentTask) lines.push(`Student Task: ${slide.studentTask}`);
         const bullets = Array.isArray(slide?.bullets) ? slide.bullets : [];
         bullets.forEach((b) => lines.push(`- ${b}`));
         if (slide?.interactivePrompt) lines.push(`Activity: ${slide.interactivePrompt}`);
@@ -683,102 +806,110 @@ export default function GeneratePage() {
       ) : null}
 
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <Field label="Curriculum / School System">
-            <select
-              value={curriculum}
-              onChange={(e) => setCurriculum(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
-            >
-              {CURRICULUM_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </Field>
+        {isGenerating ? (
+          <GenerationProgress
+            steps={steps}
+            currentStepIndex={currentStepIndex}
+            progress={progress}
+          />
+        ) : (
+          <>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <Field label="Curriculum / School System">
+                <select
+                  value={curriculum}
+                  onChange={(e) => setCurriculum(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+                >
+                  {CURRICULUM_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </Field>
 
-          <Field label="School Level">
-            <select
-              value={schoolLevel}
-              onChange={(e) => setSchoolLevel(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
-            >
-              {SCHOOL_LEVEL_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </Field>
+              <Field label="School Level">
+                <select
+                  value={schoolLevel}
+                  onChange={(e) => setSchoolLevel(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+                >
+                  {SCHOOL_LEVEL_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
 
-          <Field label="Subject">
-            <input
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              placeholder="e.g., Economics"
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
-            />
-          </Field>
+              <Field label="Subject">
+                <input
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  placeholder="e.g., Economics"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+                />
+              </Field>
 
-          <Field label="Class">
-            <input
-              value={grade}
-              onChange={(e) => setGrade(e.target.value)}
-              placeholder="e.g., JSS 2, Grade 5, SS 1"
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
-            />
-          </Field>
+              <Field label="Class">
+                <input
+                  value={grade}
+                  onChange={(e) => setGrade(e.target.value)}
+                  placeholder="e.g., JSS 2, Grade 5, SS 1"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+                />
+              </Field>
 
-          <Field label="Topic" full>
-            <input
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              placeholder="e.g., Inflation and Deflation"
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
-            />
-          </Field>
+              <Field label="Topic" full>
+                <input
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  placeholder="e.g., Inflation and Deflation"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+                />
+              </Field>
 
-          <Field label="Number of Slides">
-            <input
-              type="number"
-              min={1}
-              max={20}
-              value={numberOfSlides}
-              onChange={(e) => setNumberOfSlides(Number(e.target.value))}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
-            />
-          </Field>
-        </div>
+              <Field label="Number of Slides">
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={numberOfSlides}
+                  onChange={(e) => setNumberOfSlides(Number(e.target.value))}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+                />
+              </Field>
+            </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <button
-            onClick={onGenerate}
-            disabled={
-              loading ||
-              hasInsufficientCredits ||
-              !curriculum.trim() ||
-              !schoolLevel.trim() ||
-              !subject.trim() ||
-              !grade.trim() ||
-              !topic.trim()
-            }
-            type="button"
-            className="rounded-xl bg-violet-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-violet-700 disabled:opacity-60"
-          >
-            {loading ? "Generating..." : "Generate Lesson Pack"}
-          </button>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <button
+                onClick={onGenerate}
+                disabled={
+                  loading ||
+                  hasInsufficientCredits ||
+                  !curriculum.trim() ||
+                  !schoolLevel.trim() ||
+                  !subject.trim() ||
+                  !grade.trim() ||
+                  !topic.trim()
+                }
+                type="button"
+                className="rounded-xl bg-violet-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-violet-700 disabled:opacity-60"
+              >
+                {loading ? "Generating..." : "Generate Lesson Pack"}
+              </button>
 
-          {loading && loadingStep ? (
-            <span className="text-sm text-slate-700 animate-pulse">{loadingStep}</span>
-          ) : saving ? (
-            <span className="text-sm text-slate-700">Saving to Library…</span>
-          ) : saveMsg ? (
-            <span className="text-sm text-emerald-700">{saveMsg}</span>
-          ) : null}
+              {saving ? (
+                <span className="text-sm text-slate-700">Saving to Library…</span>
+              ) : saveMsg ? (
+                <span className="text-sm text-emerald-700">{saveMsg}</span>
+              ) : null}
 
-          {error ? <span className="text-sm text-red-600">{error}</span> : null}
-        </div>
+              {error ? <span className="text-sm text-red-600">{error}</span> : null}
+            </div>
+          </>
+        )}
 
         <p className="mt-3 text-xs text-slate-500">
           🔒 Generation + saving happens securely under your account.
@@ -973,6 +1104,17 @@ export default function GeneratePage() {
                           </p>
                         ) : null}
 
+                        {step.guidedQuestions?.length ? (
+                          <div className="text-sm text-slate-700">
+                            <div className="font-semibold">Guided Questions:</div>
+                            <ul className="mt-1 list-disc pl-6 space-y-1">
+                              {step.guidedQuestions.map((question, j) => (
+                                <li key={j}>{question}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+
                         {step.teachingMethod ? (
                           <p className="text-sm text-slate-700">
                             <span className="font-semibold">Teaching Method:</span>{" "}
@@ -1099,13 +1241,136 @@ export default function GeneratePage() {
             </section>
           ) : null}
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-2">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
             <h3 className="text-xl font-extrabold text-slate-900 tracking-tight">
               Lesson Notes
             </h3>
-            <p className="whitespace-pre-wrap text-sm text-slate-700 leading-relaxed">
-              {result.lessonNotes || "No lesson notes generated."}
-            </p>
+            {result.lessonNotes ? (
+              typeof result.lessonNotes === "string" ? (
+                <p className="whitespace-pre-wrap text-sm text-slate-700 leading-relaxed">
+                  {result.lessonNotes}
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {result.lessonNotes.introduction && (
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">Introduction</p>
+                      <p className="mt-1 text-sm text-slate-700 leading-relaxed">
+                        {result.lessonNotes.introduction}
+                      </p>
+                    </div>
+                  )}
+                  {result.lessonNotes.keyConcepts?.length ? (
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">Key Concepts</p>
+                      <div className="mt-2 space-y-3">
+                        {result.lessonNotes.keyConcepts.map((concept, i) => (
+                          <div key={i} className="border-l-2 border-violet-200 pl-3">
+                            <p className="text-sm font-medium text-slate-800">
+                              {concept.subheading || `Concept ${i + 1}`}
+                            </p>
+                            {concept.content && (
+                              <p className="mt-1 text-sm text-slate-700">{concept.content}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {result.lessonNotes.workedExamples?.length ? (
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">Worked Examples</p>
+                      <div className="mt-2 space-y-4">
+                        {result.lessonNotes.workedExamples.map((example, i) => (
+                          <div key={i} className="rounded-lg border border-slate-200 p-3">
+                            <p className="text-sm font-medium text-slate-800">
+                              {example.title || `Example ${i + 1}`}
+                            </p>
+                            {example.problem && (
+                              <p className="mt-1 text-sm text-slate-700">
+                                <span className="font-medium">Problem:</span> {example.problem}
+                              </p>
+                            )}
+                            {example.steps?.length ? (
+                              <div className="mt-2">
+                                <p className="text-sm font-medium text-slate-800">Steps:</p>
+                                <ol className="mt-1 list-decimal pl-5 space-y-1 text-sm text-slate-700">
+                                  {example.steps.map((step, j) => (
+                                    <li key={j}>{step}</li>
+                                  ))}
+                                </ol>
+                              </div>
+                            ) : null}
+                            {example.finalAnswer && (
+                              <p className="mt-2 text-sm text-slate-700">
+                                <span className="font-medium">Final Answer:</span> {example.finalAnswer}
+                              </p>
+                            )}
+                            {example.explanation && (
+                              <p className="mt-2 text-sm text-slate-700">
+                                <span className="font-medium">Explanation:</span> {example.explanation}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {result.lessonNotes.summaryPoints?.length ? (
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">Summary Points</p>
+                      <ul className="mt-2 list-disc pl-5 space-y-1 text-sm text-slate-700">
+                        {result.lessonNotes.summaryPoints.map((point, i) => (
+                          <li key={i}>{point}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {result.lessonNotes.keyVocabulary?.length ? (
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">Key Vocabulary</p>
+                      <div className="mt-2 space-y-2">
+                        {result.lessonNotes.keyVocabulary.map((item, i) => (
+                          <div key={i} className="flex gap-2 text-sm">
+                            <span className="font-medium text-slate-800 min-w-0 flex-1">
+                              {item.word}
+                            </span>
+                            <span className="text-slate-600">:</span>
+                            <span className="text-slate-700 flex-1">{item.meaning}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {result.lessonNotes.realLifeApplications?.length ? (
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">
+                        Real-Life Applications
+                      </p>
+                      <ul className="mt-2 list-disc pl-6 space-y-2 text-sm text-slate-700">
+                        {result.lessonNotes.realLifeApplications.map((item, i) => (
+                          <li key={i}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {result.lessonNotes.exitTicket?.length ? (
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">Exit Ticket</p>
+                      <ul className="mt-2 list-disc pl-6 space-y-2 text-sm text-slate-700">
+                        {result.lessonNotes.exitTicket.map((item, i) => (
+                          <li key={i}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
+              )
+            ) : (
+              <p className="text-sm text-slate-500">No lesson notes generated.</p>
+            )}
           </section>
 
           {Array.isArray(result.references) && result.references.length ? (
@@ -1129,11 +1394,17 @@ export default function GeneratePage() {
             {slides.length ? (
               <div className="grid gap-6">
                 {slides.map((s, i) => {
+                  const slideNumber = s?.slideNumber ?? i + 1;
+                  const slideType = s?.slideType ? s.slideType.replace(/_/g, " ") : "";
                   const title = s?.title || "Untitled slide";
                   const bullets = Array.isArray(s?.bullets) ? s.bullets : [];
                   const videoQuery = s?.videoQuery || title || `${subject} ${topic}`.trim();
                   const activity =
                     s?.interactivePrompt || "No interactive activity provided.";
+                  const teacherPrompt =
+                    s?.teacherPrompt || "No teacher prompt provided.";
+                  const studentTask =
+                    s?.studentTask || "No student task provided.";
                   const imgSrc = s?.image || FALLBACK_IMG;
 
                   return (
@@ -1141,12 +1412,19 @@ export default function GeneratePage() {
                       key={i}
                       className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="text-lg font-bold text-slate-900">
-                          {i + 1}. {title}
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="text-lg font-bold text-slate-900">
+                            {slideNumber}. {title}
+                          </div>
+                          {slideType ? (
+                            <div className="text-xs uppercase text-slate-500">
+                              {slideType}
+                            </div>
+                          ) : null}
                         </div>
                         <span className="text-[11px] font-semibold px-2 py-1 rounded-full border bg-slate-50 text-slate-700">
-                          Slide {i + 1}
+                          Slide {slideNumber}
                         </span>
                       </div>
 
@@ -1194,6 +1472,15 @@ export default function GeneratePage() {
                       ) : (
                         <p className="text-sm text-slate-600">No bullet points.</p>
                       )}
+
+                      <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-900">
+                        <div>
+                          <span className="font-semibold">Teacher Prompt:</span> {teacherPrompt}
+                        </div>
+                        <div>
+                          <span className="font-semibold">Student Task:</span> {studentTask}
+                        </div>
+                      </div>
 
                       <div className="flex flex-wrap gap-4 text-sm">
                         <a
@@ -1288,6 +1575,15 @@ export default function GeneratePage() {
                           </li>
                         ))}
                       </ul>
+
+                      {q?.explanation ? (
+                        <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                          <p className="text-xs font-semibold text-slate-700 mb-1">
+                            Explanation:
+                          </p>
+                          <p className="text-sm text-slate-600">{q.explanation}</p>
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })}

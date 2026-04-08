@@ -6,69 +6,101 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-type GeneratePayload = {
+export type ExamAlignment = "None" | "WAEC" | "NECO";
+export type SchoolLevel = "EYFS" | "Primary" | "Secondary";
+export type LessonType = "theory" | "practical" | "mixed";
+export type AcademicDepth = "foundational" | "standard" | "advanced";
+
+export type SlideType =
+  | "starter"
+  | "concept"
+  | "worked_example"
+  | "discussion"
+  | "activity"
+  | "quick_check"
+  | "recap";
+
+export type QuestionType =
+  | "knowledge"
+  | "understanding"
+  | "application"
+  | "analysis"
+  | "calculation";
+
+export type GeneratePayload = {
   subject: string;
   topic: string;
   grade: string;
   curriculum?: string;
-  examAlignment?: "None" | "WAEC" | "NECO" | string;
-  schoolLevel?: "EYFS" | "Primary" | "Secondary" | string;
+  examAlignment?: ExamAlignment;
+  schoolLevel?: SchoolLevel;
   numberOfSlides?: number;
   durationMins?: number;
   user_id?: string;
 };
 
-type VocabularyItem = {
+export type VocabularyItem = {
   word: string;
   simpleMeaning: string;
 };
 
-type LessonStep = {
+export type LessonVocabularyItem = {
+  word: string;
+  meaning: string;
+};
+
+export type GuidedQuestion = string;
+
+export type LessonStep = {
   stepNumber: number;
   stepTitle: string;
   timeMinutes: number;
   teacherActivity: string;
   learnerActivity: string;
+  guidedQuestions: GuidedQuestion[];
   teachingMethod: string;
   assessmentCheck: string;
   concretisedLearningPoint: string;
 };
 
-type Differentiation = {
+export type Differentiation = {
   supportForStrugglingLearners: string;
   supportForAverageLearners: string;
   challengeForAdvancedLearners: string;
 };
 
-type EvaluationItem =
-  | string
-  | {
-      question: string;
-      markingGuide: string;
-    };
-
-type TheoryQuestion = {
-  q?: string;
-  question?: string;
+export type EvaluationItem = {
+  question: string;
+  questionType: QuestionType;
   markingGuide: string;
 };
 
-type MCQItem = {
-  q: string;
-  options: string[];
-  answerIndex: number;
+export type TheoryQuestion = {
+  question: string;
+  markingGuide: string;
 };
 
-type SlideItem = {
+export type MCQItem = {
+  q: string;
+  options: [string, string, string, string];
+  answerIndex: 0 | 1 | 2 | 3;
+  explanation: string;
+};
+
+export type SlideItem = {
+  slideNumber: number;
+  slideType: SlideType;
   title: string;
   bullets: string[];
+  teacherPrompt: string;
+  studentTask: string;
   imageQuery: string;
   videoQuery: string;
   interactivePrompt: string;
   image?: string;
 };
 
-type LessonPlan = {
+export type LessonPlan = {
   lessonTitle: string;
   performanceObjectives: string[];
   successCriteria: string[];
@@ -88,19 +120,69 @@ type LessonPlan = {
   assignment: string[];
 };
 
-type GeneratedLessonData = {
-  meta: {
-    subject: string;
-    topic: string;
-    grade: string;
-    curriculum: string;
-    examAlignment: string;
-    schoolLevel: string;
-    numberOfSlides: number;
-    durationMins: number;
-  };
+export type WorkedExample = {
+  title: string;
+  problem: string;
+  steps: string[];
+  finalAnswer: string;
+  explanation: string;
+};
+
+export type KeyConcept = {
+  subheading: string;
+  content: string;
+};
+
+export type LessonNotes = {
+  introduction: string;
+  keyConcepts: KeyConcept[];
+  workedExamples: WorkedExample[];
+  realLifeApplications: string[];
+  summaryPoints: string[];
+  exitTicket: string[];
+  keyVocabulary: LessonVocabularyItem[];
+};
+
+export type FormulaItem = {
+  name: string;
+  formula: string;
+  meaning: string;
+  units: string;
+};
+
+export type SymbolUnitItem = {
+  symbol: string;
+  meaning: string;
+  unit: string;
+};
+
+export type SubjectEnrichment = {
+  isCalculationBased: boolean;
+  coreFormulas: FormulaItem[];
+  symbolsAndUnits: SymbolUnitItem[];
+  calculationRules: string[];
+  extraWorkedExamples: WorkedExample[];
+  commonCalculationMistakes: string[];
+};
+
+export type LessonMeta = {
+  subject: string;
+  topic: string;
+  grade: string;
+  curriculum: string;
+  examAlignment: ExamAlignment;
+  schoolLevel: SchoolLevel;
+  numberOfSlides: number;
+  durationMins: number;
+  lessonType: LessonType;
+  academicDepth: AcademicDepth;
+};
+
+export type GeneratedLessonData = {
+  meta: LessonMeta;
   lessonPlan: LessonPlan;
-  lessonNotes: string;
+  lessonNotes: LessonNotes;
+  subjectEnrichment: SubjectEnrichment;
   references: string[];
   slides: SlideItem[];
   quiz: {
@@ -116,6 +198,333 @@ const FALLBACK_IMG =
 function clampNumber(value: number | undefined, min: number, max: number, fallback: number) {
   if (typeof value !== "number" || Number.isNaN(value)) return fallback;
   return Math.max(min, Math.min(max, value));
+}
+
+function normalizeNumber(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number
+): number {
+  if (typeof value === "number" && !Number.isNaN(value)) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    if (!Number.isNaN(parsed)) {
+      return Math.max(min, Math.min(max, parsed));
+    }
+  }
+
+  return fallback;
+}
+
+function normalizeEnum<T extends string>(
+  value: unknown,
+  allowed: ReadonlyArray<T>,
+  fallback: T
+): T {
+  if (typeof value !== "string") return fallback;
+  const normalized = value.trim() as T;
+  return allowed.includes(normalized) ? normalized : fallback;
+}
+
+function normalizeExamAlignment(
+  value: unknown,
+  fallback: ExamAlignment
+): ExamAlignment {
+  return normalizeEnum(value, ["None", "WAEC", "NECO"] as const, fallback);
+}
+
+function normalizeSchoolLevel(
+  value: unknown,
+  fallback: SchoolLevel
+): SchoolLevel {
+  return normalizeEnum(value, ["EYFS", "Primary", "Secondary"] as const, fallback);
+}
+
+function normalizeLessonType(
+  value: unknown,
+  fallback: LessonType
+): LessonType {
+  return normalizeEnum(value, ["theory", "practical", "mixed"] as const, fallback);
+}
+
+function normalizeAcademicDepth(
+  value: unknown,
+  fallback: AcademicDepth
+): AcademicDepth {
+  return normalizeEnum(
+    value,
+    ["foundational", "standard", "advanced"] as const,
+    fallback
+  );
+}
+
+function normalizeQuestionType(
+  value: unknown,
+  fallback: QuestionType
+): QuestionType {
+  return normalizeEnum(
+    value,
+    ["knowledge", "understanding", "application", "analysis", "calculation"] as const,
+    fallback
+  );
+}
+
+function normalizeSlideType(value: unknown, fallback: SlideType): SlideType {
+  return normalizeEnum(
+    value,
+    [
+      "starter",
+      "concept",
+      "worked_example",
+      "discussion",
+      "activity",
+      "quick_check",
+      "recap",
+    ] as const,
+    fallback
+  );
+}
+
+function inferCalculationBased(subject: string, topic: string): boolean {
+  const normalized = `${subject} ${topic}`.toLowerCase();
+  const calculationSubjects = [
+    "math",
+    "mathematics",
+    "physics",
+    "chemistry",
+    "economics",
+    "accounting",
+    "financial",
+    "statistics",
+    "geometry",
+    "trigonometry",
+    "algebra",
+  ];
+  return calculationSubjects.some((term) => normalized.includes(term));
+}
+
+function inferLessonType(subject: string, topic: string): LessonType {
+  const normalized = `${subject} ${topic}`.toLowerCase();
+  if (/(experiment|practical|activity|investigation|field)/.test(normalized)) {
+    return "practical";
+  }
+  if (/(theory|concept|explain|understand|classification)/.test(normalized)) {
+    return "theory";
+  }
+  return "mixed";
+}
+
+function inferAcademicDepth(schoolLevel: SchoolLevel, grade: string): AcademicDepth {
+  const normalizedGrade = grade?.toString().toLowerCase();
+  if (schoolLevel === "EYFS") return "foundational";
+  if (/ss[1-3]|jss[1-3]|year\s?[1-9]/i.test(normalizedGrade || "")) {
+    return "standard";
+  }
+  if (/ss[4-6]|year\s?(12|13)|upper\s+secondary/i.test(normalizedGrade || "")) {
+    return "advanced";
+  }
+  return "standard";
+}
+
+function normalizeLessonVocabularyArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (typeof item !== "object" || item === null) return null;
+      const record = item as Record<string, unknown>;
+
+      return {
+        word: normalizeString(record.word),
+        meaning:
+          normalizeString(record.meaning) ||
+          normalizeString(record.simpleMeaning),
+      };
+    })
+    .filter((item): item is { word: string; meaning: string } => {
+      return !!item && (!!item.word || !!item.meaning);
+    });
+}
+
+function normalizeKeyConceptArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (typeof item !== "object" || item === null) return null;
+      const record = item as Record<string, unknown>;
+
+      return {
+        subheading: normalizeString(record.subheading),
+        content: normalizeString(record.content),
+      };
+    })
+    .filter((item): item is { subheading: string; content: string } => {
+      return !!item && (!!item.subheading || !!item.content);
+    });
+}
+
+function normalizeWorkedExampleArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (typeof item !== "object" || item === null) return null;
+      const record = item as Record<string, unknown>;
+
+      return {
+        title: normalizeString(record.title),
+        problem: normalizeString(record.problem),
+        steps: normalizeStringArray(record.steps),
+        finalAnswer: normalizeString(record.finalAnswer),
+        explanation: normalizeString(record.explanation),
+      };
+    })
+    .filter(
+      (
+        item
+      ): item is {
+        title: string;
+        problem: string;
+        steps: string[];
+        finalAnswer: string;
+        explanation: string;
+      } =>
+        !!item &&
+        (!!item.title ||
+          !!item.problem ||
+          item.steps.length > 0 ||
+          !!item.finalAnswer ||
+          !!item.explanation)
+    );
+}
+
+function normalizeLessonNotes(value: unknown) {
+  if (typeof value === "string") {
+    return {
+      introduction: value.trim(),
+      keyConcepts: [],
+      workedExamples: [],
+      realLifeApplications: [],
+      summaryPoints: [],
+      exitTicket: [],
+      keyVocabulary: [],
+    };
+  }
+
+  if (typeof value !== "object" || value === null) {
+    return {
+      introduction: "",
+      keyConcepts: [],
+      workedExamples: [],
+      realLifeApplications: [],
+      summaryPoints: [],
+      exitTicket: [],
+      keyVocabulary: [],
+    };
+  }
+
+  const record = value as Record<string, unknown>;
+
+  return {
+    introduction: normalizeString(record.introduction),
+    keyConcepts: normalizeKeyConceptArray(record.keyConcepts),
+    workedExamples: normalizeWorkedExampleArray(record.workedExamples),
+    realLifeApplications: normalizeStringArray(record.realLifeApplications),
+    summaryPoints: normalizeStringArray(record.summaryPoints),
+    exitTicket: normalizeStringArray(record.exitTicket),
+    keyVocabulary: normalizeLessonVocabularyArray(record.keyVocabulary),
+  };
+}
+
+function normalizeFormulaArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (typeof item !== "object" || item === null) return null;
+      const record = item as Record<string, unknown>;
+
+      return {
+        name: normalizeString(record.name),
+        formula: normalizeString(record.formula),
+        meaning: normalizeString(record.meaning),
+        units: normalizeString(record.units),
+      };
+    })
+    .filter(
+      (
+        item
+      ): item is {
+        name: string;
+        formula: string;
+        meaning: string;
+        units: string;
+      } => !!item && (!!item.name || !!item.formula || !!item.meaning || !!item.units)
+    );
+}
+
+function normalizeSymbolUnitArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (typeof item !== "object" || item === null) return null;
+      const record = item as Record<string, unknown>;
+
+      return {
+        symbol: normalizeString(record.symbol),
+        meaning: normalizeString(record.meaning),
+        unit: normalizeString(record.unit),
+      };
+    })
+    .filter(
+      (
+        item
+      ): item is {
+        symbol: string;
+        meaning: string;
+        unit: string;
+      } => !!item && (!!item.symbol || !!item.meaning || !!item.unit)
+    );
+}
+
+function normalizeSubjectEnrichment(
+  value: unknown,
+  body: GeneratePayload
+) {
+  const inferredCalculationBased = inferCalculationBased(body.subject, body.topic);
+
+  if (typeof value !== "object" || value === null) {
+    return {
+      isCalculationBased: inferredCalculationBased,
+      coreFormulas: [],
+      symbolsAndUnits: [],
+      calculationRules: [],
+      extraWorkedExamples: [],
+      commonCalculationMistakes: [],
+    };
+  }
+
+  const record = value as Record<string, unknown>;
+
+  return {
+    isCalculationBased:
+      typeof record.isCalculationBased === "boolean"
+        ? record.isCalculationBased
+        : inferredCalculationBased,
+    coreFormulas: normalizeFormulaArray(record.coreFormulas),
+    symbolsAndUnits: normalizeSymbolUnitArray(record.symbolsAndUnits),
+    calculationRules: normalizeStringArray(record.calculationRules),
+    extraWorkedExamples: normalizeWorkedExampleArray(record.extraWorkedExamples),
+    commonCalculationMistakes: normalizeStringArray(
+      record.commonCalculationMistakes
+    ),
+  };
 }
 
 function normalizeString(value: unknown, fallback = ""): string {
@@ -148,102 +557,131 @@ function normalizeVocabularyArray(value: unknown): VocabularyItem[] {
     .filter(Boolean) as VocabularyItem[];
 }
 
-function normalizeEvaluationArray(value: unknown): EvaluationItem[] {
+function normalizeEvaluationArray(value: unknown) {
   if (!Array.isArray(value)) return [];
+
   return value
     .map((item) => {
-      if (typeof item === "string" && item.trim()) {
-        return item.trim();
+      if (typeof item === "string") {
+        return {
+          question: item.trim(),
+          questionType: "knowledge" as QuestionType,
+          markingGuide: "",
+        };
       }
 
-      if (typeof item === "object" && item !== null) {
-        const question = normalizeString((item as Record<string, unknown>).question);
-        const markingGuide = normalizeString(
-          (item as Record<string, unknown>).markingGuide
-        );
+      if (typeof item !== "object" || item === null) return null;
+      const record = item as Record<string, unknown>;
 
-        if (question || markingGuide) {
-          return {
-            question,
-            markingGuide,
-          };
-        }
-      }
-
-      return null;
+      return {
+        question:
+          normalizeString(record.question) || normalizeString(record.q),
+        questionType: normalizeQuestionType(record.questionType, "knowledge"),
+        markingGuide: normalizeString(record.markingGuide),
+      };
     })
-    .filter(Boolean) as EvaluationItem[];
+    .filter(
+      (
+        item
+      ): item is {
+        question: string;
+        questionType: QuestionType;
+        markingGuide: string;
+      } => !!item && !!item.question
+    );
 }
 
-function normalizeTheoryArray(value: unknown): TheoryQuestion[] {
+function normalizeTheoryArray(value: unknown) {
   if (!Array.isArray(value)) return [];
+
   return value
     .map((item) => {
-      if (typeof item === "object" && item !== null) {
-        const q = normalizeString((item as Record<string, unknown>).q);
-        const question = normalizeString((item as Record<string, unknown>).question);
-        const markingGuide = normalizeString(
-          (item as Record<string, unknown>).markingGuide
-        );
-
-        if (q || question || markingGuide) {
-          return { q, question, markingGuide };
-        }
+      if (typeof item === "string") {
+        return {
+          question: item.trim(),
+          markingGuide: "",
+        };
       }
-      return null;
+
+      if (typeof item !== "object" || item === null) return null;
+      const record = item as Record<string, unknown>;
+
+      return {
+        question:
+          normalizeString(record.question) || normalizeString(record.q),
+        markingGuide: normalizeString(record.markingGuide),
+      };
     })
-    .filter(Boolean) as TheoryQuestion[];
+    .filter(
+      (item): item is { question: string; markingGuide: string } =>
+        !!item && !!item.question
+    );
 }
 
-function normalizeMCQArray(value: unknown): MCQItem[] {
+function normalizeMCQArray(value: unknown) {
   if (!Array.isArray(value)) return [];
+
   return value
     .map((item) => {
       if (typeof item !== "object" || item === null) return null;
-
       const record = item as Record<string, unknown>;
-      const q = normalizeString(record.q);
-      const options = Array.isArray(record.options)
-        ? record.options
-            .map((opt) => (typeof opt === "string" ? opt.trim() : ""))
-            .filter(Boolean)
-            .slice(0, 4)
-        : [];
+
+      const options = normalizeStringArray(record.options).slice(0, 4);
+      while (options.length < 4) options.push("");
+
+      const rawAnswerIndex =
+        typeof record.answerIndex === "number"
+          ? record.answerIndex
+          : typeof record.answerIndex === "string"
+          ? Number(record.answerIndex)
+          : -1;
+
       const answerIndex =
-        typeof record.answerIndex === "number" ? record.answerIndex : 0;
-
-      if (!q || options.length === 0) return null;
-
-      while (options.length < 4) {
-        options.push("");
-      }
+        rawAnswerIndex >= 0 && rawAnswerIndex <= 3 ? rawAnswerIndex : 0;
 
       return {
-        q,
-        options: options.slice(0, 4),
-        answerIndex: Math.max(0, Math.min(3, answerIndex)),
+        q: normalizeString(record.q, normalizeString(record.question)),
+        options: options as [string, string, string, string],
+        answerIndex: answerIndex as 0 | 1 | 2 | 3,
+        explanation: normalizeString(record.explanation),
       };
     })
-    .filter(Boolean) as MCQItem[];
+    .filter(
+      (
+        item
+      ): item is {
+        q: string;
+        options: [string, string, string, string];
+        answerIndex: 0 | 1 | 2 | 3;
+        explanation: string;
+      } => !!item && !!item.q
+    );
 }
-
 function normalizeSlideArray(value: unknown): SlideItem[] {
   if (!Array.isArray(value)) return [];
   return value
-    .map((item) => {
+    .map((item, index) => {
       if (typeof item !== "object" || item === null) return null;
 
       const record = item as Record<string, unknown>;
       const title = normalizeString(record.title);
       const bullets = normalizeStringArray(record.bullets).slice(0, 6);
+      while (bullets.length < 4) bullets.push("");
       const imageQuery = normalizeString(record.imageQuery);
       const videoQuery = normalizeString(record.videoQuery);
       const interactivePrompt = normalizeString(record.interactivePrompt);
       const image = normalizeString(record.image);
 
       return {
+        slideNumber: normalizeNumber(record.slideNumber, index + 1, 1, 999),
+        slideType: normalizeSlideType(
+          record.slideType,
+          index === 0 ? "starter" : "concept"
+        ),
         title,
         bullets,
+        teacherPrompt: normalizeString(record.teacherPrompt),
+        studentTask: normalizeString(record.studentTask),
         imageQuery,
         videoQuery,
         interactivePrompt,
@@ -259,38 +697,23 @@ function normalizeStepArray(value: unknown): LessonStep[] {
   return value
     .map((item, index) => {
       if (typeof item !== "object" || item === null) return null;
-
       const record = item as Record<string, unknown>;
 
-      const stepNumber =
-        typeof record.stepNumber === "number"
-          ? record.stepNumber
-          : typeof record.step === "number"
-          ? record.step
-          : index + 1;
-
-      const stepTitle =
-        normalizeString(record.stepTitle) ||
-        normalizeString(record.title) ||
-        `Step ${index + 1}`;
-
-      const timeMinutes =
-        typeof record.timeMinutes === "number" && !Number.isNaN(record.timeMinutes)
-          ? Math.max(1, record.timeMinutes)
-          : 5;
-
       return {
-        stepNumber,
-        stepTitle,
-        timeMinutes,
+        stepNumber: normalizeNumber(record.stepNumber, index + 1, 1, 999),
+        stepTitle: normalizeString(record.stepTitle),
+        timeMinutes: normalizeNumber(record.timeMinutes, 5, 1, 60),
         teacherActivity: normalizeString(record.teacherActivity),
         learnerActivity: normalizeString(record.learnerActivity),
+        guidedQuestions: normalizeStringArray(record.guidedQuestions),
         teachingMethod: normalizeString(record.teachingMethod),
         assessmentCheck: normalizeString(record.assessmentCheck),
-        concretisedLearningPoint: normalizeString(record.concretisedLearningPoint),
+        concretisedLearningPoint: normalizeString(
+          record.concretisedLearningPoint
+        ),
       };
     })
-    .filter(Boolean) as LessonStep[];
+    .filter((item): item is LessonStep => !!item);
 }
 
 function buildUserInstructions(input: GeneratePayload) {
@@ -323,7 +746,9 @@ You MUST output JSON with exactly this top-level shape:
     "examAlignment": "None",
     "schoolLevel": "",
     "numberOfSlides": 8,
-    "durationMins": 40
+    "durationMins": 40,
+    "lessonType": "theory",
+    "academicDepth": "standard"
   },
   "lessonPlan": {
     "lessonTitle": "",
@@ -345,6 +770,7 @@ You MUST output JSON with exactly this top-level shape:
         "timeMinutes": 5,
         "teacherActivity": "",
         "learnerActivity": "",
+        "guidedQuestions": ["...", "..."],
         "teachingMethod": "",
         "assessmentCheck": "",
         "concretisedLearningPoint": ""
@@ -360,18 +786,75 @@ You MUST output JSON with exactly this top-level shape:
     "evaluation": [
       {
         "question": "",
+        "questionType": "knowledge",
         "markingGuide": ""
       }
     ],
     "exitTicket": ["..."],
     "assignment": ["..."]
   },
-  "lessonNotes": "",
+  "lessonNotes": {
+    "introduction": "",
+    "keyConcepts": [
+      {
+        "subheading": "",
+        "content": ""
+      }
+    ],
+    "workedExamples": [
+      {
+        "title": "",
+        "problem": "",
+        "steps": ["..."],
+        "finalAnswer": "",
+        "explanation": ""
+      }
+    ],
+    "realLifeApplications": ["..."],
+    "summaryPoints": ["..."],
+    "exitTicket": ["...", "...", "..."],
+    "keyVocabulary": [
+      { "word": "", "meaning": "" }
+    ]
+  },
+  "subjectEnrichment": {
+    "isCalculationBased": false,
+    "coreFormulas": [
+      {
+        "name": "",
+        "formula": "",
+        "meaning": "",
+        "units": ""
+      }
+    ],
+    "symbolsAndUnits": [
+      {
+        "symbol": "",
+        "meaning": "",
+        "unit": ""
+      }
+    ],
+    "calculationRules": ["..."],
+    "extraWorkedExamples": [
+      {
+        "title": "",
+        "problem": "",
+        "steps": ["..."],
+        "finalAnswer": "",
+        "explanation": ""
+      }
+    ],
+    "commonCalculationMistakes": ["..."]
+  },
   "references": ["...", "...", "..."],
   "slides": [
     {
+      "slideNumber": 1,
+      "slideType": "starter",
       "title": "",
       "bullets": ["", "", "", ""],
+      "teacherPrompt": "",
+      "studentTask": "",
       "imageQuery": "",
       "videoQuery": "",
       "interactivePrompt": ""
@@ -382,7 +865,8 @@ You MUST output JSON with exactly this top-level shape:
       {
         "q": "",
         "options": ["", "", "", ""],
-        "answerIndex": 0
+        "answerIndex": 0,
+        "explanation": ""
       }
     ],
     "theory": [
@@ -405,20 +889,33 @@ The output must be:
 - teacher-friendly
 - student-understandable
 - globally standard
+- academically sound
 - usable WITHOUT needing a textbook or external AI
 
 ========================
 META (REQUIRED)
 ========================
-- Fill ALL meta fields correctly:
-  subject
-  topic
-  grade
-  curriculum
-  examAlignment (None / WAEC / NECO)
-  schoolLevel (EYFS / Primary / Secondary)
-  durationMins
-  numberOfSlides
+Fill ALL meta fields correctly:
+- subject
+- topic
+- grade
+- curriculum
+- examAlignment (None / WAEC / NECO)
+- schoolLevel (EYFS / Primary / Secondary)
+- numberOfSlides
+- durationMins
+- lessonType
+- academicDepth
+
+lessonType:
+- "theory" for concept-heavy lessons
+- "practical" for experiment / activity-based lessons
+- "mixed" for both
+
+academicDepth:
+- "foundational" for EYFS / lower Primary
+- "standard" for upper Primary / lower Secondary
+- "advanced" for upper Secondary and exam classes where appropriate
 
 ========================
 LESSON PLAN (CORE ENGINE)
@@ -447,7 +944,7 @@ PERFORMANCE OBJECTIVES
 ------------------------
 - EXACTLY 3 TO 5 objectives
 - Must start with strong action verbs:
-  identify, define, explain, describe, demonstrate, classify, compare, construct, solve, create, observe, present
+  identify, define, explain, describe, demonstrate, classify, compare, construct, solve, create, observe, present, calculate, derive, analyse
 - Must be measurable and learner-centered
 - Must reflect what learners will actually DO
 
@@ -472,7 +969,9 @@ INSTRUCTIONAL MATERIALS
 - Must include:
   classroom tools
   visual aids
-  concrete/local materials (VERY IMPORTANT)
+  concrete/local materials
+- For science/calculation subjects, include where relevant:
+  graph sheet, calculator, ruler, apparatus, chart, periodic table, formula sheet, specimen
 
 ------------------------
 LIFE / NATURE ACTIVITIES
@@ -521,50 +1020,119 @@ Each step MUST include:
 - timeMinutes
 - teacherActivity
 - learnerActivity
+- guidedQuestions
 - teachingMethod
 - assessmentCheck
 - concretisedLearningPoint
 
 RULES:
 - Must feel like REAL teaching flow
-- timeMinutes must be realistic
-- teacherActivity MUST include:
-  explanation, questioning, demonstration, guided discovery, real objects, drawing, role play, etc.
-- learnerActivity MUST be ACTIVE (no passive listening)
-- teachingMethod must be specific (e.g. discussion, demonstration, guided discovery)
-- assessmentCheck must include:
-  quick checks (oral questions, mini task, board response, pair explanation, etc.)
-- concretisedLearningPoint must clearly state what learners understand
-- Steps must build on each other logically
+- timeMinutes must be realistic and sum approximately to the lesson duration
+- teacherActivity MUST include explanation, questioning, demonstration, guided discovery, real objects, drawing, role play, worked examples, board illustration, or experiment where relevant
+- learnerActivity MUST be ACTIVE
+- guidedQuestions must contain EXACTLY 2 or 3 short teacher questions
+- teachingMethod must be specific
+- assessmentCheck must include a quick observable check
+- concretisedLearningPoint must state what learners now understand or can do
+- Steps must build logically
 
 ========================
-LESSON NOTES (VERY IMPORTANT)
+LESSON NOTES (STRUCTURED)
 ========================
-- 900 to 1400 words
-- Must be:
-  clear
-  engaging
-  practical
-  student-friendly
-  copyable into notebooks
-- MUST NOT sound robotic or dry
-- MUST include vivid, relatable examples
+lessonNotes MUST be an object, not a plain string.
 
-Use these exact headings in lessonNotes:
-1) Introduction
-2) Key Concepts
-3) Worked Examples
-4) Real-life Applications
-5) Summary
-6) Exit Ticket
-7) Key Vocabulary
+lessonNotes.introduction:
+- 1 to 2 paragraphs
+- clear and engaging
 
-Lesson note rules:
-- Worked Examples: MINIMUM 2, step-by-step
-- Real-life Applications: MINIMUM 3, local where possible
-- Summary: 5 to 8 bullet points
-- Exit Ticket: EXACTLY 3 questions
-- Key Vocabulary: MINIMUM 8 terms with meanings
+lessonNotes.keyConcepts:
+- 3 to 6 objects
+- each object must contain:
+  - subheading
+  - content
+- content must be rich, clear, student-friendly, and academically correct
+
+lessonNotes.workedExamples:
+- MINIMUM 2 examples
+- For non-calculation subjects, use classification, interpretation, comparison, or applied reasoning examples
+- For calculation subjects, must be step-by-step numerical or symbolic solutions
+
+Each worked example MUST include:
+- title
+- problem
+- steps
+- finalAnswer
+- explanation
+
+lessonNotes.realLifeApplications:
+- MINIMUM 3 items
+- local and practical where possible
+
+lessonNotes.summaryPoints:
+- 5 to 8 bullet points
+
+lessonNotes.exitTicket:
+- EXACTLY 3 short questions
+
+lessonNotes.keyVocabulary:
+- MINIMUM 8 terms with meanings
+
+========================
+SUBJECT ENRICHMENT (CRITICAL FOR HYBRID MODEL)
+========================
+subjectEnrichment MUST always exist.
+
+Set isCalculationBased = true ONLY if the subject/topic requires calculations, formulas, symbolic manipulation, balancing equations, graphs, measurements, or quantitative reasoning.
+
+Calculation-based subjects often include:
+- Mathematics
+- Further Mathematics
+- Physics
+- Chemistry
+- Economics (selected topics)
+- Financial Accounting (selected topics)
+- Geography (selected quantitative topics)
+
+If isCalculationBased = false:
+- coreFormulas may be empty
+- symbolsAndUnits may be empty
+- calculationRules may be empty
+- extraWorkedExamples may be empty
+- commonCalculationMistakes may be empty
+
+If isCalculationBased = true:
+You MUST populate all fields meaningfully.
+
+subjectEnrichment.coreFormulas:
+- 3 to 8 formula objects where relevant
+- each object must include:
+  - name
+  - formula
+  - meaning
+  - units
+
+subjectEnrichment.symbolsAndUnits:
+- include important variables and units
+- examples:
+  v = velocity = m/s
+  F = force = N
+  n = amount of substance = mol
+
+subjectEnrichment.calculationRules:
+- 3 to 6 short rules
+- examples:
+  - convert to SI units before substitution
+  - include units in final answer
+  - balance equation before mole ratio
+  - round only at final step
+
+subjectEnrichment.extraWorkedExamples:
+- 2 to 4 extra examples for Secondary calculation-based lessons
+- MUST be exam-standard where relevant
+- MUST show full step-by-step method
+
+subjectEnrichment.commonCalculationMistakes:
+- 2 to 5 real mistakes students make
 
 ========================
 DIFFERENTIATION
@@ -574,45 +1142,50 @@ Must include:
 - supportForAverageLearners
 - challengeForAdvancedLearners
 
-Must be PRACTICAL and usable in class
+Must be practical and usable
 
 ========================
 BOARD SUMMARY
 ========================
 - 5 to 10 short points
-- Must include:
-  key definitions
-  formulas
-  steps
-  core ideas
-- Must be what teacher writes on the board
+- Must be what the teacher can actually write on the board
+- For calculation-based lessons, include formulas, steps, laws, or rules where relevant
 
 ========================
 EVALUATION
 ========================
 - EXACTLY 5 questions
-- MUST include:
-  knowledge
-  understanding
-  application
-- Each MUST include:
-  question
-  markingGuide
+- Must intentionally mix:
+  - at least 1 knowledge question
+  - at least 1 understanding question
+  - at least 1 application question
+- For secondary calculation-based lessons, include at least 1 calculation or worked-response item
+- Each must include:
+  - question
+  - questionType
+  - markingGuide
+
+Allowed questionType values:
+- knowledge
+- understanding
+- application
+- analysis
+- calculation
 
 ========================
 EXIT TICKET
 ========================
 - EXACTLY 3 short questions
-- Quick understanding check
+- quick understanding check
 
 ========================
 ASSIGNMENT
 ========================
 - EXACTLY 3 items
 - Must include:
-  practice
-  real-life connection
-  extension/challenge
+  - practice
+  - real-life connection
+  - extension/challenge
 
 ========================
 SLIDES
@@ -620,54 +1193,85 @@ SLIDES
 - EXACTLY ${numberOfSlides} slides
 
 Each slide MUST include:
+- slideNumber
+- slideType
 - title
-- bullets (4 to 6 only)
+- bullets
+- teacherPrompt
+- studentTask
 - imageQuery
 - videoQuery
 - interactivePrompt
 
-Rules:
-- Bullets must be SHORT and PRESENTATION-READY
-- NOT copied from lesson notes
-- MUST be interactive
-
-Include a healthy mix of:
+Allowed slideType values:
 - starter
+- concept
+- worked_example
 - discussion
-- think-pair-share
-- quick check
-- demonstration
+- activity
+- quick_check
 - recap
+
+Rules:
+- bullets must be 4 to 6 only
+- bullets must be short and presentation-ready
+- not copied directly from lesson notes
+- teacherPrompt = what the teacher says or highlights
+- studentTask = what students do on that slide
+- interactivePrompt must create participation
+- For calculation-based lessons, at least 1 slide must be "worked_example"
+- Final slide should usually be "recap" or "quick_check"
 
 ========================
 QUIZ
 ========================
 MCQ:
 - EXACTLY 10 questions
-- Each:
-  q
-  options (4)
-  answerIndex (0–3)
+- Each must include:
+  - q
+  - options (4)
+  - answerIndex
+  - explanation
+
+Rules:
+- For Mathematics, Further Mathematics, Physics, Chemistry, Biology, and other science-heavy Secondary subjects:
+  - use a mixed difficulty set of about 30% easy, 40% medium, and 30% hard questions
+  - easy should be straightforward concept or simple calculation questions
+  - medium should require one-step reasoning, application, comparison, or interpretation
+  - hard should involve multi-step reasoning, application of concepts, realistic exam-style problem solving, or calculation where relevant
+  - hard must not be confusing for no reason; distractors should be believable and based on common misconceptions or method errors
+- If examAlignment = WAEC or NECO:
+  - use exam-like phrasing and structured wording
+  - include some higher-order questions and clear exam-aware language
+  - make distractors believable and aligned with common student traps
+  - for calculation subjects, include numerical/problem-solving MCQs where appropriate
+- For Primary and EYFS:
+  - keep questions age-appropriate, simple, and not artificially hard
+  - focus on conceptual understanding and clear reasoning at the right level
+- Use plausible distractors
+- explanation must be 1 to 2 sentences
+- For calculation-based subjects, include numerical or formula-based MCQs where appropriate
 
 Theory:
 - EXACTLY 2 questions
 - Each must include markingGuide
-
-Must be level-appropriate and exam-aware
+- For science and calculation subjects, theory questions must test explanation, working, reasoning, or application rather than only recall
+- If examAlignment = WAEC or NECO, phrasing should feel exam-aware
 
 ========================
 LIVE APPLICATIONS
 ========================
 - 3 to 5 items
 - Must show real-world use:
-  home, school, industry, transport, agriculture, health, etc.
+  home, school, industry, transport, agriculture, health, environment, technology, business, etc.
 
 ========================
 REFERENCES
 ========================
 - 3 to 5 items
-- Must be REALISTIC textbooks or curriculum guides
-- No fake details
+- Must be realistic textbooks, curriculum guides, or standard class references
+- No fake authors, fake publishers, or fake editions
+- If exact edition is uncertain, keep the reference general and realistic
 
 ========================
 LEVEL ADAPTATION
@@ -676,16 +1280,49 @@ EYFS:
 - playful, visual, simple, concrete
 - use songs, objects, pictures, movement, imitation, tracing, matching, colouring, naming
 - avoid abstract explanation
+- do not force formulas unless absolutely necessary
 
 PRIMARY:
 - simple, vivid, relatable
 - use familiar examples from home, school, playground, market, family, weather, animals, food, transport
 - encourage observation, drawing, discussion, and guided practice
+- if calculations appear, keep them simple and concrete
 
 SECONDARY:
 - structured, exam-aware, deeper reasoning
 - clear, practical, and classroom-usable
-- include stronger reasoning, comparison, examples, and application
+- include stronger reasoning, comparison, examples, derivations, formulas, principles, and applications where relevant
+- for SS1–SS3 calculation-based lessons, include serious academic depth and exam-standard worked examples
+
+========================
+SUBJECT-SPECIFIC DEPTH RULE
+========================
+For Mathematics, Further Mathematics, Physics, Chemistry, Biology, and other quantitative subjects:
+- use accurate formulas
+- define symbols
+- include units where appropriate
+- provide step-by-step worked examples
+- use exam-style phrasing for Secondary when relevant
+- avoid vague summaries
+- show substitution clearly
+- show final answers clearly
+- include method-sensitive marking language where appropriate
+- ensure theory questions test explanation, reasoning, and working, not just recall
+
+For Chemistry specifically:
+- include balanced equations where relevant
+- distinguish formula, equation, observation, and inference when needed
+- use correct chemical notation
+
+For Physics specifically:
+- include units and SI conversion where needed
+- state laws/principles clearly
+- show substitutions properly
+
+For Mathematics and Further Mathematics:
+- show method step by step
+- use proper notation
+- include simplification and final answer clearly
 
 ========================
 CURRICULUM & EXAM ADAPTATION
@@ -693,10 +1330,11 @@ CURRICULUM & EXAM ADAPTATION
 - Nigerian Curriculum → practical, teacher-friendly, classroom-usable
 - Cambridge → inquiry-based, skill-focused, conceptually clear
 
-- If examAlignment = WAEC or NECO:
-  - MUST be exam-conscious
-  - Use structured phrasing
-  - Include exam-style questions where appropriate
+If examAlignment = WAEC or NECO:
+- MUST be exam-conscious
+- use structured phrasing
+- include exam-style evaluation and theory where appropriate
+- for calculation subjects, include method-sensitive worked examples and marking logic
 
 ========================
 IMAGE QUALITY RULE
@@ -716,8 +1354,7 @@ Avoid:
 ========================
 FINAL RULE
 ========================
-This lesson must be so complete that:
-A teacher can teach directly from it WITHOUT needing a textbook or ChatGPT.
+This lesson must be so complete that a teacher can teach directly from it WITHOUT needing a textbook or external AI.
 
 Return VALID JSON only.
 `.trim();
@@ -871,10 +1508,15 @@ If the image does not clearly teach the concept, then it is not acceptable.
   }
 }
 
-function normalizeGeneratedData(rawData: unknown, body: GeneratePayload): GeneratedLessonData {
+
+
+function normalizeGeneratedData(
+  rawData: unknown,
+  body: GeneratePayload
+): GeneratedLessonData {
   const curriculum = body.curriculum ?? "Nigerian Curriculum";
-  const examAlignment = body.examAlignment ?? "None";
-  const schoolLevel = body.schoolLevel ?? "Secondary";
+  const examAlignment = normalizeExamAlignment(body.examAlignment, "None");
+  const schoolLevel = normalizeSchoolLevel(body.schoolLevel, "Secondary");
   const numberOfSlides = clampNumber(body.numberOfSlides, 1, 20, 8);
   const durationMins = clampNumber(body.durationMins, 10, 180, 40);
 
@@ -898,6 +1540,11 @@ function normalizeGeneratedData(rawData: unknown, body: GeneratePayload): Genera
     lessonPlanRecord.differentiation !== null
       ? (lessonPlanRecord.differentiation as Record<string, unknown>)
       : {};
+
+  const normalizedSchoolLevel = normalizeSchoolLevel(
+    meta.schoolLevel,
+    schoolLevel
+  );
 
   const normalizedLessonPlan: LessonPlan = {
     lessonTitle:
@@ -968,21 +1615,38 @@ function normalizeGeneratedData(rawData: unknown, body: GeneratePayload): Genera
       topic: normalizeString(meta.topic, body.topic),
       grade: normalizeString(meta.grade, body.grade),
       curriculum: normalizeString(meta.curriculum, curriculum),
-      examAlignment: normalizeString(meta.examAlignment, examAlignment),
-      schoolLevel: normalizeString(meta.schoolLevel, schoolLevel),
-      numberOfSlides:
-        typeof meta.numberOfSlides === "number"
-          ? clampNumber(meta.numberOfSlides, 1, 20, numberOfSlides)
-          : numberOfSlides,
-      durationMins:
-        typeof meta.durationMins === "number"
-          ? clampNumber(meta.durationMins, 10, 180, durationMins)
-          : durationMins,
+      examAlignment: normalizeExamAlignment(meta.examAlignment, examAlignment),
+      schoolLevel: normalizedSchoolLevel,
+      numberOfSlides: normalizeNumber(
+        meta.numberOfSlides,
+        numberOfSlides,
+        1,
+        20
+      ),
+      durationMins: normalizeNumber(
+        meta.durationMins,
+        durationMins,
+        10,
+        180
+      ),
+      lessonType: normalizeLessonType(
+        meta.lessonType,
+        inferLessonType(body.subject, body.topic)
+      ),
+      academicDepth: normalizeAcademicDepth(
+        meta.academicDepth,
+        inferAcademicDepth(normalizedSchoolLevel, body.grade)
+      ),
     },
 
     lessonPlan: normalizedLessonPlan,
 
-    lessonNotes: normalizeString(record.lessonNotes),
+    lessonNotes: normalizeLessonNotes(record.lessonNotes),
+
+    subjectEnrichment: normalizeSubjectEnrichment(
+      record.subjectEnrichment,
+      body
+    ),
 
     references: normalizeStringArray(record.references),
 
