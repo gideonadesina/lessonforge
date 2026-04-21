@@ -14,7 +14,7 @@ import PlanningStatusCard from "@/components/dashboard/PlanningStatusCard";
 import RecentActivity from "@/components/dashboard/RecentActivity";
 import WeeklyInsight from "@/components/dashboard/WeeklyInsight";
 import { listSchemeOfWork } from "@/lib/planning/scheme";
-import { listAcademicEvents } from "@/lib/planning/academicCalender";
+import { listAcademicEvents } from "@/lib/planning/academicCalendar";
 import SchoolCodeInput from "@/components/SchoolCodeInput";
 import type {
   AcademicCalendarRow,

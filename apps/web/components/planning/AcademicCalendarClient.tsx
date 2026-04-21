@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import {
   createAcademicEvent,
   deleteAcademicEvent,
   listAcademicEvents,
   updateAcademicEvent,
-} from "@/lib/planning/academicCalender";
+} from "@/lib/planning/academicCalendar";
 import { ACADEMIC_EVENT_TYPE_OPTIONS } from "@/lib/planning/constants";
 import type {
   AcademicCalendarInput,
@@ -21,14 +21,20 @@ import EventTypeBadge from "@/components/planning/EventTypeBadge";
 type AcademicCalendarFormState = {
   title: string;
   event_date: string;
+  end_date: string;
   event_type: AcademicEventType;
+  affected_classes: string[];
+  affected_classes_text: string;
   description: string;
 };
 
 const DEFAULT_FORM: AcademicCalendarFormState = {
   title: "",
   event_date: "",
+  end_date: "",
   event_type: "meeting",
+  affected_classes: [],
+  affected_classes_text: "",
   description: "",
 };
 
@@ -37,6 +43,13 @@ function validateAcademicForm(form: AcademicCalendarFormState) {
   if (!form.title.trim()) errors.title = "Title is required.";
   if (!form.event_date.trim()) errors.event_date = "Event date is required.";
   if (!form.event_type) errors.event_type = "Event type is required.";
+  if (
+    form.end_date.trim() &&
+    form.event_date.trim() &&
+    form.end_date.trim() < form.event_date.trim()
+  ) {
+    errors.end_date = "End date must be on or after event date.";
+  }
   return errors;
 }
 
@@ -64,6 +77,39 @@ export default function AcademicCalendarClient({
 
   const [error, setError] = useState<string | null>(initialError ?? null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [knownClasses, setKnownClasses] = useState<string[]>([]);
+
+  useEffect(() => {
+    void (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: timetable } = await supabase
+        .from("teacher_timetable")
+        .select("id")
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!timetable?.id) {
+        setKnownClasses([]);
+        return;
+      }
+
+      const { data: slots } = await supabase
+        .from("timetable_slots")
+        .select("class_name")
+        .eq("timetable_id", timetable.id);
+
+      const classes = Array.from(
+        new Set((slots ?? []).map((slot) => slot.class_name?.trim()).filter(Boolean))
+      ) as string[];
+      setKnownClasses(classes);
+    })();
+  }, [supabase]);
 
   const loadEvents = useCallback(async () => {
     setLoading(true);
@@ -98,7 +144,16 @@ export default function AcademicCalendarClient({
     const payload: AcademicCalendarInput = {
       title: form.title,
       event_date: form.event_date,
+      end_date: form.end_date || null,
       event_type: form.event_type,
+      affected_classes:
+        knownClasses.length > 0
+          ? form.affected_classes
+          : form.affected_classes_text
+              .split(",")
+              .map((item) => item.trim())
+              .filter(Boolean),
+      notification_sent: false,
       description: form.description || null,
     };
 
@@ -111,6 +166,44 @@ export default function AcademicCalendarClient({
     if (result.error) {
       setError(result.error.message);
       return;
+    }
+
+    const today = new Date();
+    const eventDate = new Date(`${form.event_date}T00:00:00Z`);
+    const diffDays = Math.floor(
+      (eventDate.getTime() - new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())).getTime()) /
+        86400000
+    );
+
+    if (diffDays >= 0 && diffDays <= 7) {
+      await supabase.from("notifications").insert({
+        user_id: userId,
+        notification_type: "INFO",
+        message: form.title.trim(),
+        sub_message: `Upcoming calendar event on ${form.event_date}`,
+        action_label: "View calendar",
+        action_url: "/planning/academic-calendar",
+        timetable_slot_id: null,
+        notification_date: form.event_date,
+      });
+
+      const latest = await supabase
+        .from("academic_calendar")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("title", form.title.trim())
+        .eq("event_date", form.event_date)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (latest.data?.id) {
+        await supabase
+          .from("academic_calendar")
+          .update({ notification_sent: true })
+          .eq("id", latest.data.id)
+          .eq("user_id", userId);
+      }
     }
 
     setSuccess(editingId ? "Academic event updated." : "Academic event added.");
@@ -142,7 +235,10 @@ export default function AcademicCalendarClient({
     setForm({
       title: row.title,
       event_date: row.event_date,
+      end_date: row.end_date ?? "",
       event_type: row.event_type,
+      affected_classes: row.affected_classes ?? [],
+      affected_classes_text: (row.affected_classes ?? []).join(", "),
       description: row.description ?? "",
     });
     setFormErrors({});
@@ -205,6 +301,14 @@ export default function AcademicCalendarClient({
             type="date"
           />
 
+          <Field
+            label="End date (optional)"
+            value={form.end_date}
+            onChange={(value) => setForm((prev) => ({ ...prev, end_date: value }))}
+            error={formErrors.end_date}
+            type="date"
+          />
+
           <label className="text-xs text-slate-600">
             Event type
             <select
@@ -227,6 +331,49 @@ export default function AcademicCalendarClient({
               <div className="mt-1 text-xs text-rose-700">{formErrors.event_type}</div>
             ) : null}
           </label>
+
+          {knownClasses.length > 0 ? (
+            <label className="text-xs text-slate-600">
+              Affected classes
+              <div className="mt-1 flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                {knownClasses.map((className) => {
+                  const checked = form.affected_classes.includes(className);
+                  return (
+                    <label
+                      key={className}
+                      className="inline-flex items-center gap-1 text-[11px] text-slate-700"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          setForm((prev) => ({
+                            ...prev,
+                            affected_classes: e.target.checked
+                              ? Array.from(new Set([...prev.affected_classes, className]))
+                              : prev.affected_classes.filter((item) => item !== className),
+                          }));
+                        }}
+                      />
+                      {className}
+                    </label>
+                  );
+                })}
+              </div>
+            </label>
+          ) : (
+            <label className="text-xs text-slate-600">
+              Affected classes (comma separated)
+              <input
+                value={form.affected_classes_text}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, affected_classes_text: e.target.value }))
+                }
+                placeholder="JSS 1, JSS 2"
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-violet-400"
+              />
+            </label>
+          )}
 
           <label className="text-xs text-slate-600">
             Description (optional)
@@ -293,7 +440,13 @@ export default function AcademicCalendarClient({
                     <div className="text-sm font-semibold text-slate-900">{row.title}</div>
                     <div className="mt-1 text-xs text-slate-600">
                       {formatEventDate(row.event_date)}
+                      {row.end_date ? ` - ${formatEventDate(row.end_date)}` : ""}
                     </div>
+                    {row.affected_classes?.length ? (
+                      <div className="mt-1 text-[11px] text-slate-600">
+                        Classes: {row.affected_classes.join(", ")}
+                      </div>
+                    ) : null}
                     {row.description ? (
                       <div className="mt-2 text-sm text-slate-600">{row.description}</div>
                     ) : null}
