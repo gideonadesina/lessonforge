@@ -64,12 +64,13 @@ const teacherNav: NavSection[] = [
     ],
   },
   {
-    label: "ACCOUNT",
-    items: [
-      { href: "/school", label: "School", icon: School },
-      { href: "/settings", label: "Settings", icon: Settings },
-    ],
-  },
+  label: "ACCOUNT",
+  items: [
+    { href: "/school", label: "School", icon: School },
+    { href: "/pricing", label: "Pricing", icon: CreditCard },
+    { href: "/settings", label: "Settings", icon: Settings },
+  ],
+},
 ];
 const principalNav: NavItem[] = [
   { href: "/principal", label: "Dashboard", icon: LayoutDashboard },
