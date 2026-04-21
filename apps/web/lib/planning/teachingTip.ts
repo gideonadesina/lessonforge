@@ -65,8 +65,8 @@ export async function getTeachingTip(params: {
   const normalizedClassName = params.className.trim();
 
   try {
-    const { data: cached, error: cachedErr } = await params.supabase
-      .from("ai_tip_cache")
+   const { data: cached, error: cachedErr } = await (params.supabase as any)
+  .from("ai_tip_cache")
       .select("tip_text")
       .eq("user_id", params.userId)
       .eq("topic", normalizedTopic)
@@ -87,7 +87,7 @@ export async function getTeachingTip(params: {
       subject: normalizedSubject,
     });
 
-    const { error: insertErr } = await params.supabase.from("ai_tip_cache").upsert(
+    const { error: insertErr } = await (params.supabase as any).from("ai_tip_cache").upsert(
       {
         user_id: params.userId,
         topic: normalizedTopic,
