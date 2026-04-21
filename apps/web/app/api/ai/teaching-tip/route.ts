@@ -15,7 +15,7 @@ type TipPayload = {
 export async function POST(req: NextRequest) {
   try {
     const auth = await getAuthenticatedUserClient(req);
-    if (!auth.ok || !auth.user) {
+    if (!auth.ok || !auth.user || !auth.supabase) {
       return NextResponse.json(
         { ok: false, error: auth.error ?? "Unauthorized" },
         { status: auth.status ?? 401 }

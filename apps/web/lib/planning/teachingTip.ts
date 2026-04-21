@@ -17,11 +17,9 @@ function getOpenAiClient() {
 
 export async function generateTeachingTip(input: TeachingTipInput) {
   const client = getOpenAiClient();
-  const prompt =
-    `You are ForgeGuide, a teaching assistant for Nigerian secondary schools.\n` +
-    `Give one practical, specific teaching tip for a teacher about to teach ` +
-    `${input.topic} in ${input.subject} to ${input.className} students.\n` +
-    `One sentence only. Be concrete, not generic.`;
+  const prompt = `You are ForgeGuide, a teaching assistant for Nigerian secondary schools.
+Give one practical, specific teaching tip for a teacher about to teach ${input.topic} in ${input.subject} to ${input.className} students.
+One sentence only. Be concrete, not generic.`;
 
   const response = await client.responses.create({
     model: "gpt-4.1-mini",
@@ -47,7 +45,7 @@ export async function generateTeachingTip(input: TeachingTipInput) {
 }
 
 export function fallbackTeachingTip() {
-  return "Begin with a question your students can answer from experience - it activates prior knowledge before new content.";
+  return "Begin with a question your students can answer from experience — it activates prior knowledge before new content.";
 }
 
 function utcDateOnly(value = new Date()) {
@@ -73,7 +71,6 @@ export async function getTeachingTip(params: {
       .eq("user_id", params.userId)
       .eq("topic", normalizedTopic)
       .eq("generated_for_date", today)
-      .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
