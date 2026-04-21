@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
 import AcademicCalendarClient from "@/components/planning/AcademicCalendarClient";
-import { listAcademicEvents } from "@/lib/planning/academicCalender";
+import { listAcademicEvents } from "@/lib/planning/academicCalendar";
 
 export default async function AcademicCalendarPage() {
   const supabase = await createServerSupabase();

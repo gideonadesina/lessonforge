@@ -96,3 +96,131 @@ export async function deleteSchemeEntry(
 
   return { error };
 }
+
+export async function listUserTimetableSlotsBySubject(
+  supabase: SupabaseClient,
+  userId: string,
+  subject?: string
+) {
+  const timetableRes = await supabase
+    .from("teacher_timetable")
+    .select("id")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (timetableRes.error) {
+    return { data: [], error: timetableRes.error };
+  }
+
+  if (!timetableRes.data?.id) {
+    return { data: [], error: null };
+  }
+
+  let slotQuery = supabase
+    .from("timetable_slots")
+    .select(
+      "id, day_of_week, start_time, duration_minutes, class_name, subject, scheme_entry_id"
+    )
+    .eq("timetable_id", timetableRes.data.id)
+    .order("day_of_week", { ascending: true })
+    .order("start_time", { ascending: true });
+
+  if (subject?.trim()) {
+    slotQuery = slotQuery.ilike("subject", subject.trim());
+  }
+
+  const { data, error } = await slotQuery;
+  return {
+    data:
+      (data ?? []) as Array<{
+        id: string;
+        day_of_week: number;
+        start_time: string;
+        duration_minutes: number;
+        class_name: string;
+        subject: string;
+        scheme_entry_id: string | null;
+      }>,
+    error,
+  };
+}
+
+export async function linkSchemeEntryToTimetableSlot(
+  supabase: SupabaseClient,
+  userId: string,
+  schemeEntryId: string,
+  timetableSlotId: string
+) {
+  const slotRes = await supabase
+    .from("timetable_slots")
+    .select("id, timetable_id")
+    .eq("id", timetableSlotId)
+    .maybeSingle();
+
+  if (slotRes.error || !slotRes.data?.id) {
+    return { error: slotRes.error ?? new Error("Timetable slot not found.") };
+  }
+
+  const ownerRes = await supabase
+    .from("teacher_timetable")
+    .select("id")
+    .eq("id", slotRes.data.timetable_id)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (ownerRes.error || !ownerRes.data?.id) {
+    return { error: ownerRes.error ?? new Error("Forbidden") };
+  }
+
+  const { error } = await supabase
+    .from("timetable_slots")
+    .update({ scheme_entry_id: schemeEntryId })
+    .eq("id", timetableSlotId);
+
+  return { error };
+}
+
+export async function markSchemeEntryCompleted(
+  supabase: SupabaseClient,
+  userId: string,
+  schemeEntryId: string
+) {
+  const { error } = await supabase
+    .from("scheme_of_work")
+    .update({ status: "completed" })
+    .eq("id", schemeEntryId)
+    .eq("user_id", userId);
+
+  return { error };
+}
+
+export async function listTimetableSlotsByUser(
+  supabase: SupabaseClient,
+  userId: string
+) {
+  return listUserTimetableSlotsBySubject(supabase, userId);
+}
+
+export async function assignSchemeEntryToTimetableSlot(
+  supabase: SupabaseClient,
+  userId: string,
+  schemeEntryId: string,
+  timetableSlotId: string | null
+) {
+  if (!timetableSlotId) {
+    const { error } = await supabase
+      .from("timetable_slots")
+      .update({ scheme_entry_id: null })
+      .eq("scheme_entry_id", schemeEntryId);
+    return { error };
+  }
+
+  return linkSchemeEntryToTimetableSlot(
+    supabase,
+    userId,
+    schemeEntryId,
+    timetableSlotId
+  );
+}

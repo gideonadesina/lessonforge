@@ -17,6 +17,8 @@ import {
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { useProfile } from "@/lib/useProfile";
 import { useToast } from "@/components/ui/ToastProvider";
+import type { Notification } from "@/lib/planning/types";
+import NotificationBellDropdown from "@/components/planning/NotificationBellDropdown";
 
 export default function Topbar({
   userEmail,
@@ -34,9 +36,13 @@ export default function Topbar({
   const [roleError, setRoleError] = useState<string | null>(null);
   const [roleMenuOpen, setRoleMenuOpen] = useState(false);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
+  const [bellOpen, setBellOpen] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const roleMenuRef = useRef<HTMLDivElement | null>(null);
   const shareMenuRef = useRef<HTMLDivElement | null>(null);
+  const bellRef = useRef<HTMLDivElement | null>(null);
 
   const supabase = useMemo(() => createBrowserSupabase(), []);
   const { profile } = useProfile();
@@ -65,11 +71,53 @@ export default function Topbar({
       if (shareMenuRef.current && !shareMenuRef.current.contains(target)) {
         setShareMenuOpen(false);
       }
+
+      if (bellRef.current && !bellRef.current.contains(target)) {
+        setBellOpen(false);
+      }
     }
 
     document.addEventListener("mousedown", onDocumentClick);
     return () => document.removeEventListener("mousedown", onDocumentClick);
   }, []);
+
+  useEffect(() => {
+    if (isPrincipalArea) return;
+
+    let active = true;
+    async function loadNotifications() {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const token = session?.access_token ?? "";
+        if (!token) return;
+
+        const res = await fetch("/api/notifications", {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        const json = await res.json();
+        if (!res.ok || !json?.ok) return;
+
+        if (!active) return;
+        setNotifications((json.data?.notifications ?? []) as Notification[]);
+        setUnreadCount(Number(json.data?.unreadCount ?? 0));
+      } catch {
+        // Keep topbar resilient if notifications are unavailable.
+      }
+    }
+
+    void loadNotifications();
+    const timer = window.setInterval(() => {
+      void loadNotifications();
+    }, 60_000);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [isPrincipalArea, supabase]);
 
   async function logout() {
     try {
@@ -166,6 +214,55 @@ export default function Topbar({
 
     setShareMenuOpen((current) => !current);
   }
+
+  async function dismissNotification(id: string) {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token ?? "";
+      if (!token) return;
+
+      await fetch(`/api/notifications/${id}/dismiss`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      setNotifications((prev) => {
+        const dismissed = prev.find((item) => item.id === id);
+        if (dismissed?.read_at == null) {
+          setUnreadCount((count) => Math.max(0, count - 1));
+        }
+        return prev.filter((item) => item.id !== id);
+      });
+    } catch {
+      showToast("Could not dismiss notification.");
+    }
+  }
+
+  async function markAllNotificationsRead() {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token ?? "";
+      if (!token) return;
+
+      await fetch("/api/notifications/read-all", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      setUnreadCount(0);
+      setNotifications((prev) =>
+        prev.map((item) => ({ ...item, read_at: item.read_at ?? new Date().toISOString() }))
+      );
+    } catch {
+      showToast("Could not mark notifications as read.");
+    }
+  }
+
+  const unreadBadge = unreadCount > 9 ? "9+" : String(unreadCount);
 
   return (
     <>
@@ -280,74 +377,99 @@ export default function Topbar({
               </Link>
             </>
           ) : (
-            <div ref={shareMenuRef} className="relative">
-              <button
-                type="button"
-                onClick={() => {
-                  void handleShareReferral();
-                }}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 dark:border-[#1A2847] bg-white dark:bg-[#0B1530] dark:text-slate-200 dark:hover:bg-[#101827]"
-              >
-                Share
-              </button>
+            <>
+              <div ref={bellRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setBellOpen((current) => !current)}
+                  className="relative rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 dark:border-[#1A2847] dark:bg-[#0B1530] dark:text-slate-200 dark:hover:bg-[#101827]"
+                  aria-label="Notifications"
+                >
+                  <span aria-hidden>🔔</span>
+                  {unreadCount > 0 ? (
+                    <span className="absolute -right-1 -top-1 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-[#E24B4A] px-1 text-[10px] font-semibold text-white">
+                      {unreadBadge}
+                    </span>
+                  ) : null}
+                </button>
+                {bellOpen ? (
+                  <NotificationBellDropdown
+                    notifications={notifications}
+                    onDismiss={dismissNotification}
+                    onMarkAllRead={markAllNotificationsRead}
+                  />
+                ) : null}
+              </div>
 
-              {shareMenuOpen ? (
-                <div className="absolute right-0 z-50 mt-2 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg dark:border-[#1A2847] bg-white dark:bg-[#0B1530]">
-                  <div className="px-2 pb-2 pt-1">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Share referral
+              <div ref={shareMenuRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleShareReferral();
+                  }}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 dark:border-[#1A2847] bg-white dark:bg-[#0B1530] dark:text-slate-200 dark:hover:bg-[#101827]"
+                >
+                  Share
+                </button>
+
+                {shareMenuOpen ? (
+                  <div className="absolute right-0 z-50 mt-2 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg dark:border-[#1A2847] bg-white dark:bg-[#0B1530]">
+                    <div className="px-2 pb-2 pt-1">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Share referral
+                      </div>
+                      <div className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                        Invite teachers and share your LessonForge referral link.
+                      </div>
                     </div>
-                    <div className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                      Invite teachers and share your LessonForge referral link.
+
+                    <div className="space-y-1">
+                      <a
+                        href={whatsappShareUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]"
+                      >
+                        WhatsApp
+                      </a>
+
+                      <a
+                        href={twitterShareUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]"
+                      >
+                        X / Twitter
+                      </a>
+
+                      <a
+                        href={emailShareUrl}
+                        className="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]"
+                      >
+                        Email
+                      </a>
+
+                      <a
+                        href={smsShareUrl}
+                        className="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]"
+                      >
+                        SMS
+                      </a>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void copyReferralLink();
+                        }}
+                        className="block w-full rounded-xl px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]"
+                      >
+                        Copy link
+                      </button>
                     </div>
                   </div>
-
-                  <div className="space-y-1">
-                    <a
-                      href={whatsappShareUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]"
-                    >
-                      WhatsApp
-                    </a>
-
-                    <a
-                      href={twitterShareUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]"
-                    >
-                      X / Twitter
-                    </a>
-
-                    <a
-                      href={emailShareUrl}
-                      className="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]"
-                    >
-                      Email
-                    </a>
-
-                    <a
-                      href={smsShareUrl}
-                      className="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]"
-                    >
-                      SMS
-                    </a>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void copyReferralLink();
-                      }}
-                      className="block w-full rounded-xl px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]"
-                    >
-                      Copy link
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-            </div>
+                ) : null}
+              </div>
+            </>
           )}
 
           <button

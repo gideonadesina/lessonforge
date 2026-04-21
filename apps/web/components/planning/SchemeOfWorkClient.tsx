@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import {
+  assignSchemeEntryToTimetableSlot,
   createSchemeEntry,
   deleteSchemeEntry,
   listSchemeOfWork,
+  markSchemeEntryCompleted,
+  listTimetableSlotsByUser,
   updateSchemeEntry,
 } from "@/lib/planning/scheme";
 import { SCHEME_STATUS_OPTIONS } from "@/lib/planning/constants";
@@ -26,6 +29,15 @@ type SchemeFormState = {
   topic: string;
   subtopic: string;
   status: SchemeStatus;
+};
+
+type TimetableLinkRow = {
+  id: string;
+  day_of_week: number;
+  start_time: string;
+  class_name: string;
+  subject: string;
+  scheme_entry_id: string | null;
 };
 
 const DEFAULT_FORM: SchemeFormState = {
@@ -89,6 +101,17 @@ export default function SchemeOfWorkClient({
 
   const [error, setError] = useState<string | null>(initialError ?? null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [slots, setSlots] = useState<TimetableLinkRow[]>([]);
+  const [linkingId, setLinkingId] = useState<string | null>(null);
+  const [linkOpenFor, setLinkOpenFor] = useState<string | null>(null);
+  const [markingDoneId, setMarkingDoneId] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const { data } = await listTimetableSlotsByUser(supabase, userId);
+      setSlots(data);
+    })();
+  }, [supabase, userId]);
 
   async function loadEntries(nextFilters?: SchemeOfWorkFilters) {
     setLoading(true);
@@ -191,6 +214,73 @@ export default function SchemeOfWorkClient({
     if (editingId === id) resetForm();
     setSuccess("Scheme entry deleted.");
     await loadEntries();
+  }
+
+  async function onLinkSlot(entryId: string, slotId: string | null) {
+    setError(null);
+    setSuccess(null);
+    setLinkingId(entryId);
+    const result = await assignSchemeEntryToTimetableSlot(
+      supabase,
+      userId,
+      entryId,
+      slotId
+    );
+    setLinkingId(null);
+    if (result.error) {
+      setError(result.error.message);
+      return;
+    }
+
+    setSuccess(slotId ? "Timetable slot linked." : "Timetable link removed.");
+    const refreshed = await listTimetableSlotsByUser(supabase, userId);
+    setSlots(refreshed.data);
+    setLinkOpenFor(null);
+  }
+
+  async function onMarkDone(row: SchemeOfWorkRow) {
+    setError(null);
+    setSuccess(null);
+    setMarkingDoneId(row.id);
+
+    const linkedSlot = slots.find((slot) => slot.scheme_entry_id === row.id);
+    if (linkedSlot) {
+      const tokenRes = await supabase.auth.getSession();
+      const token = tokenRes.data.session?.access_token ?? "";
+      if (!token) {
+        setMarkingDoneId(null);
+        setError("You are signed out. Please sign in again.");
+        return;
+      }
+
+      const doneRes = await fetch(`/api/planning/slots/${linkedSlot.id}/mark-done`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const doneJson = await doneRes.json().catch(() => null);
+      if (!doneRes.ok || !doneJson?.ok) {
+        setMarkingDoneId(null);
+        setError(doneJson?.error ?? "Failed to mark as done.");
+        return;
+      }
+    } else {
+      const result = await markSchemeEntryCompleted(supabase, userId, row.id);
+      if (result.error) {
+        setMarkingDoneId(null);
+        setError(result.error.message);
+        return;
+      }
+    }
+
+    setRows((prev) =>
+      prev.map((entry) =>
+        entry.id === row.id ? { ...entry, status: "completed" } : entry
+      )
+    );
+    setMarkingDoneId(null);
+    setSuccess("Scheme entry marked as completed.");
   }
 
   function onEdit(row: SchemeOfWorkRow) {
@@ -474,6 +564,61 @@ export default function SchemeOfWorkClient({
 
                         <div className="flex flex-wrap items-center gap-2">
                           <SchemeStatusBadge status={row.status} />
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setLinkOpenFor((prev) => (prev === row.id ? null : row.id))
+                              }
+                              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                            >
+                              Link to timetable
+                            </button>
+                            {linkOpenFor === row.id ? (
+                              <div className="absolute right-0 z-20 mt-1 w-64 rounded-xl border border-slate-200 bg-white p-2">
+                                <select
+                                  value={
+                                    slots.find((slot) => slot.scheme_entry_id === row.id)?.id ??
+                                    ""
+                                  }
+                                  onChange={(e) =>
+                                    void onLinkSlot(row.id, e.target.value || null)
+                                  }
+                                  disabled={linkingId === row.id}
+                                  className="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs text-slate-800"
+                                >
+                                  <option value="">Not linked</option>
+                                  {slots
+                                    .filter(
+                                      (slot) =>
+                                        slot.subject.trim().toLowerCase() ===
+                                        row.subject.trim().toLowerCase()
+                                    )
+                                    .map((slot) => (
+                                      <option key={slot.id} value={slot.id}>
+                                        {slot.class_name} · {slot.start_time.slice(0, 5)} · Day{" "}
+                                        {slot.day_of_week}
+                                      </option>
+                                    ))}
+                                </select>
+                              </div>
+                            ) : null}
+                          </div>
+                          {slots.find((slot) => slot.scheme_entry_id === row.id) ? (
+                            <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] text-slate-600">
+                              Linked
+                            </span>
+                          ) : null}
+                          {row.status !== "completed" ? (
+                            <button
+                              type="button"
+                              onClick={() => void onMarkDone(row)}
+                              disabled={markingDoneId === row.id}
+                              className="rounded-lg border border-[#C0DD97] bg-white px-3 py-1.5 text-xs font-medium text-[#3B6D11] hover:bg-[#EAF3DE] disabled:opacity-60"
+                            >
+                              {markingDoneId === row.id ? "Saving..." : "Mark as done"}
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => onEdit(row)}
