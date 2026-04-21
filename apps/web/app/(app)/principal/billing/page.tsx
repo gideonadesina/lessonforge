@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import PrincipalPageHeader from "@/components/principal/PrincipalPageHeader";
 import SectionCard from "@/components/principal/SectionCard";
 import {
@@ -10,16 +10,84 @@ import {
 } from "@/components/principal/PrincipalStates";
 import { formatDateOnly, getErrorMessage, toNaira, usePrincipalDashboard } from "@/lib/principal/client";
 
+const PRINCIPAL_ONBOARDING_STORAGE_KEY = "principal_onboarding_pending";
+
 export default function PrincipalBillingPage() {
   const { supabase, loading, forbidden, error, setError, dashboard, onboardingRequired, getToken, loadDashboard } =
     usePrincipalDashboard();
   const [slotUpgradeBusy, setSlotUpgradeBusy] = useState(false);
   const [paystackBusy, setPaystackBusy] = useState(false);
+  const [onboardingBusy, setOnboardingBusy] = useState(false);
   const [addSlots, setAddSlots] = useState(1);
+  const onboardingHandledRef = useRef(false);
 
   useEffect(() => {
     void loadDashboard();
   }, [loadDashboard]);
+
+  useEffect(() => {
+    if (onboardingHandledRef.current || typeof window === "undefined") return;
+
+    const params = new URLSearchParams(window.location.search);
+    const flow = String(params.get("flow") ?? "").trim();
+    if (flow !== "principal_onboarding") return;
+
+    const status = String(params.get("status") ?? "").trim().toLowerCase();
+    if (status && status !== "success") {
+      onboardingHandledRef.current = true;
+      setError("Payment was not completed successfully.");
+      return;
+    }
+
+    const reference = String(params.get("reference") ?? params.get("trxref") ?? "").trim();
+    onboardingHandledRef.current = true;
+
+    void (async () => {
+      setOnboardingBusy(true);
+      setError(null);
+      try {
+        const token = await getToken();
+        if (!token) throw new Error("Session expired.");
+
+        const rawPending = window.sessionStorage.getItem(PRINCIPAL_ONBOARDING_STORAGE_KEY);
+        const pending = rawPending ? (JSON.parse(rawPending) as Record<string, unknown>) : null;
+        const resolvedReference =
+          reference || String(pending?.reference ?? "").trim();
+        if (!resolvedReference) {
+          throw new Error("Missing payment reference for principal onboarding verification.");
+        }
+
+        const res = await fetch("/api/principal/onboarding", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            principalName: String(pending?.principalName ?? ""),
+            schoolName: String(pending?.schoolName ?? ""),
+            teacherSlots: Number(pending?.teacherSlots ?? 1),
+            payment: {
+              provider: "paystack",
+              reference: resolvedReference,
+            },
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok || !json?.ok) {
+          throw new Error(json?.error || "Failed to verify principal onboarding payment.");
+        }
+
+        window.sessionStorage.removeItem(PRINCIPAL_ONBOARDING_STORAGE_KEY);
+        const redirectTo = String(json?.data?.redirectTo ?? "/principal/dashboard").trim() || "/principal/dashboard";
+        window.location.assign(redirectTo);
+      } catch (err: unknown) {
+        setError(getErrorMessage(err, "Failed to complete principal onboarding after payment."));
+      } finally {
+        setOnboardingBusy(false);
+      }
+    })();
+  }, [getToken, setError]);
 
   async function upgradeSlots() {
     setSlotUpgradeBusy(true);
@@ -90,6 +158,11 @@ export default function PrincipalBillingPage() {
 
       {error ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+      ) : null}
+      {onboardingBusy ? (
+        <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700">
+          Verifying your payment and completing principal onboarding...
+        </div>
       ) : null}
 
       {dashboard ? (
