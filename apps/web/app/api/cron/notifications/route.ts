@@ -2,10 +2,9 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isoUtcDate, startTimeToUtcDate, utcDayOfWeek, withMinutesOffset } from "@/lib/planning/notifications";
 
-// Called by external scheduler.
+// Called by external scheduler every 15 minutes.
 // Configure in Vercel dashboard cron settings or Supabase pg_cron.
-// NOTE: Vercel Hobby limits cron frequency; this project currently uses a reduced schedule.
-// Upgrading to Vercel Pro enables the intended 15-minute schedule.
+// NOTE: Vercel Hobby limits cron to daily. Upgrade to Vercel Pro for 15-min schedule.
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,7 +48,11 @@ function parseHourMinute(startTime: string) {
   };
 }
 
-async function lessonExistsForTopic(admin: ReturnType<typeof createAdminClient>, userId: string, topic: string) {
+async function lessonExistsForTopic(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+  topic: string
+) {
   const { data, error } = await admin
     .from("lessons")
     .select("id")
@@ -57,26 +60,33 @@ async function lessonExistsForTopic(admin: ReturnType<typeof createAdminClient>,
     .ilike("topic", topic)
     .limit(1)
     .maybeSingle();
-
   if (error) return false;
   return Boolean(data?.id);
 }
 
-async function hasAnyPackViewForSlot(admin: ReturnType<typeof createAdminClient>, userId: string, slotId: string) {
-  const { data, error } = await admin
+async function hasAnyPackViewForSlot(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+  slotId: string
+) {
+  const { data, error } = await (admin as any)
     .from("lesson_pack_views")
     .select("id")
     .eq("user_id", userId)
     .eq("timetable_slot_id", slotId)
     .limit(1)
     .maybeSingle();
-
   if (error) return false;
   return Boolean(data?.id);
 }
 
-async function hasTodayPackViewForSlot(admin: ReturnType<typeof createAdminClient>, userId: string, slotId: string, today: string) {
-  const { data, error } = await admin
+async function hasTodayPackViewForSlot(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+  slotId: string,
+  today: string
+) {
+  const { data, error } = await (admin as any)
     .from("lesson_pack_views")
     .select("id")
     .eq("user_id", userId)
@@ -84,7 +94,6 @@ async function hasTodayPackViewForSlot(admin: ReturnType<typeof createAdminClien
     .eq("view_date", today)
     .limit(1)
     .maybeSingle();
-
   if (error) return false;
   return Boolean(data?.id);
 }
@@ -98,15 +107,21 @@ export async function POST() {
     const in48h = withMinutesOffset(now, 48 * 60);
 
     const [timetableRes, prefRes] = await Promise.all([
-      admin.from("teacher_timetable").select("id, user_id"),
-      admin.from("notification_preferences").select("user_id, reminder_minutes, enabled"),
+      (admin as any).from("teacher_timetable").select("id, user_id"),
+      (admin as any).from("notification_preferences").select("user_id, reminder_minutes, enabled"),
     ]);
 
     if (timetableRes.error) {
-      return NextResponse.json({ ok: false, error: timetableRes.error.message }, { status: 500 });
+      return NextResponse.json(
+        { ok: false, error: timetableRes.error.message },
+        { status: 500 }
+      );
     }
     if (prefRes.error) {
-      return NextResponse.json({ ok: false, error: prefRes.error.message }, { status: 500 });
+      return NextResponse.json(
+        { ok: false, error: prefRes.error.message },
+        { status: 500 }
+      );
     }
 
     const timetables = (timetableRes.data ?? []) as TeacherTimetableRow[];
@@ -122,7 +137,7 @@ export async function POST() {
       if (pref && !pref.enabled) continue;
       const reminderMinutes = Math.max(1, Number(pref?.reminder_minutes ?? 30));
 
-      const { data: slots, error: slotsErr } = await admin
+      const { data: slots, error: slotsErr } = await (admin as any)
         .from("timetable_slots")
         .select("id, timetable_id, day_of_week, start_time, duration_minutes, class_name, subject, scheme_entry_id")
         .eq("timetable_id", timetable.id)
@@ -134,6 +149,7 @@ export async function POST() {
       for (const slot of (slots ?? []) as SlotRow[]) {
         let schemeTopic = "";
         let schemeExists = false;
+
         if (slot.scheme_entry_id) {
           const { data: schemeRow } = await admin
             .from("scheme_of_work")
@@ -163,53 +179,62 @@ export async function POST() {
           ? await lessonExistsForTopic(admin, timetable.user_id, schemeTopic)
           : false;
 
-        // URGENT: within reminder window and no same-day open.
-        // Fallback: if no open tracking history for slot, require lesson existence by linked topic.
+        // URGENT: within reminder window and not opened today
         if (withinReminderWindow && !openedToday) {
           const fallbackMissingLesson = !anyViewForSlot && schemeExists && !hasLessonForTopic;
-          const shouldFireUrgent = anyViewForSlot ? true : fallbackMissingLesson || !schemeExists;
+          const shouldFireUrgent = anyViewForSlot
+            ? true
+            : fallbackMissingLesson || !schemeExists;
 
           if (shouldFireUrgent) {
             const urgentMsg = schemeTopic
               ? `Class starts soon: ${slot.class_name} - ${schemeTopic}`
               : `Class starts soon: ${slot.class_name}`;
 
-            const { error: urgentInsertErr } = await admin.from("notifications").insert({
-              user_id: timetable.user_id,
-              timetable_slot_id: slot.id,
-              notification_type: "URGENT",
-              notification_date: today,
-              message: urgentMsg,
-              sub_message: `Starts at ${slot.start_time} UTC`,
-              action_label: "Open lesson pack",
-              action_url: `/planning`,
-            });
+            const { error: urgentErr } = await (admin as any)
+              .from("notifications")
+              .insert({
+                user_id: timetable.user_id,
+                timetable_slot_id: slot.id,
+                notification_type: "URGENT",
+                notification_date: today,
+                message: urgentMsg,
+                sub_message: `Starts at ${slot.start_time} UTC`,
+                action_label: "Open lesson pack",
+                action_url: "/planning",
+              });
 
-            if (!urgentInsertErr) insertedCount += 1;
+            if (!urgentErr) insertedCount += 1;
           }
         }
 
-        // PREP_WARNING: within 48 hours, has linked scheme, and no lesson exists for linked topic.
+        // PREP_WARNING: within 48 hours, has linked scheme, no lesson exists
         if (within48Hours && schemeExists && !hasLessonForTopic) {
-          const { error: prepInsertErr } = await admin.from("notifications").insert({
-            user_id: timetable.user_id,
-            timetable_slot_id: slot.id,
-            notification_type: "PREP_WARNING",
-            notification_date: today,
-            message: `Prepare lesson for ${slot.class_name}`,
-            sub_message: `${schemeTopic} is within 48 hours`,
-            action_label: "Generate lesson",
-            action_url: "/generate",
-          });
+          const { error: prepErr } = await (admin as any)
+            .from("notifications")
+            .insert({
+              user_id: timetable.user_id,
+              timetable_slot_id: slot.id,
+              notification_type: "PREP_WARNING",
+              notification_date: today,
+              message: `Prepare lesson for ${slot.class_name}`,
+              sub_message: `${schemeTopic} is within 48 hours`,
+              action_label: "Generate lesson",
+              action_url: "/generate",
+            });
 
-          if (!prepInsertErr) insertedCount += 1;
+          if (!prepErr) insertedCount += 1;
         }
       }
     }
 
-    return NextResponse.json({ ok: true, data: { inserted: insertedCount } }, { status: 200 });
+    return NextResponse.json(
+      { ok: true, data: { inserted: insertedCount } },
+      { status: 200 }
+    );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Failed to run notifications engine";
+    const message =
+      error instanceof Error ? error.message : "Failed to run notifications engine";
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }
