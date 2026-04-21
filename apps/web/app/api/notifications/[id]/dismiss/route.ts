@@ -36,7 +36,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
     const nowIso = new Date().toISOString();
     const { error } = await supabase
       .from("notifications")
-      .update({ dismissed_at: nowIso })
+      .update({ dismissed_at: nowIso } as any)
       .eq("id", id)
       .eq("user_id", user.id);
 
