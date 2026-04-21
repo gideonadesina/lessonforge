@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   SCHOOL_PRICING_PLANS,
   getCreditUsageNote,
@@ -9,15 +10,66 @@ import {
 import SchoolPricingPlanCard from "@/components/billing/SchoolPricingPlanCard";
 
 export default function PrincipalPricingPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [busyPlanId, setBusyPlanId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
 
-  async function handleSchoolPlanSelect(planId: (typeof SCHOOL_PRICING_PLANS)[number]["id"]) {
-    if (planId === "enterprise") {
-      window.location.href = "mailto:support@lessonforge.io?subject=Enterprise%20Pricing%20Inquiry";
+  const verificationReference = useMemo(
+    () => String(searchParams.get("reference") ?? "").trim(),
+    [searchParams]
+  );
+  const shouldVerifyCallback =
+    String(searchParams.get("paymentComplete") ?? "").toLowerCase() === "true" &&
+    Boolean(verificationReference);
+
+  useEffect(() => {
+    if (!shouldVerifyCallback) {
       return;
     }
 
+    let active = true;
+
+    const runVerify = async () => {
+      setIsVerifyingPayment(true);
+      setVerifyError(null);
+
+      try {
+        const res = await fetch(
+          `/api/paystack/school/verify?reference=${encodeURIComponent(
+            verificationReference
+          )}`
+        );
+        const json = await res.json();
+
+        if (!res.ok || !json?.ok) {
+          throw new Error(json?.error || "School payment verification failed");
+        }
+
+        if (!active) return;
+        router.replace("/billing/success?type=school");
+      } catch (err) {
+        if (!active) return;
+        const message =
+          err instanceof Error ? err.message : "School payment verification failed";
+        setVerifyError(message);
+      } finally {
+        if (active) {
+          setIsVerifyingPayment(false);
+        }
+      }
+    };
+
+    runVerify();
+
+    return () => {
+      active = false;
+    };
+  }, [router, shouldVerifyCallback, verificationReference]);
+
+  async function handleSchoolPlanSelect(planId: (typeof SCHOOL_PRICING_PLANS)[number]["id"]) {
     setBusyPlanId(planId);
     setError(null);
 
@@ -64,6 +116,29 @@ export default function PrincipalPricingPage() {
 
   return (
     <div className="space-y-8 pb-8">
+      {isVerifyingPayment && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          Verifying school payment...
+        </div>
+      )}
+
+      {verifyError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <p>{verifyError}</p>
+          <button
+            type="button"
+            onClick={() => {
+              window.location.href = `/principal/pricing?paymentComplete=true&reference=${encodeURIComponent(
+                verificationReference
+              )}`;
+            }}
+            className="mt-2 inline-flex items-center rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+          >
+            Retry verification
+          </button>
+        </div>
+      )}
+
       <section className="rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 via-amber-50/70 to-amber-50 px-6 py-8 shadow-sm sm:px-8">
         <div className="max-w-3xl space-y-3">
           <p className="inline-flex rounded-full bg-amber-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-900">

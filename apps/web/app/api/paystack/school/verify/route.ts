@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { paystackHeaders } from "@/lib/paystack";
-import { createAdminClient } from "@/lib/supabase/admin";
 import {
   isValidSchoolPlanId,
   type SchoolPlanId,
@@ -49,6 +48,17 @@ export async function GET(req: Request) {
     }
 
     const paystackData = json.data ?? {};
+    const paymentPurpose = String(paystackData?.metadata?.payment_purpose ?? "")
+      .toLowerCase()
+      .trim();
+
+    if (paymentPurpose !== "school") {
+      return NextResponse.json(
+        { error: "Payment reference is not a school payment" },
+        { status: 400 }
+      );
+    }
+
     const userId = String(paystackData?.metadata?.user_id ?? "").trim();
     const schoolId = String(paystackData?.metadata?.school_id ?? "").trim();
     const planId = normalizeSchoolPlanId(paystackData?.metadata?.plan);
@@ -75,7 +85,7 @@ export async function GET(req: Request) {
       paystackSubscriptionCode: paystackData?.subscription?.subscription_code,
       paystackEmail: paystackData?.customer?.email,
       payerPayload: paystackData,
-      flow: "school_checkout",
+      flow: "school_verify",
     } as ProcessSchoolPaymentInput);
 
     if (!paymentResult.ok) {

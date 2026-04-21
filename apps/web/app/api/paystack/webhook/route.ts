@@ -5,9 +5,17 @@ import {
   type TeacherPlanId,
 } from "@/lib/billing/server-pricing";
 import {
+  isValidSchoolPlanId,
+  type SchoolPlanId,
+} from "@/lib/billing/server-school-pricing";
+import {
   processTeacherPayment,
   type ProcessPaymentInput,
 } from "@/lib/billing/server-payment";
+import {
+  processSchoolPayment,
+  type ProcessSchoolPaymentInput,
+} from "@/lib/billing/server-school-payment";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -23,6 +31,11 @@ function verifyPaystackSignature(rawBody: string, signature: string | null) {
 function normalizeTeacherPlanId(rawPlan: unknown): TeacherPlanId | null {
   if (!isValidTeacherPlanId(rawPlan)) return null;
   return rawPlan as TeacherPlanId;
+}
+
+function normalizeSchoolPlanId(rawPlan: unknown): SchoolPlanId | null {
+  if (!isValidSchoolPlanId(rawPlan)) return null;
+  return rawPlan as SchoolPlanId;
 }
 
 async function resolvePlanForUser(userId: string, data: any): Promise<TeacherPlanId> {
@@ -98,7 +111,9 @@ export async function POST(req: Request) {
 
     const paystackData = event?.data ?? {};
     const reference = String(paystackData?.reference ?? "").trim();
-    const userId = String(paystackData?.metadata?.user_id ?? "").trim();
+    const paymentPurpose = String(paystackData?.metadata?.payment_purpose ?? "")
+      .toLowerCase()
+      .trim();
 
     // Validate required fields
     if (!reference) {
@@ -109,19 +124,74 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!userId) {
-      console.warn("Webhook: missing user_id in metadata");
-      return NextResponse.json(
-        { received: true, warning: "Missing user_id" },
-        { status: 200 }
-      );
-    }
-
     // Skip if not a success payment
     if (paystackData?.status !== "success") {
       console.warn(`Webhook: payment not successful for reference ${reference}`);
       return NextResponse.json(
         { received: true, warning: "Payment not successful" },
+        { status: 200 }
+      );
+    }
+
+    if (paymentPurpose === "school") {
+      console.log(
+        `Webhook: routing school payment ${reference} to school processor`
+      );
+
+      const userId = String(paystackData?.metadata?.user_id ?? "").trim();
+      const schoolId = String(paystackData?.metadata?.school_id ?? "").trim();
+      const plan = normalizeSchoolPlanId(paystackData?.metadata?.plan);
+
+      if (!userId || !schoolId || !plan) {
+        console.warn(
+          `Webhook: missing school payment metadata for reference ${reference}`
+        );
+        return NextResponse.json(
+          { received: true, warning: "Missing school payment metadata" },
+          { status: 200 }
+        );
+      }
+
+      const schoolPaymentResult = await processSchoolPayment({
+        reference,
+        userId,
+        schoolId,
+        plan,
+        amount: paystackData?.amount,
+        currency: paystackData?.currency,
+        paystackCustomerCode: paystackData?.customer?.customer_code,
+        paystackSubscriptionCode: paystackData?.subscription?.subscription_code,
+        paystackEmail: paystackData?.customer?.email,
+        payerPayload: paystackData,
+        flow: "school_webhook",
+      } as ProcessSchoolPaymentInput);
+
+      if (!schoolPaymentResult.ok) {
+        console.error(
+          `Webhook: school payment processing failed for reference ${reference}:`,
+          schoolPaymentResult.error
+        );
+        return NextResponse.json(
+          { received: true, error: schoolPaymentResult.error },
+          { status: 200 }
+        );
+      }
+
+      return NextResponse.json({
+        received: true,
+        reference,
+        schoolId,
+        sharedCreditsAwarded: schoolPaymentResult.sharedCreditsAwarded,
+        teacherLimitAwarded: schoolPaymentResult.teacherLimitAwarded,
+        alreadyProcessed: schoolPaymentResult.alreadyProcessed,
+      });
+    }
+
+    const userId = String(paystackData?.metadata?.user_id ?? "").trim();
+    if (!userId) {
+      console.warn("Webhook: missing user_id in metadata");
+      return NextResponse.json(
+        { received: true, warning: "Missing user_id" },
         { status: 200 }
       );
     }

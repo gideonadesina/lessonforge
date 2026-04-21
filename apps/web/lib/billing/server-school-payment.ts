@@ -9,6 +9,7 @@ import {
   getSchoolPlanTeacherLimit,
   type SchoolPlanId,
 } from "@/lib/billing/server-school-pricing";
+import { generateSchoolCode } from "@/lib/principal/utils";
 
 export interface ProcessSchoolPaymentInput {
   reference: string;
@@ -108,6 +109,17 @@ export async function recordSchoolPaymentTransaction(
   });
 
   if (error) {
+    if ((error as any)?.code === "23505") {
+      const retry = await getSchoolPaymentTransactionByReference(input.reference);
+      if (retry) {
+        return {
+          isNew: false,
+          alreadyProcessed: Boolean(retry.processed),
+          sharedCreditsAwarded: Number(retry.shared_credits_awarded ?? 0),
+          teacherLimitAwarded: Number(retry.teacher_limit_awarded ?? 0),
+        };
+      }
+    }
     throw new Error(`Failed to record school payment: ${error.message}`);
   }
 
@@ -119,76 +131,83 @@ export async function recordSchoolPaymentTransaction(
   };
 }
 
-/**
- * Safe school credit increment: Get current balance, add credits, update atomically.
- * Uses compare-and-swap to prevent race conditions.
- */
-async function incrementSchoolCreditsAtomic(
+async function ensureSchoolCodeExists(
   schoolId: string,
-  creditsToAdd: number,
-  maxAttempts: number = 3
-): Promise<{ previousBalance: number; newBalance: number }> {
+  generatedBy: string
+): Promise<string> {
   const admin = createAdminClient();
 
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const { data: school, error: selectError } = await admin
-      .from("schools")
-      .select("shared_credits")
-      .eq("id", schoolId)
-      .maybeSingle();
+  const { data: existingCode, error: existingCodeError } = await admin
+    .from("school_codes")
+    .select("code")
+    .eq("school_id", schoolId)
+    .eq("is_active", true)
+    .maybeSingle();
 
-    if (selectError) {
-      throw new Error(`Failed to read school credits: ${selectError.message}`);
-    }
-
-    const previousBalance = Number(school?.shared_credits ?? 0);
-    if (!Number.isFinite(previousBalance)) {
-      throw new Error("Invalid current school credits balance");
-    }
-
-    const newBalance = previousBalance + creditsToAdd;
-
-    const { data: updated, error: updateError } = await admin
-      .from("schools")
-      .update({
-        shared_credits: newBalance,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", schoolId)
-      .eq("shared_credits", previousBalance)
-      .select("shared_credits")
-      .maybeSingle();
-
-    if (updateError) {
-      throw new Error(`Failed to update school credits: ${updateError.message}`);
-    }
-
-    if (updated) {
-      return { previousBalance, newBalance };
-    }
-
-    if (attempt === maxAttempts - 1) {
-      throw new Error(
-        "Failed to update school credits after retries (balance changed)"
-      );
-    }
+  if (existingCodeError) {
+    throw new Error(`Failed to check school code: ${existingCodeError.message}`);
   }
 
-  throw new Error("Unexpected: school credit update failed");
-}
-
-/**
- * Grant shared credits to school from successful payment.
- */
-async function grantSchoolCreditsForPayment(
-  schoolId: string,
-  creditsToGrant: number
-): Promise<{ previousBalance: number; newBalance: number }> {
-  if (creditsToGrant <= 0) {
-    throw new Error("Credits to grant must be positive");
+  const currentCode = String(existingCode?.code ?? "").trim();
+  if (currentCode) {
+    return currentCode;
   }
 
-  return incrementSchoolCreditsAtomic(schoolId, creditsToGrant);
+  const { data: school, error: schoolError } = await admin
+    .from("schools")
+    .select("name")
+    .eq("id", schoolId)
+    .maybeSingle();
+
+  if (schoolError) {
+    throw new Error(`Failed to load school for code generation: ${schoolError.message}`);
+  }
+
+  const schoolName = String(school?.name ?? "LessonForge School").trim() || "LessonForge School";
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const newCode = String(generateSchoolCode(schoolName)).trim();
+    if (!newCode) {
+      throw new Error("Failed to generate school code");
+    }
+
+    const { error: insertCodeError } = await admin.from("school_codes").insert({
+      code: newCode,
+      school_id: schoolId,
+      is_active: true,
+      generated_by: generatedBy,
+    });
+
+    if (!insertCodeError) {
+      return newCode;
+    }
+
+    if ((insertCodeError as any)?.code === "23505") {
+      const { data: retryCode, error: retryCodeError } = await admin
+        .from("school_codes")
+        .select("code")
+        .eq("school_id", schoolId)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (retryCodeError) {
+        throw new Error(
+          `Failed to load existing school code after conflict: ${retryCodeError.message}`
+        );
+      }
+
+      const retryValue = String(retryCode?.code ?? "").trim();
+      if (retryValue) {
+        return retryValue;
+      }
+
+      continue;
+    }
+
+    throw new Error(`Failed to store school code: ${insertCodeError.message}`);
+  }
+
+  throw new Error("Failed to generate a unique school code after retries");
 }
 
 /**
@@ -197,34 +216,54 @@ async function grantSchoolCreditsForPayment(
 async function markSchoolPaymentProcessed(
   reference: string,
   schoolId: string,
+  userId: string,
+  plan: SchoolPlanId,
   sharedCreditsAwarded: number,
   teacherLimitAwarded: number
 ) {
   const admin = createAdminClient();
   const now = new Date().toISOString();
 
+  // Keep this assignment deterministic by plan so repeated processing for the same
+  // reference cannot stack credits.
+  const { error: schoolUpdateError } = await admin
+    .from("schools")
+    .update({
+      plan_type: plan,
+      shared_credits: sharedCreditsAwarded,
+      credits_used: 0,
+      subscription_active: true,
+      teacher_limit: teacherLimitAwarded,
+      updated_at: now,
+    })
+    .eq("id", schoolId);
+
+  if (schoolUpdateError) {
+    throw new Error(`Failed to update school subscription: ${schoolUpdateError.message}`);
+  }
+
+  const schoolCode = await ensureSchoolCodeExists(schoolId, userId);
+
   const { error } = await admin
     .from("school_payment_transactions")
     .update({
       processed: true,
       processed_at: now,
+      shared_credits_awarded_at: now,
+      result_snapshot: {
+        school_id: schoolId,
+        plan,
+        shared_credits: sharedCreditsAwarded,
+        teacher_limit: teacherLimitAwarded,
+        school_code: schoolCode,
+      },
       updated_at: now,
     })
-    .eq("reference", reference);
+    .eq("reference", reference)
+    .eq("school_id", schoolId);
 
   if (error) {
     throw new Error(`Failed to mark school payment processed: ${error.message}`);
-  }
-
-  // Also update school's teacher_limit if provided
-  if (teacherLimitAwarded > 0) {
-    await admin
-      .from("schools")
-      .update({
-        teacher_limit: teacherLimitAwarded,
-        updated_at: now,
-      })
-      .eq("id", schoolId);
   }
 }
 
@@ -232,7 +271,7 @@ async function markSchoolPaymentProcessed(
  * Main entry point for processing school payment idempotently.
  * Guarantees:
  * - Same reference cannot grant credits twice
- * - Credits always ADD to balance
+ * - School shared credits are set from plan allowance
  * - Either verify endpoint or webhook can run independently
  */
 export async function processSchoolPayment(
@@ -255,16 +294,12 @@ export async function processSchoolPayment(
       };
     }
 
-    // Grant credits
-    const creditResult = await grantSchoolCreditsForPayment(
-      input.schoolId,
-      transaction.sharedCreditsAwarded
-    );
-
-    // Mark as processed
+    // Apply school subscription state and mark as processed
     await markSchoolPaymentProcessed(
       input.reference,
       input.schoolId,
+      input.userId,
+      input.plan,
       transaction.sharedCreditsAwarded,
       transaction.teacherLimitAwarded
     );
