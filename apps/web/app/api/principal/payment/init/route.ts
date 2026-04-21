@@ -76,10 +76,12 @@ export async function POST(req: NextRequest) {
         callback_url: callbackUrl,
         metadata: {
           flow: getPrincipalPaystackFlow(),
+          purpose: "principal_onboarding",
           user_id: context.user.id,
           principal_name: principalName,
           school_name: schoolName,
           teacher_slots: teacherSlots,
+          expected_amount_major: amount,
           slot_price: DEFAULT_SLOT_PRICE,
           billing_cycle: DEFAULT_BILLING_CYCLE,
         },

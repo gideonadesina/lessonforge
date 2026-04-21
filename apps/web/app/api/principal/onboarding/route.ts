@@ -484,19 +484,24 @@ export async function POST(req: NextRequest) {
 
     const verified = await verifyPaystackReference(paymentReference);
     const metadata = (verified.metadata ?? {}) as Record<string, unknown>;
-    const purpose = String(metadata?.purpose ?? "");
-    if (purpose !== "principal_onboarding") {
+    const purpose = String(metadata?.purpose ?? "").trim();
+    const flow = String(metadata?.flow ?? "").trim();
+    if (purpose !== "principal_onboarding" && flow !== "principal_onboarding") {
       return NextResponse.json({ ok: false, error: "Payment purpose mismatch for principal onboarding." }, { status: 400 });
     }
 
-    const ownerId = String(metadata?.user_id ?? "");
+    const ownerId = String(metadata?.user_id ?? metadata?.userId ?? "").trim();
     if (!ownerId || ownerId !== context.user.id) {
       return NextResponse.json({ ok: false, error: "Payment ownership mismatch." }, { status: 403 });
     }
 
-    const principalName = String(metadata?.principal_name ?? body?.principalName ?? "").trim();
-    const schoolName = String(metadata?.school_name ?? body?.schoolName ?? context.school?.name ?? "").trim();
-    const teacherSlots = sanitizeSlotCount(metadata?.teacher_slots ?? body?.teacherSlots ?? 1);
+    const principalName = String(
+      metadata?.principal_name ?? metadata?.principalName ?? body?.principalName ?? ""
+    ).trim();
+    const schoolName = String(
+      metadata?.school_name ?? metadata?.schoolName ?? body?.schoolName ?? context.school?.name ?? ""
+    ).trim();
+    const teacherSlots = sanitizeSlotCount(metadata?.teacher_slots ?? metadata?.teacherSlots ?? body?.teacherSlots ?? 1);
 
     const provider: "paystack" = "paystack";
     const reference = body?.payment?.reference ?? null;
@@ -505,7 +510,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Principal name and school name are required." }, { status: 400 });
     }
      const expectedAmount = computeSubscriptionAmount(teacherSlots, DEFAULT_SLOT_PRICE);
-    const expectedAmountFromMeta = parsePositiveNumber(metadata?.expected_amount_major);
+    const expectedAmountFromMeta = parsePositiveNumber(
+      metadata?.expected_amount_major ?? metadata?.expectedAmountMajor
+    );
     const expectedMajorAmount = expectedAmountFromMeta ?? expectedAmount;
     const paidAmountMajor = Math.round(Number(verified.amount ?? 0)) / 100;
     if (!Number.isFinite(paidAmountMajor) || paidAmountMajor !== expectedMajorAmount) {

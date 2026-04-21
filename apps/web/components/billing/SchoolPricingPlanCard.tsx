@@ -13,6 +13,9 @@ export default function SchoolPricingPlanCard({
   onSelect,
   loading = false,
 }: SchoolPricingPlanCardProps) {
+  const lessonPacks = Math.floor(plan.credits / 4);
+  const isEnterprise = plan.id === "enterprise";
+
   return (
     <article
       className={[
@@ -31,11 +34,12 @@ export default function SchoolPricingPlanCard({
         {formatNaira(plan.priceNaira)}
       </div>
       <p className="mt-1 text-xs text-slate-500">/month</p>
+      {isEnterprise ? <p className="mt-1 text-xs font-medium text-slate-600">Less than ₦2,900 per teacher</p> : null}
 
       <div className="mt-4 space-y-1 border-t border-slate-100 pt-4">
         <p className="text-sm text-slate-600">Up to {plan.teachers} teachers</p>
         <p className="text-sm text-slate-600">{plan.credits} shared credits/month</p>
-        <p className="text-sm font-medium text-violet-700">Up to {plan.lessonPacks} Lesson Packs</p>
+        <p className="text-sm font-medium text-violet-700">Up to {lessonPacks} Lesson Packs</p>
       </div>
 
       <div className="mt-6 flex-1 space-y-2 border-t border-slate-100 pt-4">
@@ -59,7 +63,7 @@ export default function SchoolPricingPlanCard({
           loading ? "cursor-not-allowed opacity-70" : "",
         ].join(" ")}
       >
-        {loading ? "Processing..." : plan.ctaLabel}
+        {loading ? "Processing..." : isEnterprise ? "Start with Enterprise" : plan.ctaLabel}
       </button>
     </article>
   );

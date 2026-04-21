@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import SectionCard from "@/components/principal/SectionCard";
-import type { PaymentQuote } from "../../lib/principal/client";
-import { getErrorMessage, toNaira } from "../../lib/principal/client";
+import { getErrorMessage } from "../../lib/principal/client";
 
 type Props = {
   getToken: () => Promise<string>;
@@ -11,67 +10,77 @@ type Props = {
   setParentError: (message: string | null) => void;
 };
 
+const PRINCIPAL_ONBOARDING_STORAGE_KEY = "principal_onboarding_pending";
+
 export default function PrincipalOnboardingCard({ getToken, onCompleted, setParentError }: Props) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [principalName, setPrincipalName] = useState("");
   const [schoolName, setSchoolName] = useState("");
   const [teacherSlots, setTeacherSlots] = useState(12);
-  const [quote, setQuote] = useState<PaymentQuote | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function getQuote() {
-    const token = await getToken();
-    if (!token) throw new Error("Session expired.");
-
-    const res = await fetch("/api/principal/payment/quote", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ teacherSlots }),
-    });
-    const json = await res.json();
-    if (!res.ok || !json?.ok) throw new Error(json?.error || "Failed to get payment quote.");
-    return json.data as PaymentQuote;
-  }
-
-  async function completeOnboarding() {
+  async function startPaystackCheckout() {
     setBusy(true);
     setParentError(null);
     try {
       const token = await getToken();
       if (!token) throw new Error("Session expired.");
 
-      const paymentQuote = quote ?? (await getQuote());
-      const res = await fetch("/api/principal/onboarding", {
+      const trimmedPrincipalName = principalName.trim();
+      const trimmedSchoolName = schoolName.trim();
+      if (!trimmedPrincipalName || !trimmedSchoolName) {
+        throw new Error("Please enter principal and school name.");
+      }
+
+      const callbackPath = "/principal/billing?flow=principal_onboarding";
+      const res = await fetch("/api/paystack/school/initialize", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          principalName,
-          schoolName,
+          principalName: trimmedPrincipalName,
+          schoolName: trimmedSchoolName,
           teacherSlots,
-          payment: {
-            provider: paymentQuote.provider,
-            reference: paymentQuote.reference,
-            status: "success",
-          },
+          purpose: "principal_onboarding",
+          callbackPath,
         }),
       });
 
       const json = await res.json();
       if (!res.ok || !json?.ok) {
-        throw new Error(json?.error || "Failed to create principal workspace.");
+        throw new Error(json?.error || "Failed to initialize Paystack checkout.");
       }
 
-      setStep(1);
-      setPrincipalName("");
-      setSchoolName("");
-      setQuote(null);
-      await onCompleted();
+      if (json?.data?.alreadyActivated) {
+        await onCompleted();
+        window.location.assign("/principal/dashboard");
+        return;
+      }
+
+      const authorizationUrl = String(
+        json?.data?.authorizationUrl ?? json?.data?.authorization_url ?? json?.authorization_url ?? ""
+      ).trim();
+      const reference = String(json?.data?.reference ?? json?.reference ?? "").trim();
+      if (!authorizationUrl) {
+        throw new Error("Missing checkout URL from Paystack initialization.");
+      }
+      if (!reference) {
+        throw new Error("Missing payment reference from checkout initialization.");
+      }
+
+      window.sessionStorage.setItem(
+        PRINCIPAL_ONBOARDING_STORAGE_KEY,
+        JSON.stringify({
+          principalName: trimmedPrincipalName,
+          schoolName: trimmedSchoolName,
+          teacherSlots,
+          reference,
+        })
+      );
+
+      window.location.assign(authorizationUrl);
     } catch (err: unknown) {
       setParentError(getErrorMessage(err, "Onboarding failed."));
     } finally {
@@ -151,8 +160,7 @@ export default function PrincipalOnboardingCard({ getToken, onCompleted, setPare
                 Teacher slots: <span className="font-semibold text-slate-900">{teacherSlots}</span>
               </div>
               <div>
-                Monthly total:{" "}
-                <span className="font-semibold text-violet-700">{quote ? toNaira(quote.amount) : "Fetching..."}</span>
+                Monthly total: <span className="font-semibold text-violet-700">Calculated in checkout</span>
               </div>
             </div>
             <p className="mt-3 text-xs text-slate-500">
@@ -178,17 +186,7 @@ export default function PrincipalOnboardingCard({ getToken, onCompleted, setPare
                 setParentError("Please enter principal and school name.");
                 return;
               }
-
-              if (step === 2) {
-                try {
-                  setParentError(null);
-                  const nextQuote = await getQuote();
-                  setQuote(nextQuote);
-                } catch (err: unknown) {
-                  setParentError(getErrorMessage(err, "Failed to get quote."));
-                  return;
-                }
-              }
+              setParentError(null);
 
               setStep((s) => (s < 3 ? ((s + 1) as 1 | 2 | 3) : s));
             }}
@@ -199,11 +197,11 @@ export default function PrincipalOnboardingCard({ getToken, onCompleted, setPare
           </button>
         ) : (
           <button
-            onClick={completeOnboarding}
+            onClick={startPaystackCheckout}
             disabled={busy}
             className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
           >
-            {busy ? "Processing..." : "Complete payment & create workspace"}
+            {busy ? "Redirecting..." : "Continue to Paystack"}
           </button>
         )}
       </div>

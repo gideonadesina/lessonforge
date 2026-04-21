@@ -13,6 +13,8 @@ export default function TeacherPricingPlanCard({
   onSelect,
   loading = false,
 }: TeacherPricingPlanCardProps) {
+  const lessonPacks = Math.floor(plan.credits / 4);
+
   return (
     <article
       className={[
@@ -34,7 +36,7 @@ export default function TeacherPricingPlanCard({
       
       <div className="mt-4 space-y-1 border-t border-slate-100 pt-4">
         <p className="text-sm text-slate-600">{plan.credits} credits/month</p>
-        <p className="text-sm font-medium text-violet-700">Up to {plan.lessonPacks} Lesson Packs</p>
+        <p className="text-sm font-medium text-violet-700">Up to {lessonPacks} Lesson Packs</p>
       </div>
 
       <div className="mt-6 flex-1 space-y-2 border-t border-slate-100 pt-4">

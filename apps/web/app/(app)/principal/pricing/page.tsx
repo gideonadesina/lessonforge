@@ -13,11 +13,6 @@ export default function PrincipalPricingPage() {
   const [error, setError] = useState<string | null>(null);
 
   async function handleSchoolPlanSelect(planId: (typeof SCHOOL_PRICING_PLANS)[number]["id"]) {
-    if (planId === "enterprise") {
-      window.location.href = "mailto:support@lessonforge.io?subject=Enterprise%20Pricing%20Inquiry";
-      return;
-    }
-
     setBusyPlanId(planId);
     setError(null);
 

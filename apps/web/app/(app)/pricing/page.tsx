@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import {
-  LESSON_PACK_CREDIT_COST,
   NEW_USER_FREE_CREDITS,
   TEACHER_PRICING_PLANS,
   estimateLessonPacks,
@@ -79,6 +78,9 @@ export default function PricingPage() {
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-sm">
         <p className="font-semibold text-slate-900">{getCreditUsageNote()}</p>
+        <p className="mt-2 text-xs text-slate-600">
+          1 lesson pack = 4 credits · slides = 2 credits · worksheet = 1 credit · exam = 1 credit
+        </p>
         <p className="mt-2">
           <span className="font-semibold text-slate-900">New users get </span>
           <span className="font-bold text-violet-700">{NEW_USER_FREE_CREDITS} free credits</span>
