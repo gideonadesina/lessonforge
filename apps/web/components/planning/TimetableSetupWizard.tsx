@@ -6,19 +6,12 @@ import { createBrowserSupabase } from "@/lib/supabase/browser";
 import type { NotificationPreferencesInput, TimetableSlotInput } from "@/lib/planning/types";
 
 type DayLabel = "Mon" | "Tue" | "Wed" | "Thu" | "Fri";
-type SubjectOption =
-  | "Physics"
-  | "Chemistry"
-  | "Maths"
-  | "Biology"
-  | "English"
-  | "Other";
 
 type SlotDraft = {
   id: string;
   day: DayLabel;
   class_name: string;
-  subject: SubjectOption;
+  subject: string;
   start_time: string;
   duration_minutes: 30 | 40 | 45 | 60;
   room: string;
@@ -87,7 +80,7 @@ function makeSlot(day: DayLabel): SlotDraft {
     id: crypto.randomUUID(),
     day,
     class_name: "",
-    subject: "Physics",
+    subject: "",
     start_time: "08:00",
     duration_minutes: 40,
     room: "",
@@ -117,7 +110,17 @@ async function apiFetch(path: string, init?: RequestInit) {
   });
 }
 
-export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?: number }) {
+const inputClass =
+  "w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:border-[#534AB7] focus:outline-none";
+
+const selectClass =
+  "w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 focus:border-[#534AB7] focus:outline-none";
+
+export default function TimetableSetupWizard({
+  initialStep = 1,
+}: {
+  initialStep?: number;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = useMemo(() => createBrowserSupabase(), []);
@@ -141,13 +144,14 @@ export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?
     "Thu",
     "Fri",
   ]);
-  const [slots, setSlots] = useState<SlotDraft[]>(DAY_OPTIONS.map((day) => makeSlot(day)));
+  const [slots, setSlots] = useState<SlotDraft[]>(
+    DAY_OPTIONS.map((day) => makeSlot(day))
+  );
   const [preferences, setPreferences] = useState<Preferences>({
     reminder_minutes: 30,
     delivery_method: "in_app",
     enabled: true,
   });
-
   const [savedSlots, setSavedSlots] = useState<SavedSlotRow[]>([]);
   const [schemeRows, setSchemeRows] = useState<SchemeRow[]>([]);
 
@@ -168,15 +172,17 @@ export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?
         } = await supabase.auth.getUser();
         if (userErr || !user) throw new Error("Unauthorized");
 
+        const db = supabase as any;
+
         const [ttRes, prefRes, schemeRes] = await Promise.all([
-          supabase
+          db
             .from("teacher_timetable")
             .select("id, term, academic_year, weeks_in_term, teaching_days")
             .eq("user_id", user.id)
             .order("updated_at", { ascending: false })
             .limit(1)
             .maybeSingle(),
-          supabase
+          db
             .from("notification_preferences")
             .select("reminder_minutes, delivery_method, enabled")
             .eq("user_id", user.id)
@@ -203,35 +209,34 @@ export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?
           const daySet = (ttRes.data.teaching_days ?? []).filter((d: string) =>
             DAY_OPTIONS.includes(d as DayLabel)
           ) as DayLabel[];
-          if (daySet.length) {
-            setTeachingDays(daySet);
-          }
+          if (daySet.length) setTeachingDays(daySet);
 
-          const slotRes = await supabase
+          const slotRes = await db
             .from("timetable_slots")
-            .select("id, day_of_week, start_time, class_name, subject, duration_minutes, room, scheme_entry_id")
+            .select(
+              "id, day_of_week, start_time, class_name, subject, duration_minutes, room, scheme_entry_id"
+            )
             .eq("timetable_id", ttRes.data.id)
             .order("day_of_week", { ascending: true })
             .order("start_time", { ascending: true });
 
           if (slotRes.error) throw new Error(slotRes.error.message);
 
-          const normalized = (slotRes.data ?? []).map((row) => ({
+          const normalized = (slotRes.data ?? []).map((row: any) => ({
             id: row.id,
             day: isoToDay(row.day_of_week),
             class_name: row.class_name,
-            subject: (row.subject as SubjectOption) ?? "Other",
+            subject: row.subject ?? "",
             start_time: row.start_time.slice(0, 5),
             duration_minutes: row.duration_minutes as 30 | 40 | 45 | 60,
             room: row.room ?? "",
             scheme_entry_id: row.scheme_entry_id ?? null,
           }));
 
-          if (normalized.length) {
-            setSlots(normalized);
-          }
+          if (normalized.length) setSlots(normalized);
+
           setSavedSlots(
-            (slotRes.data ?? []).map((row) => ({
+            (slotRes.data ?? []).map((row: any) => ({
               id: row.id,
               day_of_week: row.day_of_week,
               start_time: row.start_time,
@@ -255,7 +260,9 @@ export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?
         setSchemeRows((schemeRes.data ?? []) as SchemeRow[]);
       } catch (err: unknown) {
         if (!active) return;
-        setError(err instanceof Error ? err.message : "Failed to load setup data.");
+        setError(
+          err instanceof Error ? err.message : "Failed to load setup data."
+        );
       } finally {
         if (active) setLoading(false);
       }
@@ -299,7 +306,7 @@ export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?
     }
 
     const token = await getToken();
-    const tmp = createBrowserSupabase();
+    const tmp = createBrowserSupabase() as any;
     const {
       data: { user },
     } = await tmp.auth.getUser();
@@ -314,25 +321,27 @@ export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?
       .maybeSingle();
 
     if (timetable?.id) {
-      const slotRes = await fetch(`/api/planning/week`, {
+      const slotRes = await fetch("/api/planning/week", {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (slotRes.ok) {
         const slotJson = await slotRes.json();
         const byDay = slotJson?.data?.slots_by_day ?? {};
-        const all = Object.values(byDay).flat() as Array<{ slot: SavedSlotRow }>;
-            setSavedSlots(
-              all.map((item) => ({
-                id: item.slot.id,
-                day_of_week: item.slot.day_of_week,
-                start_time: item.slot.start_time,
-                duration_minutes: item.slot.duration_minutes,
-                class_name: item.slot.class_name,
-                subject: item.slot.subject,
-                room: item.slot.room ?? null,
-                scheme_entry_id: item.slot.scheme_entry_id ?? null,
-              }))
-            );
+        const all = Object.values(byDay).flat() as Array<{
+          slot: SavedSlotRow;
+        }>;
+        setSavedSlots(
+          all.map((item) => ({
+            id: item.slot.id,
+            day_of_week: item.slot.day_of_week,
+            start_time: item.slot.start_time,
+            duration_minutes: item.slot.duration_minutes,
+            class_name: item.slot.class_name,
+            subject: item.slot.subject,
+            room: item.slot.room ?? null,
+            scheme_entry_id: item.slot.scheme_entry_id ?? null,
+          }))
+        );
       }
     }
 
@@ -357,11 +366,17 @@ export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?
   }
 
   function updateSlot(id: string, patch: Partial<SlotDraft>) {
-    setSlots((prev) => prev.map((slot) => (slot.id === id ? { ...slot, ...patch } : slot)));
+    setSlots((prev) =>
+      prev.map((slot) => (slot.id === id ? { ...slot, ...patch } : slot))
+    );
   }
 
   function addSlot(day: DayLabel) {
     setSlots((prev) => [...prev, makeSlot(day)]);
+  }
+
+  function removeSlot(id: string) {
+    setSlots((prev) => prev.filter((slot) => slot.id !== id));
   }
 
   const optionsBySubject = useMemo(() => {
@@ -386,7 +401,8 @@ export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?
       class_name: slot.class_name,
       subject: slot.subject,
       room: slot.room,
-      scheme_entry_id: slot.id === slotId ? schemeEntryId : slot.scheme_entry_id,
+      scheme_entry_id:
+        slot.id === slotId ? schemeEntryId : slot.scheme_entry_id,
     }));
 
     setSaving(true);
@@ -407,12 +423,13 @@ export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?
         }),
       });
       const json = await res.json();
-      if (!res.ok || !json?.ok) {
+      if (!res.ok || !json?.ok)
         throw new Error(json?.error ?? "Failed to link scheme.");
-      }
       setSavedSlots((prev) =>
         prev.map((slot) =>
-          slot.id === slotId ? { ...slot, scheme_entry_id: schemeEntryId } : slot
+          slot.id === slotId
+            ? { ...slot, scheme_entry_id: schemeEntryId }
+            : slot
         )
       );
       setMessage("Scheme link updated.");
@@ -450,7 +467,7 @@ export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?
       ) : null}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4">
-        <div className="mb-3 flex gap-2 text-xs">
+        <div className="mb-4 flex gap-2 text-xs">
           {[1, 2, 3, 4].map((n) => (
             <button
               key={n}
@@ -460,10 +477,10 @@ export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?
                 setStep(n);
               }}
               className={[
-                "rounded-full border px-3 py-1",
+                "rounded-full border px-3 py-1 font-medium",
                 step === n
                   ? "border-[#534AB7] bg-[#EEEDFE] text-[#3C3489]"
-                  : "border-slate-200 bg-white text-slate-600",
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
               ].join(" ")}
             >
               Step {n}
@@ -472,11 +489,15 @@ export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?
         </div>
 
         {step === 1 ? (
-          <div className="space-y-3">
-            <h2 className="text-sm font-semibold text-slate-900">Step 1 · Term structure</h2>
-            <div className="grid gap-3 md:grid-cols-3">
-              <label className="text-xs text-slate-600">
-                Weeks in term
+          <div className="space-y-4">
+            <h2 className="text-sm font-semibold text-slate-900">
+              Step 1 · Term structure
+            </h2>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-slate-700">
+                  Weeks in term
+                </label>
                 <input
                   type="number"
                   min={1}
@@ -485,14 +506,19 @@ export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?
                   onChange={(e) =>
                     setTerm((prev) => ({
                       ...prev,
-                      weeks_in_term: Math.min(20, Math.max(1, Number(e.target.value || 1))),
+                      weeks_in_term: Math.min(
+                        20,
+                        Math.max(1, Number(e.target.value || 1))
+                      ),
                     }))
                   }
-                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[#534AB7] focus:outline-none"
                 />
-              </label>
-              <label className="text-xs text-slate-600">
-                Term
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-slate-700">
+                  Term
+                </label>
                 <select
                   value={term.term}
                   onChange={(e) =>
@@ -501,22 +527,29 @@ export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?
                       term: e.target.value as TermStructure["term"],
                     }))
                   }
-                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[#534AB7] focus:outline-none"
                 >
                   <option>First Term</option>
                   <option>Second Term</option>
                   <option>Third Term</option>
                 </select>
-              </label>
-              <label className="text-xs text-slate-600">
-                Academic year
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-slate-700">
+                  Academic year
+                </label>
                 <input
                   value={term.academic_year}
-                  onChange={(e) => setTerm((prev) => ({ ...prev, academic_year: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                  placeholder="2025/2026"
+                  onChange={(e) =>
+                    setTerm((prev) => ({
+                      ...prev,
+                      academic_year: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g. 2025/2026"
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-[#534AB7] focus:outline-none"
                 />
-              </label>
+              </div>
             </div>
             <button
               type="button"
@@ -524,20 +557,22 @@ export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?
               onClick={() => void onSaveAndContinue(2)}
               className="rounded-xl bg-[#534AB7] px-4 py-2 text-sm font-semibold text-white hover:bg-[#3C3489] disabled:opacity-60"
             >
-              Save and continue
+              {saving ? "Saving..." : "Save and continue"}
             </button>
           </div>
         ) : null}
 
         {step === 2 ? (
           <div className="space-y-4">
-            <h2 className="text-sm font-semibold text-slate-900">Step 2 · Daily timetable</h2>
+            <h2 className="text-sm font-semibold text-slate-900">
+              Step 2 · Daily timetable
+            </h2>
 
             <div className="flex flex-wrap gap-2">
               {DAY_OPTIONS.map((day) => (
                 <label
                   key={day}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-700"
+                  className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50"
                 >
                   <input
                     type="checkbox"
@@ -557,71 +592,135 @@ export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?
 
             <div className="space-y-4">
               {teachingDays.map((day) => {
-                const daySlots = activeSlots.filter((slot) => slot.day === day);
+                const daySlots = activeSlots.filter(
+                  (slot) => slot.day === day
+                );
                 return (
-                  <div key={day} className="rounded-xl border border-slate-200 p-3">
-                    <div className="mb-2 flex items-center justify-between">
-                      <h3 className="text-sm font-medium text-slate-900">{day}</h3>
+                  <div
+                    key={day}
+                    className="rounded-xl border border-slate-200 p-3"
+                  >
+                    <div className="mb-3 flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-slate-900">
+                        {day}
+                      </h3>
                       <button
                         type="button"
                         onClick={() => addSlot(day)}
                         className="text-xs font-medium text-[#534AB7] hover:underline"
                       >
-                        Add another class
+                        + Add another class
                       </button>
                     </div>
-                    <div className="space-y-2">
-                      {daySlots.map((slot) => (
-                        <div key={slot.id} className="grid gap-2 md:grid-cols-6">
-                          <input
-                            value={slot.class_name}
-                            onChange={(e) => updateSlot(slot.id, { class_name: e.target.value })}
-                            placeholder="Class name"
-                            className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
-                          />
-                          <select
-                            value={slot.subject}
-                            onChange={(e) =>
-                              updateSlot(slot.id, { subject: e.target.value as SubjectOption })
-                            }
-                            className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
-                          >
-                            <option>Physics</option>
-                            <option>Chemistry</option>
-                            <option>Maths</option>
-                            <option>Biology</option>
-                            <option>English</option>
-                            <option>Other</option>
-                          </select>
-                          <input
-                            type="time"
-                            value={slot.start_time}
-                            onChange={(e) => updateSlot(slot.id, { start_time: e.target.value })}
-                            className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
-                          />
-                          <select
-                            value={slot.duration_minutes}
-                            onChange={(e) =>
-                              updateSlot(slot.id, {
-                                duration_minutes: Number(e.target.value) as 30 | 40 | 45 | 60,
-                              })
-                            }
-                            className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
-                          >
-                            <option value={30}>30</option>
-                            <option value={40}>40</option>
-                            <option value={45}>45</option>
-                            <option value={60}>60</option>
-                          </select>
-                          <input
-                            value={slot.room}
-                            onChange={(e) => updateSlot(slot.id, { room: e.target.value })}
-                            placeholder="Room (optional)"
-                            className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
-                          />
-                        </div>
-                      ))}
-                    </div>
+
+                    {daySlots.length === 0 ? (
+                      <p className="text-xs text-slate-500">
+                        No classes yet. Click &quot;Add another class&quot; to
+                        start.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {daySlots.map((slot, index) => (
+                          <div key={slot.id} className="space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-slate-500">
+                                Class {index + 1}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => removeSlot(slot.id)}
+                                className="text-xs text-rose-500 hover:text-rose-700 hover:underline"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                            <div className="grid gap-2 md:grid-cols-5">
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[10px] text-slate-500">
+                                  Class name
+                                </label>
+                                <input
+                                  value={slot.class_name}
+                                  onChange={(e) =>
+                                    updateSlot(slot.id, {
+                                      class_name: e.target.value,
+                                    })
+                                  }
+                                  placeholder="e.g. SS2"
+                                  className={inputClass}
+                                />
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[10px] text-slate-500">
+                                  Subject
+                                </label>
+                                <input
+                                  value={slot.subject}
+                                  onChange={(e) =>
+                                    updateSlot(slot.id, {
+                                      subject: e.target.value,
+                                    })
+                                  }
+                                  placeholder="e.g. Physics"
+                                  className={inputClass}
+                                />
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[10px] text-slate-500">
+                                  Start time
+                                </label>
+                                <input
+                                  type="time"
+                                  value={slot.start_time}
+                                  onChange={(e) =>
+                                    updateSlot(slot.id, {
+                                      start_time: e.target.value,
+                                    })
+                                  }
+                                  className={inputClass}
+                                />
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[10px] text-slate-500">
+                                  Duration
+                                </label>
+                                <select
+                                  value={slot.duration_minutes}
+                                  onChange={(e) =>
+                                    updateSlot(slot.id, {
+                                      duration_minutes: Number(
+                                        e.target.value
+                                      ) as 30 | 40 | 45 | 60,
+                                    })
+                                  }
+                                  className={selectClass}
+                                >
+                                  <option value={30}>30 min</option>
+                                  <option value={40}>40 min</option>
+                                  <option value={45}>45 min</option>
+                                  <option value={60}>60 min</option>
+                                </select>
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[10px] text-slate-500">
+                                  Room (optional)
+                                </label>
+                                <input
+                                  value={slot.room}
+                                  onChange={(e) =>
+                                    updateSlot(slot.id, {
+                                      room: e.target.value,
+                                    })
+                                  }
+                                  placeholder="e.g. Room 4B"
+                                  className={inputClass}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -633,7 +732,7 @@ export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?
               onClick={() => void onSaveAndContinue(3)}
               className="rounded-xl bg-[#534AB7] px-4 py-2 text-sm font-semibold text-white hover:bg-[#3C3489] disabled:opacity-60"
             >
-              Save timetable
+              {saving ? "Saving..." : "Save timetable"}
             </button>
           </div>
         ) : null}
@@ -644,55 +743,89 @@ export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?
               Step 3 · Notification preferences
             </h2>
 
-            <div className="grid gap-3 md:grid-cols-3">
-              {[15, 30, 60, 1440].map((value) => (
-                <label
-                  key={value}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700"
-                >
-                  <input
-                    type="radio"
-                    checked={preferences.reminder_minutes === value}
-                    onChange={() =>
-                      setPreferences((prev) => ({ ...prev, reminder_minutes: value }))
-                    }
-                  />
-                  {value === 1440 ? "Day before" : `${value} min`}
-                </label>
-              ))}
+            <div>
+              <p className="mb-2 text-xs font-medium text-slate-700">
+                Remind me before class starts
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { value: 15, label: "15 min before" },
+                  { value: 30, label: "30 min before" },
+                  { value: 60, label: "1 hour before" },
+                  { value: 1440, label: "Day before" },
+                ].map(({ value, label }) => (
+                  <label
+                    key={value}
+                    className={[
+                      "inline-flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-xs",
+                      preferences.reminder_minutes === value
+                        ? "border-[#534AB7] bg-[#EEEDFE] text-[#3C3489]"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                    ].join(" ")}
+                  >
+                    <input
+                      type="radio"
+                      className="hidden"
+                      checked={preferences.reminder_minutes === value}
+                      onChange={() =>
+                        setPreferences((prev) => ({
+                          ...prev,
+                          reminder_minutes: value,
+                        }))
+                      }
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-3">
-              {[
-                ["in_app", "In-app only"],
-                ["email", "Email only"],
-                ["both", "Both"],
-              ].map(([value, label]) => (
-                <label
-                  key={value}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700"
-                >
-                  <input
-                    type="radio"
-                    checked={preferences.delivery_method === value}
-                    onChange={() =>
-                      setPreferences((prev) => ({
-                        ...prev,
-                        delivery_method: value as Preferences["delivery_method"],
-                      }))
-                    }
-                  />
-                  {label}
-                </label>
-              ))}
+            <div>
+              <p className="mb-2 text-xs font-medium text-slate-700">
+                Delivery method
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { value: "in_app", label: "In-app only" },
+                  { value: "email", label: "Email only" },
+                  { value: "both", label: "Both" },
+                ].map(({ value, label }) => (
+                  <label
+                    key={value}
+                    className={[
+                      "inline-flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-xs",
+                      preferences.delivery_method === value
+                        ? "border-[#534AB7] bg-[#EEEDFE] text-[#3C3489]"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                    ].join(" ")}
+                  >
+                    <input
+                      type="radio"
+                      className="hidden"
+                      checked={preferences.delivery_method === value}
+                      onChange={() =>
+                        setPreferences((prev) => ({
+                          ...prev,
+                          delivery_method:
+                            value as Preferences["delivery_method"],
+                        }))
+                      }
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
             </div>
 
-            <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+            <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-slate-700">
               <input
                 type="checkbox"
                 checked={preferences.enabled}
                 onChange={(e) =>
-                  setPreferences((prev) => ({ ...prev, enabled: e.target.checked }))
+                  setPreferences((prev) => ({
+                    ...prev,
+                    enabled: e.target.checked,
+                  }))
                 }
               />
               Enable reminders
@@ -704,7 +837,7 @@ export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?
               onClick={() => void onSaveAndContinue(4)}
               className="rounded-xl bg-[#534AB7] px-4 py-2 text-sm font-semibold text-white hover:bg-[#3C3489] disabled:opacity-60"
             >
-              Save preferences
+              {saving ? "Saving..." : "Save preferences"}
             </button>
           </div>
         ) : null}
@@ -715,7 +848,8 @@ export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?
               Step 4 · Link scheme of work topics
             </h2>
             <p className="text-xs text-slate-600">
-              Match each timetable slot to a scheme entry of the same subject.
+              Match each timetable slot to a scheme of work entry. Only entries
+              with a matching subject are shown first.
             </p>
 
             {savedSlots.length === 0 ? (
@@ -726,22 +860,24 @@ export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?
               <div className="space-y-2">
                 {savedSlots.map((slot) => {
                   const subjectKey = slot.subject.trim().toLowerCase();
-                  const options = optionsBySubject.get(subjectKey) ?? schemeRows;
+                  const options =
+                    optionsBySubject.get(subjectKey) ?? schemeRows;
                   return (
                     <div
                       key={slot.id}
                       className="grid items-center gap-2 rounded-lg border border-slate-200 p-2 md:grid-cols-[1.6fr_1fr]"
                     >
                       <div className="text-xs text-slate-700">
-                        <span className="font-medium">{slot.class_name}</span> · {slot.subject} ·{" "}
-                        {isoToDay(slot.day_of_week)} {slot.start_time.slice(0, 5)}
+                        <span className="font-medium">{slot.class_name}</span>{" "}
+                        · {slot.subject} · {isoToDay(slot.day_of_week)}{" "}
+                        {slot.start_time.slice(0, 5)}
                       </div>
                       <select
                         value={slot.scheme_entry_id ?? ""}
                         onChange={(e) =>
                           void linkScheme(slot.id, e.target.value || null)
                         }
-                        className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                        className={selectClass}
                       >
                         <option value="">Select scheme topic</option>
                         {options.map((row) => (
@@ -762,7 +898,7 @@ export default function TimetableSetupWizard({ initialStep = 1 }: { initialStep?
               onClick={() => router.push("/planning")}
               className="rounded-xl bg-[#534AB7] px-4 py-2 text-sm font-semibold text-white hover:bg-[#3C3489] disabled:opacity-60"
             >
-              Done
+              Done — go to planning
             </button>
           </div>
         ) : null}
