@@ -33,7 +33,7 @@ export async function POST(
     );
   }
 
-  const { data: slot, error: slotError } = await auth.supabase
+  const { data: slot, error: slotError } = await auth.supabase!
     .from("timetable_slots")
     .select("id, scheme_entry_id, timetable_id")
     .eq("id", timetableSlotId)
