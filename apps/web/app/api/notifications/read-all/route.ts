@@ -28,7 +28,8 @@ export async function POST(req: NextRequest) {
     }
 
     const now = utcNowIso();
-    const { error } = await supabase
+
+    const { error } = await (supabase as any)
       .from("notifications")
       .update({ read_at: now })
       .eq("user_id", user.id)
@@ -41,7 +42,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error: unknown) {
     const message =
-      error instanceof Error ? error.message : "Failed to mark notifications as read.";
+      error instanceof Error
+        ? error.message
+        : "Failed to mark notifications as read.";
     return jsonError(message, 500);
   }
 }
