@@ -2,21 +2,45 @@
 
 :root {
   color-scheme: light;
+  --bg: #faf9f6;
+  --surface: #ffffff;
+  --surface-alt: #f8fafc;
+  --border: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-tertiary: #64748b;
+}
+
+html.dark {
+  color-scheme: dark;
+  --bg: #070b14;
+  --surface: #0b1530;
+  --surface-alt: #101827;
+  --border: #1a2847;
+  --text-primary: #ffffff;
+  --text-secondary: #cbd5e1;
+  --text-tertiary: #94a3b8;
 }
 
 html {
   scroll-behavior: smooth;
 }
 
+/* Base body styling - responds to CSS variables */
 body {
-  background: #faf9f6;
-  color: #0f172a;
+  background-color: var(--bg);
+  color: var(--text-primary);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
 
+/* Selection */
 ::selection {
   background: rgba(126, 34, 206, 0.22);
   color: #3b0764;
 }
 
+html.dark ::selection {
+  background: rgba(126, 34, 206, 0.4);
+  color: var(--text-primary);
+}

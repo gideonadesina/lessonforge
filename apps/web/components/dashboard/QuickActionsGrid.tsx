@@ -57,29 +57,29 @@ const ACTIONS = [
 function toneClasses(tone: string) {
   switch (tone) {
     case "violet":
-      return "bg-violet-50 border-violet-100 text-violet-700";
+      return "bg-violet-50 border-violet-100 text-violet-700 dark:bg-violet-900/20 dark:border-violet-900 dark:text-violet-400";
     case "blue":
-      return "bg-blue-50 border-blue-100 text-blue-700";
+      return "bg-blue-50 border-blue-100 text-blue-700 dark:bg-blue-900/20 dark:border-blue-900 dark:text-blue-400";
     case "amber":
-      return "bg-amber-50 border-amber-100 text-amber-700";
+      return "bg-amber-50 border-amber-100 text-amber-700 dark:bg-amber-900/20 dark:border-amber-900 dark:text-amber-400";
     case "emerald":
-      return "bg-emerald-50 border-emerald-100 text-emerald-700";
+      return "bg-emerald-50 border-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-900 dark:text-emerald-400";
     case "pink":
-      return "bg-pink-50 border-pink-100 text-pink-700";
+      return "bg-pink-50 border-pink-100 text-pink-700 dark:bg-pink-900/20 dark:border-pink-900 dark:text-pink-400";
     default:
-      return "bg-slate-50 border-slate-100 text-slate-700";
+      return "bg-slate-50 border-slate-100 text-slate-700 dark:bg-[#101827] border-slate-200 border-slate-200 border-slate-200 dark:border-[#1A2847] dark:text-slate-300";
   }
 }
 
 export default function QuickActionsGrid() {
   return (
-    <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm dark:bg-white dark:bg-[#0B1530] border-slate-200 border-slate-200 dark:border-[#1A2847]">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold tracking-tight text-slate-900">
+          <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
             Quick Actions
           </h2>
-          <p className="mt-1 text-sm text-slate-600">
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
             Move quickly through the most important parts of your teaching workflow.
           </p>
         </div>
@@ -90,7 +90,7 @@ export default function QuickActionsGrid() {
           <Link
             key={action.title}
             href={action.href}
-            className="group rounded-2xl border border-slate-200 bg-white p-5 transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+            className="group rounded-2xl border border-slate-200 bg-white p-5 transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md dark:border-[#1A2847] dark:bg-[#101827] dark:hover:border-[#2A3A57] dark:hover:shadow-lg dark:hover:shadow-black/30"
           >
             <div
               className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${toneClasses(
@@ -100,15 +100,15 @@ export default function QuickActionsGrid() {
               {action.title}
             </div>
 
-            <div className="mt-4 text-base font-bold text-slate-900 transition group-hover:text-slate-950">
+            <div className="mt-4 text-base font-bold text-slate-900 transition group-hover:text-slate-950 dark:text-white dark:group-hover:text-slate-50">
               {action.title}
             </div>
 
-            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+            <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
               {action.description}
             </p>
 
-            <div className="mt-4 text-sm font-semibold text-violet-700">
+            <div className="mt-4 text-sm font-semibold text-violet-700 dark:text-violet-400">
               Open →
             </div>
           </Link>

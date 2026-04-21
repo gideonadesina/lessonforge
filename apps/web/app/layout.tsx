@@ -2,6 +2,8 @@ import "./globals.css";
 import Script from "next/script";
 import type { Metadata, Viewport } from "next";
 import { ToastProvider } from "@/components/ui/ToastProvider";
+import { NetworkProvider } from "@/components/network/NetworkProvider";
+import ThemeInitializer from "@/components/theme/ThemeInitializer";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://lessonforge.app"),
@@ -72,7 +74,7 @@ export default function RootLayout({
 
   return (
     <html lang="en">
-      <body className="min-h-screen bg-[#FAF9F6] antialiased">
+      <body className="min-h-screen antialiased">
         {GA_ID && (
           <>
             <Script
@@ -90,8 +92,12 @@ export default function RootLayout({
           </>
         )}
 
+        <ThemeInitializer />
+
         <ToastProvider>
-          {children}
+          <NetworkProvider>
+            {children}
+          </NetworkProvider>
         </ToastProvider>
       </body>
     </html>

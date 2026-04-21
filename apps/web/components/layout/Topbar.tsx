@@ -39,7 +39,7 @@ export default function Topbar({
   const shareMenuRef = useRef<HTMLDivElement | null>(null);
 
   const supabase = useMemo(() => createBrowserSupabase(), []);
-  const { profile, creditsRemaining, loading: profileLoading } = useProfile();
+  const { profile } = useProfile();
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -86,6 +86,7 @@ export default function Topbar({
     if (switchingRole) return;
     setRoleError(null);
     setSwitchingRole(nextRole);
+
     try {
       const result = await switchRoleApi(nextRole);
       persistActiveRole(nextRole);
@@ -168,19 +169,21 @@ export default function Topbar({
 
   return (
     <>
-      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between bg-white dark:bg-[#0B1530] dark:border-[#1A2847] text-slate-900 dark:text-white">
         <div className="min-w-0 flex items-center gap-3">
           <button
             onClick={onMenu}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white xl:hidden"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white xl:hidden dark:border-[#1A2847] dark:bg-[#101827] dark:text-slate-300"
             aria-label="Open menu"
           >
             <span className="text-xl leading-none">☰</span>
           </button>
 
           <div className="min-w-0">
-            <div className="text-sm font-semibold text-slate-900">Welcome 👋</div>
-            <div className="truncate text-xs text-slate-500">
+            <div className="text-sm font-semibold text-slate-900 dark:text-white">
+              Welcome 👋
+            </div>
+            <div className="truncate text-xs text-slate-500 dark:text-slate-400">
               {userEmail || "Signed in"}
             </div>
           </div>
@@ -193,7 +196,7 @@ export default function Topbar({
                 ? "Search principal workspace..."
                 : "Search lessons, topics..."
             }
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-violet-400"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-violet-400 dark:border-[#1A2847] dark:bg-[#101827] dark:text-white dark:placeholder-slate-400 dark:focus:border-violet-500"
           />
         </div>
 
@@ -203,7 +206,7 @@ export default function Topbar({
               <button
                 type="button"
                 onClick={() => setRoleMenuOpen((current) => !current)}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 dark:border-[#1A2847] bg-white dark:bg-[#0B1530] dark:text-slate-200 dark:hover:bg-[#101827]"
               >
                 {switchingRole
                   ? "Switching..."
@@ -211,11 +214,13 @@ export default function Topbar({
                       activeRole ? ROLE_CONTENT[activeRole].label : "Account"
                     }`}
               </button>
+
               {roleMenuOpen ? (
-                <div className="absolute right-0 z-50 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-md">
+                <div className="absolute right-0 z-50 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-md dark:border-[#1A2847] bg-white dark:bg-[#0B1530]">
                   {availableRoles.map((candidateRole) => {
                     const isActive = candidateRole === activeRole;
                     const isSwitching = switchingRole === candidateRole;
+
                     return (
                       <button
                         key={candidateRole}
@@ -227,8 +232,8 @@ export default function Topbar({
                         className={[
                           "flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-sm transition",
                           isActive
-                            ? "cursor-default bg-violet-50 text-violet-700"
-                            : "text-slate-700 hover:bg-slate-50",
+                            ? "cursor-default bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400"
+                            : "text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]",
                         ].join(" ")}
                       >
                         <span>{ROLE_CONTENT[candidateRole].label}</span>
@@ -242,8 +247,9 @@ export default function Topbar({
                       </button>
                     );
                   })}
+
                   {roleError ? (
-                    <div className="mt-1 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">
+                    <div className="mt-1 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700 dark:border-rose-900/50 dark:bg-rose-900/20 dark:text-rose-400">
                       {roleError}
                     </div>
                   ) : null}
@@ -256,108 +262,98 @@ export default function Topbar({
             <>
               <Link
                 href="/principal/generate"
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 dark:border-slate-600 bg-white dark:bg-[#0B1530]bg-[#0B1530] dark:text-slate-100 dark:hover:bg-[#101827]"
               >
                 Generate
               </Link>
               <Link
                 href="/principal/library"
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 dark:border-slate-600 bg-white dark:bg-[#0B1530] dark:text-slate-100 dark:hover:bg-[#101827]"
               >
                 Library
               </Link>
               <Link
                 href="/principal/billing"
-                className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-violet-600 dark:hover:bg-violet-700"
               >
                 Manage billing
               </Link>
             </>
           ) : (
-            <>
-             
-              <div ref={shareMenuRef} className="relative">
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleShareReferral();
-                  }}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
-                >
-                  Share
-                </button>
+            <div ref={shareMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  void handleShareReferral();
+                }}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 dark:border-[#1A2847] bg-white dark:bg-[#0B1530] dark:text-slate-200 dark:hover:bg-[#101827]"
+              >
+                Share
+              </button>
 
-                {shareMenuOpen ? (
-                  <div className="absolute right-0 z-50 mt-2 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
-                    <div className="px-2 pb-2 pt-1">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Share referral
-                      </div>
-                      <div className="mt-1 text-xs text-slate-600">
-                        Invite teachers and share your LessonForge referral link.
-                      </div>
+              {shareMenuOpen ? (
+                <div className="absolute right-0 z-50 mt-2 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg dark:border-[#1A2847] bg-white dark:bg-[#0B1530]">
+                  <div className="px-2 pb-2 pt-1">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      Share referral
                     </div>
-
-                    <div className="space-y-1">
-                      <a
-                        href={whatsappShareUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-                      >
-                        WhatsApp
-                      </a>
-
-                      <a
-                        href={twitterShareUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-                      >
-                        X / Twitter
-                      </a>
-
-                      <a
-                        href={emailShareUrl}
-                        className="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-                      >
-                        Email
-                      </a>
-
-                      <a
-                        href={smsShareUrl}
-                        className="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-                      >
-                        SMS
-                      </a>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void copyReferralLink();
-                        }}
-                        className="block w-full rounded-xl px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-                      >
-                        Copy link
-                      </button>
+                    <div className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                      Invite teachers and share your LessonForge referral link.
                     </div>
                   </div>
-                ) : null}
-              </div>
 
-              <Link
-                href="/pricing"
-                className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700"
-              >
-                Upgrade
-              </Link>
-            </>
+                  <div className="space-y-1">
+                    <a
+                      href={whatsappShareUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]"
+                    >
+                      WhatsApp
+                    </a>
+
+                    <a
+                      href={twitterShareUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]"
+                    >
+                      X / Twitter
+                    </a>
+
+                    <a
+                      href={emailShareUrl}
+                      className="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]"
+                    >
+                      Email
+                    </a>
+
+                    <a
+                      href={smsShareUrl}
+                      className="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]"
+                    >
+                      SMS
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void copyReferralLink();
+                      }}
+                      className="block w-full rounded-xl px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]"
+                    >
+                      Copy link
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           )}
 
           <button
             onClick={logout}
             disabled={loading}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-100 disabled:opacity-60"
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-100 disabled:opacity-60 dark:border-[#1A2847] bg-white bg-white dark:bg-[#0B1530] dark:text-slate-200 dark:hover:bg-[#101827]"
           >
             {loading ? "Logging out..." : "Logout"}
           </button>
@@ -380,8 +376,8 @@ export default function Topbar({
               className={[
                 "whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition",
                 pathname === link.href
-                  ? "border-violet-200 bg-violet-50 text-violet-700"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                  ? "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900 dark:bg-violet-900/30 dark:text-violet-400"
+                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-[#1A2847] dark:bg-[#0B1530] dark:text-slate-300 dark:hover:bg-[#101827]",
               ].join(" ")}
             >
               {link.label}

@@ -118,9 +118,6 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [emailLoading, setEmailLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState<SocialProvider | null>(null);
-  const [syncingRole, setSyncingRole] = useState(false);
-
-  const hasHandledSessionRef = useRef(false);
 
   const roleConfig = ROLE_CONTENT[role];
 
@@ -247,60 +244,6 @@ const resolveRoleAfterAuth = useCallback(
   []
 );
 
-  const syncUserRoleAndRedirect = useCallback(
-    async (userId?: string) => {
-      if (hasHandledSessionRef.current) return;
-      hasHandledSessionRef.current = true;
-      setSyncingRole(true);
-      setMessage(null);
-
-      try {
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
-
-        if (userError) throw userError;
-        if (!user || (userId && user.id !== userId)) {
-          hasHandledSessionRef.current = false;
-          return;
-        }
-
-        const roleContext = await resolveRoleAfterAuth(role, {
-          allowUnprovisioned: true,
-        });
-
-        if (!roleContext.availableRoles.length) {
-          const { homePath } = await switchRoleApi(role, {
-            claimIfUnprovisioned: true,
-          });
-          persistActiveRole(role);
-          clearSocialIntent();
-          router.replace(homePath);
-          router.refresh();
-          return;
-        }
-
-        if (roleContext.availableRoles.includes(role)) {
-          const { homePath } = await switchRoleApi(role);
-          persistActiveRole(role);
-          clearSocialIntent();
-          router.replace(homePath);
-          router.refresh();
-          return;
-        }
-
-        return;
-      } catch (error: unknown) {
-        hasHandledSessionRef.current = false;
-        setMessage(normalizeAuthErrorMessage(error, "Unable to finish sign in."));
-      } finally {
-        setSyncingRole(false);
-      }
-    },
-    [applyStoredReferralToProfile, ensureSignupProfile, role, resolveRoleAfterAuth, supabase]
-  );
-
   useEffect(() => {
     const ref = searchParams.get("ref");
     if (ref && ref.trim()) {
@@ -308,66 +251,37 @@ const resolveRoleAfterAuth = useCallback(
     }
   }, [searchParams]);
 
-  useEffect(() => {
-    let active = true;
-
-    persistActiveRole(role);
-    if (!hasOAuthCallbackParams()) return;
-
-    (async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (active && session?.user) {
-        await syncUserRoleAndRedirect(session.user.id);
-      }
-    })();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!session?.user) return;
-
-      if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
-        await syncUserRoleAndRedirect(session.user.id);
-      }
-    });
-
-    return () => {
-      active = false;
-      subscription.unsubscribe();
-    };
-  }, [role, supabase, syncUserRoleAndRedirect]);
-
   async function handleSocialSignIn(provider: SocialProvider) {
-  setMessage(null);
-  setSocialLoading(provider);
+    setMessage(null);
+    setSocialLoading(provider);
 
-  try {
-    persistActiveRole(role);
-    writeSocialIntent(mode);
+    try {
+      // Store the requested role for the callback route
+      persistActiveRole(role);
+      writeSocialIntent(mode);
 
-    const redirectTo = `${window.location.origin}/auth/${role}`;
+      // Redirect OAuth to the dedicated callback route
+      // The callback route will handle everything: session, profile, role, redirect
+      const redirectTo = `${window.location.origin}/auth/callback`;
 
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: provider === "google" ? "google" : "azure",
-      options: {
-        redirectTo,
-      },
-    });
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: provider === "google" ? "google" : "azure",
+        options: {
+          redirectTo,
+        },
+      });
 
-    if (error) {
-      setMessage(error.message);
+      if (error) {
+        setMessage(error.message);
+        clearSocialIntent();
+      }
+    } catch (error: unknown) {
+      setMessage(error instanceof Error ? error.message : "Unable to sign in right now.");
       clearSocialIntent();
+    } finally {
+      setSocialLoading(null);
     }
-  } catch (error: unknown) {
-    setMessage(error instanceof Error ? error.message : "Unable to sign in right now.");
-    clearSocialIntent();
-  } finally {
-    setSocialLoading(null);
   }
-}
 
   async function handleEmailAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -516,7 +430,7 @@ return;
     }
   }
 
-  const isBusy = emailLoading || Boolean(socialLoading) || syncingRole;
+  const isBusy = emailLoading || Boolean(socialLoading);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#FAF9F6] p-4 sm:p-6">
@@ -644,8 +558,6 @@ return;
               ? mode === "signup"
                 ? "Creating account..."
                 : "Signing in..."
-              : syncingRole
-              ? "Finishing setup..."
               : mode === "signup"
               ? `Create ${roleConfig.label} account`
               : `Sign in as ${roleConfig.label}`}

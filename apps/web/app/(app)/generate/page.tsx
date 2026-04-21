@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
@@ -8,6 +8,8 @@ import { useProfile } from "@/lib/useProfile";
 import TeacherPaywallModal from "@/components/billing/TeacherPaywallModal";
 import GenerationProgress from "@/components/generation/GenerationProgress";
 import { useGenerationProgress } from "@/components/generation/useGenerationProgress";
+import { useNetworkStatus } from "@/components/network/NetworkProvider";
+import { GenerationStage } from "@/components/generation/generationStages";
 import { LESSON_PACK_CREDIT_COST } from "@/lib/billing/pricing";
 
 type VocabularyItem = {
@@ -225,7 +227,18 @@ export default function GeneratePage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const { steps, currentStepIndex, progress, completeProgress } = useGenerationProgress(isGenerating);
+  const [generationStage, setGenerationStage] = useState<GenerationStage>("queued");
+  const { isOnline, isUnstable } = useNetworkStatus();
+  const networkRef = useRef({ isOnline, isUnstable });
+
+  useEffect(() => {
+    networkRef.current = { isOnline, isUnstable };
+  }, [isOnline, isUnstable]);
+
+  const { steps, currentStepIndex, progress, completeProgress, failProgress } = useGenerationProgress({
+    isGenerating,
+    stage: generationStage,
+  });
 
   const [error, setError] = useState<string | null>(null);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
@@ -279,12 +292,20 @@ export default function GeneratePage() {
       return;
     }
 
+    if (!isOnline) {
+      setError("You’re offline. Reconnect to generate your lesson pack.");
+      setLoading(false);
+      setIsGenerating(false);
+      return;
+    }
+
     setLoading(true);
     setIsGenerating(true);
     setSaving(false);
     setError(null);
     setSaveMsg(null);
     setResult(null);
+    setGenerationStage("planning");
 
     try {
       const {
@@ -294,6 +315,22 @@ export default function GeneratePage() {
       if (!session?.access_token) {
         throw new Error("Session expired. Please login again.");
       }
+
+      const stageProgression = [
+        { stage: "planning" as GenerationStage, delay: 2000 },
+        { stage: "notes" as GenerationStage, delay: 5000 },
+        { stage: "assessments" as GenerationStage, delay: 5000 },
+        { stage: "slides_images" as GenerationStage, delay: 8000 },
+      ];
+
+      let stageIndex = 0;
+      const progressInterval = window.setInterval(() => {
+        if (!networkRef.current.isOnline || networkRef.current.isUnstable) return;
+        if (stageIndex < stageProgression.length - 1) {
+          stageIndex++;
+          setGenerationStage(stageProgression[stageIndex].stage);
+        }
+      }, 5000);
 
       const res = await fetch("/api/generate", {
         method: "POST",
@@ -312,19 +349,26 @@ export default function GeneratePage() {
         }),
       });
 
+      // Clear the stage progression interval once API responds
+      clearInterval(progressInterval);
+
       const json = await res.json();
 
       if (!res.ok) {
         if (res.status === 402) {
           setShowPaywall(true);
         }
+        setGenerationStage("failed");
+        failProgress();
         throw new Error(json?.error || json?.message || "Generation failed");
       }
 
       const generated = json.data as Generated;
       setResult(generated);
-      completeProgress();
-      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // NOW move to saving stage - only when we're actually persisting
+      setGenerationStage("saving");
+      setSaving(true);
 
       const {
         data: { user },
@@ -355,9 +399,14 @@ export default function GeneratePage() {
 
       if (insertError) {
         console.error("Save failed:", insertError.message);
+        setGenerationStage("failed");
+        failProgress();
         throw insertError;
       }
 
+      // Success! Move to completed
+      setGenerationStage("completed");
+      completeProgress();
       setSaveMsg("✅ Auto-saved to Library");
       setIsGenerating(false);
     } catch (e: any) {

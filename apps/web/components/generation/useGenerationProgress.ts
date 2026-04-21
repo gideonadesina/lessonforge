@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { GenerationStage, STAGE_PROGRESS, getInterpolatedProgress } from "./generationStages";
 
 export type ProgressStep = {
   title: string;
@@ -9,121 +10,132 @@ export type ProgressStep = {
 
 const GENERATION_STEPS: ProgressStep[] = [
   {
-    title: "Generating lesson plan",
-    description: "Drafting the lesson structure and objectives.",
+    title: "Designing lesson structure",
+    description: "Creating educational objectives and learning framework.",
   },
   {
     title: "Writing lesson notes",
-    description: "Composing teacher-facing lesson notes.",
+    description: "Composing comprehensive teacher guidance and concepts.",
   },
   {
-    title: "Creating quizzes",
-    description: "Building assessment questions and answers.",
+    title: "Creating assessments",
+    description: "Building quiz questions and evaluation methods.",
   },
   {
-    title: "Preparing images",
-    description: "Finding and preparing visuals for your slides.",
-  },
-  {
-    title: "Creating slides",
-    description: "Assembling slide titles and talking points.",
-  },
-  {
-    title: "Finalizing lesson pack",
-    description: "Putting everything together.",
+    title: "Preparing visuals & slides",
+    description: "Generating images and assembling presentation materials.",
   },
   {
     title: "Saving to library",
-    description: "Saving your finished lesson pack to the library.",
+    description: "Securing your lesson pack to the library.",
   },
 ];
 
-// Progress should move more slowly and stop before 100
-const PROGRESS_TARGETS = [10, 25, 35, 58, 80, 90, 96];
+// Stage to step index mapping
+const STAGE_TO_STEP_INDEX: Record<GenerationStage, number> = {
+  queued: 0,
+  planning: 0,
+  notes: 1,
+  assessments: 2,
+  slides_images: 3,
+  saving: 4,
+  completed: 4,
+  failed: 0,
+};
 
-const STEP_DELAYS = [40000, 55000, 35000, 75000, 75000, 35000, 0];
+export interface UseGenerationProgressProps {
+  isGenerating: boolean;
+  stage?: GenerationStage;
+}
 
-export function useGenerationProgress(isGenerating: boolean) {
+export function useGenerationProgress({ isGenerating, stage = "queued" }: UseGenerationProgressProps) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [progress, setProgress] = useState(0);
+  const stageStartTimeRef = useRef<number>(Date.now());
   const completedRef = useRef(false);
-  const currentStepIndexRef = useRef(0);
-
-  const updateProgress = useCallback((next: number) => {
-    setProgress((previous) => {
-      if (completedRef.current) return previous;
-      return Math.max(previous, Math.min(100, next));
-    });
-  }, []);
-
-  const setStepIndex = useCallback((index: number) => {
-    currentStepIndexRef.current = index;
-    setCurrentStepIndex(index);
-  }, []);
 
   const completeProgress = useCallback(() => {
     completedRef.current = true;
-    currentStepIndexRef.current = GENERATION_STEPS.length - 1;
     setCurrentStepIndex(GENERATION_STEPS.length - 1);
     setProgress(100);
   }, []);
 
-  useEffect(() => {
-    completedRef.current = false;
+  const failProgress = useCallback(() => {
+    completedRef.current = true;
+    setProgress(0);
+  }, []);
 
+  // Update progress when stage changes
+  useEffect(() => {
     if (!isGenerating) {
-      setStepIndex(0);
+      completedRef.current = false;
+      setCurrentStepIndex(0);
       setProgress(0);
       return;
     }
 
-    setStepIndex(0);
-    setProgress(5);
+    // Map stage to step index
+    const stepIndex = STAGE_TO_STEP_INDEX[stage] ?? 0;
+    setCurrentStepIndex(stepIndex);
 
-    const timeouts: number[] = [];
-    let elapsed = 0;
+    // Update progress based on stage
+    if (stage === "completed") {
+      completeProgress();
+    } else if (stage === "failed") {
+      failProgress();
+    } else {
+      // Calculate smooth progress within current stage
+      const now = Date.now();
+      const elapsed = now - stageStartTimeRef.current;
+      
+      // Estimated duration for each stage (in milliseconds)
+      const stageDurations: Record<GenerationStage, number> = {
+        queued: 500,
+        planning: 5000,
+        notes: 8000,
+        assessments: 6000,
+        slides_images: 8000,
+        saving: 5000,
+        completed: 0,
+        failed: 0,
+      };
 
-    PROGRESS_TARGETS.forEach((target, index) => {
-      elapsed += STEP_DELAYS[index];
-      timeouts.push(
-        window.setTimeout(() => {
-          if (completedRef.current) return;
-          if (index === PROGRESS_TARGETS.length - 1) {
-            setStepIndex(GENERATION_STEPS.length - 1);
-          } else {
-            setStepIndex(index + 1);
-          }
-          updateProgress(target);
-        }, elapsed)
-      );
-    });
+      const duration = stageDurations[stage] ?? 5000;
+      const interpolated = getInterpolatedProgress(stage, elapsed, duration);
+      setProgress(interpolated);
+    }
+  }, [isGenerating, stage, completeProgress, failProgress]);
 
-    const progressInterval = window.setInterval(() => {
+  // Smooth progress animation within current stage
+  useEffect(() => {
+    if (!isGenerating || stage === "completed" || stage === "failed" || stage === "saving") {
+      return;
+    }
+
+    const animationInterval = setInterval(() => {
+      if (completedRef.current) return;
+
       setProgress((previous) => {
-        if (completedRef.current) return previous;
-
-        if (currentStepIndexRef.current === GENERATION_STEPS.length - 1) {
-          if (previous <= 94) return 94;
-          return previous === 94 ? 96 : 94;
-        }
-
-        if (previous >= 95) return previous;
-        const next = Math.min(95, previous + Math.floor(Math.random() * 6 + 3));
-        return next;
+        const range = STAGE_PROGRESS[stage];
+        // Continue animating smoothly but don't jump too far
+        if (previous >= range.max * 0.9) return previous;
+        return previous + 0.5;
       });
-    }, 500);
+    }, 200);
 
-    return () => {
-      completedRef.current = false;
-      timeouts.forEach(window.clearTimeout);
-      window.clearInterval(progressInterval);
-    };
-  }, [isGenerating, updateProgress]);
+    return () => clearInterval(animationInterval);
+  }, [isGenerating, stage]);
+
+  // Reset stage start time when stage changes
+  useEffect(() => {
+    stageStartTimeRef.current = Date.now();
+  }, [stage]);
 
   return {
     steps: GENERATION_STEPS,
     currentStepIndex,
     progress,
     completeProgress,
+    failProgress,
   };
 }

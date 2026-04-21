@@ -31,18 +31,45 @@ type NavItem = {
   children?: Array<{ href: string; label: string }>;
 };
 
-const teacherNav: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/generate", label: "Generate", icon: Sparkles },
-  { href: "/pricing", label: "Pricing", icon: CreditCard },
-  { href: "/library", label: "Library", icon: Library },
-   {
-    href: "/planning", label: "Planning", icon: CalendarDays,
+type NavSection = {
+  label: string;
+  items: NavItem[];
+};
+
+const teacherNav: NavSection[] = [
+  {
+    label: "OVERVIEW",
+    items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }],
   },
-  { href: "/exam-builder", label: "Exam Builder", icon: ScrollText },
-  { href: "/worksheets", label: "Worksheets", icon: FileText },
-  { href: "/school", label: "School", icon: School },
-  { href: "/settings", label: "Settings", icon: Settings },
+  {
+    label: "CONTENT",
+    items: [
+      {
+        href: "/generate",
+        label: "Generate",
+        icon: Sparkles,
+        children: [
+          { href: "/generate/lesson-slides", label: "Lesson Slides" },
+        ],
+      },
+      { href: "/library", label: "Library", icon: Library },
+      { href: "/worksheets", label: "Worksheets", icon: FileText },
+    ],
+  },
+  {
+    label: "TOOLS",
+    items: [
+      { href: "/planning", label: "Planning", icon: CalendarDays },
+      { href: "/exam-builder", label: "Exam Builder", icon: ScrollText },
+    ],
+  },
+  {
+    label: "ACCOUNT",
+    items: [
+      { href: "/school", label: "School", icon: School },
+      { href: "/settings", label: "Settings", icon: Settings },
+    ],
+  },
 ];
 const principalNav: NavItem[] = [
   { href: "/principal", label: "Dashboard", icon: LayoutDashboard },
@@ -65,7 +92,7 @@ export default function Sidebar({
 }) {
   const pathname = usePathname();
   const isPrincipalArea = pathname.startsWith("/principal");
-  const navItems = isPrincipalArea ? principalNav : teacherNav;
+  const navSections = isPrincipalArea ? principalNav : teacherNav;
 
   // ✅ create supabase client once
   const supabase = useMemo(() => createBrowserSupabase(), []);
@@ -156,14 +183,14 @@ export default function Sidebar({
     )}&background=6366f1&color=fff`;
 
   const SidebarCard = ({ onNavigate }: { onNavigate?: () => void }) => (
-     <aside className="flex h-full min-h-0 flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+     <aside className="flex h-full min-h-0 flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm bg-white dark:bg-[#0B1530] dark:border-[#1A2847]">
       {/* User */}
-       <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 pb-4">
+       <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 pb-4 dark:border-[#1A2847]">
         <label className="relative cursor-pointer">
           <img
             src={avatar}
             alt="avatar"
-            className="h-12 w-12 rounded-full border border-slate-200 object-cover"
+            className="h-12 w-12 rounded-full border border-slate-200 object-cover dark:border-[#1A2847]"
           />
           <input
             type="file"
@@ -175,67 +202,132 @@ export default function Sidebar({
         </label>
 
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-slate-900">
+          <div className="truncate text-sm font-semibold text-slate-900 dark:text-white">
             {profile?.full_name || "Your Name"}
           </div>
-          <div className="truncate text-xs text-slate-500">{email}</div>
-          <div className="text-[11px] text-slate-400">
+          <div className="truncate text-xs text-slate-500 dark:text-[#94A3B8]">{email}</div>
+          <div className="text-[11px] text-slate-400 dark:text-slate-500">
             {uploading ? "Uploading..." : "Click photo to change"}
           </div>
         </div>
       </div>
 
       {/* Nav */}
-      <nav className="mt-4 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
-         {navItems.map((item) => {
-          const active =
-            item.href === "/principal"
-              ? pathname === "/principal"
-              : pathname === item.href || pathname.startsWith(item.href + "/");
-          const Icon = item.icon;
+      <nav className="mt-4 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
+        {!isPrincipalArea ? (
+          (navSections as NavSection[]).map((section: NavSection) => (
+            <div key={section.label}>
+              <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                {section.label}
+              </div>
+              <div className="mt-2 flex flex-col gap-1">
+                {section.items.map((item: NavItem) => {
+                  const active =
+                    item.href === "/dashboard"
+                      ? pathname === "/dashboard"
+                      : pathname === item.href ||
+                        pathname.startsWith(item.href + "/");
+                  const Icon = item.icon;
 
-          return (
-                      <div key={item.href}>
-              <Link
-                href={item.href}
-                onClick={onNavigate}
-                className={[
-                  "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition",
-                  active
-                    ? "bg-violet-50 text-violet-700 border border-violet-100"
-                    : "text-slate-700 hover:bg-slate-50",
-                ].join(" ")}
-              >
-                <Icon className="h-4 w-4" />
-                {item.label}
-              </Link>
-
-              {item.children ? (
-                <div className="ml-6 mt-1 flex flex-col gap-1">
-                  {item.children.map((child) => {
-                    const childActive =
-                      pathname === child.href || pathname.startsWith(child.href + "/");
-                    return (
+                  return (
+                    <div key={item.href}>
                       <Link
-                        key={child.href}
-                        href={child.href}
-                        onClick={onNavigate}
+                        href={item.href}
+                        onClick={() => setOpen(false)}
                         className={[
-                          "rounded-lg px-3 py-1.5 text-xs font-medium transition",
-                          childActive
-                            ? "bg-violet-100 text-violet-700"
-                            : "text-slate-600 hover:bg-slate-50",
+                          "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition",
+                          active
+                            ? "bg-violet-50 text-violet-700 border border-violet-100 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-900"
+                            : "text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]",
                         ].join(" ")}
                       >
-                        {child.label}
+                        <Icon className="h-4 w-4" />
+                        {item.label}
                       </Link>
-                    );
-                  })}
-                </div>
-              ) : null}
+
+                      {item.children ? (
+                        <div className="ml-6 mt-1 flex flex-col gap-1">
+                          {item.children.map((child) => {
+                            const childActive =
+                              pathname === child.href ||
+                              pathname.startsWith(child.href + "/");
+                            return (
+                              <Link
+                                key={child.href}
+                                href={child.href}
+                                onClick={() => setOpen(false)}
+                                className={[
+                                  "rounded-lg px-3 py-1.5 text-xs font-medium transition",
+                                  childActive
+                                    ? "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400"
+                                    : "text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-[#101827]",
+                                ].join(" ")}
+                              >
+                                {child.label}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          );
-        })}
+          ))
+        ) : (
+          /* Principal nav - keep old structure for now */
+          (navSections as NavItem[]).map((item: NavItem) => {
+            const active =
+              item.href === "/principal"
+                ? pathname === "/principal"
+                : pathname === item.href || pathname.startsWith(item.href + "/");
+            const Icon = item.icon;
+
+            return (
+              <div key={item.href}>
+                <Link
+                  href={item.href}
+                  onClick={() => setOpen(false)}
+                  className={[
+                    "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition",
+                    active
+                      ? "bg-violet-50 text-violet-700 border border-violet-100 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-900"
+                      : "text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800",
+                  ].join(" ")}
+                >
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                </Link>
+
+                {item.children ? (
+                  <div className="ml-6 mt-1 flex flex-col gap-1">
+                    {item.children.map((child) => {
+                      const childActive =
+                        pathname === child.href ||
+                        pathname.startsWith(child.href + "/");
+                      return (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          onClick={() => setOpen(false)}
+                          className={[
+                            "rounded-lg px-3 py-1.5 text-xs font-medium transition",
+                            childActive
+                              ? "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400"
+                              : "text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800",
+                          ].join(" ")}
+                        >
+                          {child.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })
+        )}
       </nav>
 
     </aside>

@@ -22,6 +22,7 @@ type ProfileRoleRow = {
 };
 
 export type AuthRoleContext = {
+  activeRole: string | null;
   userId: string;
   email: string | null;
   availableRoles: AppRole[];
@@ -197,6 +198,7 @@ export async function resolveAuthRoleContext(input: {
     input.metadataRole != null;
 
   return {
+    activeRole: input.metadataRole ?? availableRoles[0] ?? null,
     userId: input.userId,
     email: input.email,
     availableRoles,

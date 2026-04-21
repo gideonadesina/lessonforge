@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { youtubeSearchUrl } from "@/lib/media";
+import { resolveLessonContent } from "@/lib/lessons/resolveLessonContent";
+import { LessonPageSkeleton } from "@/lib/lessons/LessonSkeleton";
 
 type LessonRow = {
   id: string;
@@ -420,11 +422,7 @@ export default function LessonPage() {
   }
 
   if (loading) {
-    return (
-      <div className="mx-auto max-w-5xl p-6 text-slate-900 md:p-10">
-        <div className="rounded-2xl border bg-white p-6">Loading lesson…</div>
-      </div>
-    );
+    return <LessonPageSkeleton />;
   }
 
   if (!row) {

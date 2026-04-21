@@ -31,10 +31,8 @@ async function createServerSupabase() {
       getAll() {
         return cookieStore.getAll?.() ?? [];
       },
-            setAll(cookiesToSet: Array<{ name: string; value: string; options?: Record<string, unknown> }>) {
-        for (const { name, value, options } of cookiesToSet) {
-          cookieStore.set?.(name, value, options);
-        }
+      setAll() {
+        // no-op: cookies cannot be written from a layout/server component render
       },
     },
   });

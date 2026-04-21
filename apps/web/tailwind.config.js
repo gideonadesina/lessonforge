@@ -5,8 +5,18 @@ module.exports = {
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./lib/**/*.{js,ts,jsx,tsx,mdx}",
   ],
+  darkMode: "selector",
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        dark: {
+          50: "#f8f8f8",
+          100: "#e3e3e3",
+          900: "#1a1a1a",
+        },
+      },
+    },
   },
   plugins: [],
 };
+

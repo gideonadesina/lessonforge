@@ -60,71 +60,71 @@ export default function WeeklyInsight({
   });
 
   return (
-    <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm bg-white dark:bg-[#0B1530] dark:border-[#1A2847]">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h2 className="text-lg font-bold tracking-tight text-slate-900">
+          <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
             Weekly Teaching Insight
           </h2>
-          <p className="mt-1 text-sm text-slate-600">
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
             A simple view of your teaching rhythm and what to improve next.
           </p>
         </div>
 
-        <div className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">
+        <div className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-400">
           This week
         </div>
       </div>
 
       <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-[#1A2847] dark:bg-[#101827]">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             Lessons Created
           </div>
-          <div className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">
+          <div className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             {totalLessons}
           </div>
-          <div className="mt-1 text-sm text-slate-600">
+          <div className="mt-1 text-sm text-slate-600 dark:text-slate-400">
             Total saved lesson packs
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-[#1A2847] dark:bg-[#101827]">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             Recent Activity
           </div>
-          <div className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">
+          <div className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             {recent7d}
           </div>
-          <div className="mt-1 text-sm text-slate-600">
+          <div className="mt-1 text-sm text-slate-600 dark:text-slate-400">
             Lessons generated in the last 7 days
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-[#1A2847] dark:bg-[#101827]">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             Worksheets
           </div>
-          <div className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">
+          <div className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             {worksheetsCreated}
           </div>
-          <div className="mt-1 text-sm text-slate-600">
+          <div className="mt-1 text-sm text-slate-600 dark:text-slate-400">
             Practice resources created
           </div>
         </div>
       </div>
 
-      <div className="mt-5 rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-50 to-violet-50 p-5">
-        <div className="text-sm font-bold text-slate-900">{insight.title}</div>
-        <p className="mt-2 text-sm leading-relaxed text-slate-700">
+      <div className="mt-5 rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-50 to-violet-50 p-5 dark:border-[#1A2847] dark:from-[#101827] dark:to-violet-900/20">
+        <div className="text-sm font-bold text-slate-900 dark:text-white">{insight.title}</div>
+        <p className="mt-2 text-sm leading-relaxed text-slate-700 dark:text-slate-300">
           {insight.body}
         </p>
 
-        <div className="mt-4 rounded-xl border border-violet-100 bg-white/80 p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-violet-700">
+        <div className="mt-4 rounded-xl border border-violet-100 bg-white/80 p-4 dark:border-violet-800 dark:bg-[#101827]">
+          <div className="text-xs font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-400">
             ForgeGuide Suggestion
           </div>
-          <p className="mt-2 text-sm leading-relaxed text-slate-700">
+          <p className="mt-2 text-sm leading-relaxed text-slate-700 dark:text-slate-300">
             {insight.suggestion}
           </p>
         </div>

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { signOutAndRedirect } from "@/lib/auth/logout";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { LESSON_PACK_CREDIT_COST } from "@/lib/billing/pricing";
+import AppearanceSettings from "@/components/settings/AppearanceSettings";
 import type { Plan } from "@/lib/useProfile";
 
 type Profile = {
@@ -96,7 +97,7 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div className="p-6">
-        <div className="text-slate-600">Loading settings...</div>
+        <div className="text-slate-600 dark:text-slate-400">Loading settings...</div>
       </div>
     );
   }
@@ -108,57 +109,63 @@ export default function SettingsPage() {
      <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-slate-900">Settings</h1>
-        <p className="text-slate-600 mt-1">Manage your account and plan.</p>
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Settings</h1>
+        <p className="text-slate-600 mt-1 dark:text-slate-400">Manage your account and plan.</p>
       </div>
 
       {/* Account Info */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-        <h2 className="font-semibold text-slate-900 mb-4">Account</h2>
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm dark:bg-slate-800 dark:border-slate-700">
+        <h2 className="font-semibold text-slate-900 mb-4 dark:text-white">Account</h2>
 
         <div className="space-y-3 text-sm">
            <div className="flex justify-between">
-            <span className="text-slate-500">Email</span>
-            <span className="font-medium text-slate-900">{profile?.email}</span>
+            <span className="text-slate-500 dark:text-slate-400">Email</span>
+            <span className="font-medium text-slate-900 dark:text-white">{profile?.email}</span>
           </div>
 
           <div className="flex justify-between">
-            <span className="text-slate-500">Plan</span>
-            <span className={`font-medium ${planInfo.colorClass}`}>
+            <span className="text-slate-500 dark:text-slate-400">Plan</span>
+            <span className={`font-medium ${planInfo.colorClass} dark:text-slate-300`}>
               {planInfo.label}
             </span>
           </div>
 
           <div className="flex justify-between">
-            <span className="text-slate-500">Remaining Credits</span>
-            <span className="font-medium text-slate-900">
+            <span className="text-slate-500 dark:text-slate-400">Remaining Credits</span>
+            <span className="font-medium text-slate-900 dark:text-white">
               {profile?.credits_balance ?? 0}
             </span>
           </div>
          </div>
       </div>
 
+      {/* Appearance */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm dark:bg-slate-800 dark:border-slate-700">
+        <h2 className="font-semibold text-slate-900 mb-4 dark:text-white">Appearance</h2>
+        <AppearanceSettings />
+      </div>
+
       {/* Billing */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-        <h2 className="font-semibold text-slate-900 mb-4">Billing</h2>
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm dark:bg-slate-800 dark:border-slate-700">
+        <h2 className="font-semibold text-slate-900 mb-4 dark:text-white">Billing</h2>
 
         {isPaidPlan ? (
           <div className="space-y-3">
-            <div className="text-green-600 text-sm font-medium">
+            <div className="text-green-600 text-sm font-medium dark:text-green-400">
               Your {planInfo.label} plan is active.
             </div>
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-slate-500 dark:text-slate-400">
               1 lesson pack uses {LESSON_PACK_CREDIT_COST} credits.
             </div>
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="text-sm text-slate-600">
+            <div className="text-sm text-slate-600 dark:text-slate-400">
               Upgrade to get more credits for lesson generation.
             </div>
             <Link
               href="/pricing"
-              className="inline-flex bg-violet-600 text-white px-4 py-2 rounded-xl hover:bg-violet-700 text-sm font-semibold"
+              className="inline-flex bg-violet-600 text-white px-4 py-2 rounded-xl hover:bg-violet-700 dark:bg-violet-700 dark:hover:bg-violet-600 text-sm font-semibold"
             >
               View Pricing
             </Link>
@@ -167,13 +174,13 @@ export default function SettingsPage() {
       </div>
 
       {/* Logout */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-        <h2 className="font-semibold text-slate-900 mb-4">Danger Zone</h2>
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm dark:bg-slate-800 dark:border-slate-700">
+        <h2 className="font-semibold text-slate-900 mb-4 dark:text-white">Danger Zone</h2>
 
         <button
           onClick={logout}
           disabled={loggingOut}
-          className="bg-red-600 text-white px-4 py-2 rounded-xl hover:bg-red-700 text-sm font-semibold disabled:opacity-50"
+          className="bg-red-600 text-white px-4 py-2 rounded-xl hover:bg-red-700 dark:bg-red-900 dark:hover:bg-red-800 text-sm font-semibold disabled:opacity-50"
         >
           {loggingOut ? "Logging out..." : "Logout"}
         </button>

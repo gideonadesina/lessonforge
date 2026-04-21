@@ -2,6 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { resolveLessonContent } from "@/lib/lessons/resolveLessonContent";
+import { LessonSkeleton } from "@/lib/lessons/LessonSkeleton";
+import { useLessonCache } from "@/lib/lessons/useLessonCache";
+import { useProgressiveRenderer, SectionSkeleton, ProgressiveContent } from "@/lib/lessons/ProgressiveRenderer";
  
 
 type LessonRow = {
@@ -38,10 +42,20 @@ export default function LibraryPage() {
   const [sort, setSort] = useState<SortMode>("newest");
 
   const [active, setActive] = useState<LessonRow | null>(null);
-  const [activeWithPayload, setActiveWithPayload] = useState<LessonRow | null>(null);
-  
   const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
-  const [isLoadingLessonContent, setIsLoadingLessonContent] = useState(false);
+  
+  // Use the new lesson cache hook for instant loading and deduplication
+  const { data: activeWithPayload, isLoading: isLoadingLessonContent, error: lessonError } = useLessonCache(active?.id ?? null);
+  
+  // Memoize resolved lesson content at top level (MUST be here, not in JSX)
+  // This ensures hooks always run in the same order
+  const resolvedLessonContent = useMemo(() => {
+    if (!activeWithPayload || isLoadingLessonContent) return null;
+    return resolveLessonContent(activeWithPayload);
+  }, [activeWithPayload, isLoadingLessonContent]);
+  
+  // Progressive rendering for content sections
+  const { isSectionReady } = useProgressiveRenderer(resolvedLessonContent);
 
   async function load() {
     setLoading(true);
@@ -77,31 +91,6 @@ export default function LibraryPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Fetch full lesson data (with result_json) when modal opens
-  useEffect(() => {
-    if (!active) {
-      setActiveWithPayload(null);
-      return;
-    }
-
-    (async () => {
-      try {
-        const { data: fullLesson, error } = await supabase
-          .from("lessons")
-          .select("id, subject, topic, grade, curriculum, result_json, content, created_at")
-          .eq("id", active.id)
-          .single();
-
-        if (!error && fullLesson) {
-          setActiveWithPayload(fullLesson as LessonRow);
-        }
-      } catch {
-        // If fetch fails, use the basic active data
-        setActiveWithPayload(active);
-      }
-    })();
-  }, [active?.id, supabase]);
 
   function safeRender(value: any): React.ReactNode {
   if (value === null || value === undefined) return null;
@@ -161,10 +150,14 @@ export default function LibraryPage() {
   gen,
   fallbackSubject,
   fallbackTopic,
+  isReady = true,
+  isSectionReady = () => true,
 }: {
   gen: any;
   fallbackSubject: string;
   fallbackTopic: string;
+  isReady?: boolean;
+  isSectionReady?: (section: string) => boolean;
 }) {
   const meta = gen?.meta ?? {};
   const subject = meta?.subject ?? fallbackSubject;
@@ -178,7 +171,7 @@ export default function LibraryPage() {
 
   return (
     <div className="space-y-6">
-      {/* Meta header */}
+      {/* Meta header - ALWAYS visible immediately */}
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
         <div className="text-xs text-slate-500">Lesson Pack</div>
         <div className="mt-1 text-xl font-extrabold text-slate-900">{topic || "Lesson"}</div>
@@ -190,10 +183,14 @@ export default function LibraryPage() {
         </div>
       </div>
 
-            {/* Lesson Plan */}
-      {lessonPlan ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-5">
-          <h3 className="text-sm font-bold text-slate-900">Lesson Plan</h3>
+            {/* Lesson Plan - loads quickly, high priority */}
+      <ProgressiveContent
+        isReady={isSectionReady("lessonPlan")}
+        fallback={<SectionSkeleton title="Lesson Plan" />}
+      >
+        {lessonPlan ? (
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-5">
+            <h3 className="text-sm font-bold text-slate-900">Lesson Plan</h3>
 
           {lessonPlan?.title ? (
             <div>
@@ -351,11 +348,16 @@ export default function LibraryPage() {
           ) : null}
         </section>
       ) : null}
+      </ProgressiveContent>
       
-      {/* Lesson Notes */}
-      {gen?.lessonNotes ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-4">
-          <h3 className="text-sm font-bold text-slate-900">Lesson Notes</h3>
+      {/* Lesson Notes - medium priority */}
+      <ProgressiveContent
+        isReady={isSectionReady("notes")}
+        fallback={<SectionSkeleton title="Lesson Notes" />}
+      >
+        {gen?.lessonNotes ? (
+          <section className="rounded-2xl border border-slate-200 bg-white p-4">
+            <h3 className="text-sm font-bold text-slate-900">Lesson Notes</h3>
           <div className="mt-2">
             {typeof gen.lessonNotes === "string" ? (
               <div className="whitespace-pre-wrap text-sm text-slate-800 leading-relaxed">
@@ -448,11 +450,16 @@ export default function LibraryPage() {
           </div>
         </section>
       ) : null}
+      </ProgressiveContent>
 
-      {/* Slides */}
-      {slides.length ? (
-        <section className="space-y-4">
-          <h3 className="text-sm font-bold text-slate-900">Slides</h3>
+      {/* Slides - can be large, medium priority */}
+      <ProgressiveContent
+        isReady={isSectionReady("slides")}
+        fallback={<SectionSkeleton title="Slides" lines={4} />}
+      >
+        {slides.length ? (
+          <section className="space-y-4">
+            <h3 className="text-sm font-bold text-slate-900">Slides</h3>
 
           <div className="grid gap-6">
             {slides.map((s, i) => {
@@ -546,11 +553,16 @@ export default function LibraryPage() {
           </div>
         </section>
       ) : null}
+      </ProgressiveContent>
 
-      {/* MCQ */}
-      {mcq.length ? (
-        <section className="space-y-4">
-          <h3 className="text-sm font-bold text-slate-900">📝 Multiple Choice Questions</h3>
+      {/* MCQ - medium priority */}
+      <ProgressiveContent
+        isReady={isSectionReady("quiz")}
+        fallback={<SectionSkeleton title="Quiz" lines={5} />}
+      >
+        {mcq.length ? (
+          <section className="space-y-4">
+            <h3 className="text-sm font-bold text-slate-900">📝 Multiple Choice Questions</h3>
 
           <div className="space-y-4">
             {mcq.map((q, i) => {
@@ -577,11 +589,16 @@ export default function LibraryPage() {
           </div>
         </section>
       ) : null}
+      </ProgressiveContent>
 
-      {/* Theory */}
-      {theory.length ? (
-        <section className="space-y-4">
-          <h3 className="text-sm font-bold text-slate-900">✍️ Theory Questions</h3>
+      {/* Theory - medium priority */}
+      <ProgressiveContent
+        isReady={isSectionReady("quiz")}
+        fallback={<SectionSkeleton title="Theory Questions" lines={5} />}
+      >
+        {theory.length ? (
+          <section className="space-y-4">
+            <h3 className="text-sm font-bold text-slate-900">✍️ Theory Questions</h3>
           <div className="space-y-4">
             {theory.map((q, i) => (
               <div key={i} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -600,11 +617,16 @@ export default function LibraryPage() {
           </div>
         </section>
       ) : null}
+      </ProgressiveContent>
 
-      {/* Real-life applications */}
-      {liveApps.length ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-4">
-          <h3 className="text-sm font-bold text-slate-900">Real-life Applications</h3>
+      {/* Real-life applications - optional, low priority */}
+      <ProgressiveContent
+        isReady={isSectionReady("applications")}
+        fallback={null}
+      >
+        {liveApps.length ? (
+          <section className="rounded-2xl border border-slate-200 bg-white p-4">
+            <h3 className="text-sm font-bold text-slate-900">Real-life Applications</h3>
           <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
            {liveApps.map((x: any, i: number) => (
   <li key={i}>{safeRender(x)}</li>
@@ -612,6 +634,7 @@ export default function LibraryPage() {
           </ul>
         </section>
       ) : null}
+      </ProgressiveContent>
     </div>
   );
 }
@@ -714,7 +737,7 @@ export default function LibraryPage() {
   }
 
   function buildLessonStructureTextFromRow(row: LessonRow | null) {
-    const gen = getGeneratedFromRow(row);
+    const gen = resolveLessonContent(row);
     if (!gen || !row) return "";
 
     const meta = gen?.meta ?? {};
@@ -938,7 +961,7 @@ export default function LibraryPage() {
   function handleDownloadLessonStructureFromRow(row: LessonRow | null) {
     if (!row) return;
 
-    const gen = getGeneratedFromRow(row);
+    const gen = resolveLessonContent(row);
     const meta = gen?.meta ?? {};
 
     const safeSubject = String(meta?.subject ?? row.subject ?? "subject")
@@ -1190,28 +1213,24 @@ export default function LibraryPage() {
 ) : null}
 </div>
             <div className="max-h-[70vh] overflow-auto p-4">
-            {(() => {
-  const gen = getGeneratedFromRow(activeWithPayload);
-
-  if (isLoadingLessonContent) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-      Loading lesson content...
-    </div>
-  );
-}
-
-  return <LessonPreview gen={gen} fallbackSubject={activeWithPayload?.subject ?? ""} fallbackTopic={activeWithPayload?.topic ?? ""} />;
-})()}
-
-
-              {/* ✅ Small helpful message if the row is truly missing payload */}
-              {!isLoadingLessonContent && !getLessonPayload(activeWithPayload) ? (
-                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                  This lesson row has no saved content yet. It was likely created before auto-save was fixed.
-                  You can delete it and generate again.
+              {!active ? null : isLoadingLessonContent ? (
+                <LessonSkeleton />
+              ) : resolvedLessonContent ? (
+                <LessonPreview
+                  gen={resolvedLessonContent}
+                  fallbackSubject={activeWithPayload?.subject ?? active.subject ?? ""}
+                  fallbackTopic={activeWithPayload?.topic ?? active.topic ?? ""}
+                  isReady
+                  isSectionReady={isSectionReady}
+                />
+              ) : (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center space-y-3">
+                  <div className="text-sm font-medium text-slate-700">No content available</div>
+                  <div className="text-xs text-slate-600">
+                    This lesson doesn't have saved content yet. Delete and regenerate it.
+                  </div>
                 </div>
-              ) : null}
+              )}
             </div>
 
             <div className="flex items-center justify-end gap-2 border-t border-slate-200 p-4">
