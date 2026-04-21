@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export const GENERATION_CREDIT_COSTS = {
   LESSON_PACK: 4,
+  LESSON_SLIDES: 2,
   WORKSHEET: 1,
   EXAM_BUILDER: 1,
 };
@@ -14,6 +15,7 @@ export const GENERATION_CREDIT_COSTS = {
 interface CreditCheckResult {
   ok: boolean;
   hasLessonPackCredits: boolean;
+  hasSlidesCredits: boolean;
   hasWorksheetCredits: boolean;
   hasExamCredits: boolean;
   usesSchoolCredits: boolean;
@@ -54,6 +56,7 @@ export async function checkTeacherCredits(
       return {
         ok: false,
         hasLessonPackCredits: false,
+        hasSlidesCredits: false,
         hasWorksheetCredits: false,
         hasExamCredits: false,
         usesSchoolCredits: false,
@@ -89,6 +92,7 @@ export async function checkTeacherCredits(
     return {
       ok: true,
       hasLessonPackCredits: totalAvailable >= GENERATION_CREDIT_COSTS.LESSON_PACK,
+      hasSlidesCredits: totalAvailable >= GENERATION_CREDIT_COSTS.LESSON_SLIDES,
       hasWorksheetCredits: totalAvailable >= GENERATION_CREDIT_COSTS.WORKSHEET,
       hasExamCredits: totalAvailable >= GENERATION_CREDIT_COSTS.EXAM_BUILDER,
       usesSchoolCredits,
@@ -102,6 +106,7 @@ export async function checkTeacherCredits(
     return {
       ok: false,
       hasLessonPackCredits: false,
+      hasSlidesCredits: false,
       hasWorksheetCredits: false,
       hasExamCredits: false,
       usesSchoolCredits: false,

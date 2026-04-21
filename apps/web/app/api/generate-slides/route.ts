@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { cookies } from "next/headers";
+import { LESSON_SLIDES_CREDIT_COST } from "@/lib/billing/pricing";
+import { consumeGenerationCredits } from "@/lib/credits/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -288,6 +292,36 @@ export async function POST(req: NextRequest) {
             "Missing required fields: topic, grade, subject, duration, tone, bloom",
         },
         { status: 400 }
+      );
+    }
+
+    const supabase = createRouteHandlerClient({ cookies });
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const creditResult = await consumeGenerationCredits(
+      supabase,
+      user.id,
+      LESSON_SLIDES_CREDIT_COST
+    );
+
+    if (!creditResult.ok) {
+      if (creditResult.error === "No credits") {
+        return NextResponse.json(
+          { error: "Insufficient credits" },
+          { status: 402 }
+        );
+      }
+
+      return NextResponse.json(
+        { error: creditResult.error || "Credit deduction failed" },
+        { status: 500 }
       );
     }
 
