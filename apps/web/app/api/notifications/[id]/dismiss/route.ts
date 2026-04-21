@@ -34,11 +34,11 @@ export async function POST(req: NextRequest, context: RouteContext) {
     }
 
     const nowIso = new Date().toISOString();
-    const { error } = await supabase
-      .from("notifications")
-      .update({ dismissed_at: nowIso } as any)
-      .eq("id", id)
-      .eq("user_id", user.id);
+   const { error } = await (supabase as any)
+  .from("notifications")
+  .update({ dismissed_at: nowIso })
+  .eq("id", id)
+  .eq("user_id", user.id);
 
     if (error) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
