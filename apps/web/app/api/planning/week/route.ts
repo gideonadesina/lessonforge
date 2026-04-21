@@ -27,13 +27,13 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const supabase = auth.supabase;
+    const db = auth.supabase as any;
     const user = auth.user;
     const weekRange = getCurrentUtcWeekRange();
 
     const [slotsByDay, eventsRes] = await Promise.all([
-      getWeekSlotsByDay(supabase, user.id),
-      supabase
+      getWeekSlotsByDay(auth.supabase, user.id),
+      db
         .from("academic_calendar")
         .select("id, title, event_date, event_type")
         .eq("user_id", user.id)
@@ -43,12 +43,26 @@ export async function GET(req: NextRequest) {
     ]);
 
     if (eventsRes.error) {
-      return NextResponse.json({ ok: false, error: eventsRes.error.message }, { status: 500 });
+      return NextResponse.json(
+        { ok: false, error: eventsRes.error.message },
+        { status: 500 }
+      );
     }
 
-    const eventsByDay: Record<string, Array<{ id: string; title: string; event_type: string; event_date: string }>> =
-      { Mon: [], Tue: [], Wed: [], Thu: [], Fri: [] };
+   type EventItem = {
+  id: string;
+  title: string;
+  event_type: string;
+  event_date: string;
+};
 
+const eventsByDay: Record<string, EventItem[]> = {
+  Mon: [],
+  Tue: [],
+  Wed: [],
+  Thu: [],
+  Fri: [],
+};
     for (const event of eventsRes.data ?? []) {
       const dayLabel = weekdayFromDateIso(event.event_date);
       if (!dayLabel || !eventsByDay[dayLabel]) continue;
@@ -71,7 +85,10 @@ export async function GET(req: NextRequest) {
       { status: 200 }
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Failed to load weekly planning data.";
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to load weekly planning data.";
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

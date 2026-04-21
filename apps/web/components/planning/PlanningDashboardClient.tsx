@@ -17,12 +17,16 @@ type NotificationsResponse = {
   unreadCount: number;
 };
 
+type EventItem = {
+  id: string;
+  title: string;
+  event_type: string;
+  event_date: string;
+};
+
 type WeekResponse = {
   slots_by_day: Record<string, TodaySlot[]>;
-  events_by_day: Record<
-    string,
-    Array<{ id: string; title: string; event_type: string; event_date: string }>
-  >;
+  events_by_day: Record<string, EventItem[]>;
 };
 
 type SetupStatus = {
@@ -43,19 +47,6 @@ type FetchState<T> = {
   data: T;
 };
 
-function todayUtcDateIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function currentDayLabelUtc(): "Mon" | "Tue" | "Wed" | "Thu" | "Fri" {
-  const day = new Date().getUTCDay();
-  if (day === 1) return "Mon";
-  if (day === 2) return "Tue";
-  if (day === 3) return "Wed";
-  if (day === 4) return "Thu";
-  return "Fri";
-}
-
 function sortNotificationsByPriority(items: Notification[]) {
   const order: Record<NotificationType, number> = {
     URGENT: 0,
@@ -68,9 +59,7 @@ function sortNotificationsByPriority(items: Notification[]) {
     const byType =
       (order[a.notification_type] ?? 99) - (order[b.notification_type] ?? 99);
     if (byType !== 0) return byType;
-    return (
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 }
 
@@ -97,6 +86,18 @@ async function authedFetch(url: string, init?: RequestInit) {
   });
 }
 
+const EMPTY_WEEK: WeekResponse = {
+  slots_by_day: { Mon: [], Tue: [], Wed: [], Thu: [], Fri: [] },
+  events_by_day: { Mon: [], Tue: [], Wed: [], Thu: [], Fri: [] },
+};
+
+const EMPTY_SETUP: SetupStatus = {
+  has_timetable: false,
+  has_slots: false,
+  has_preferences: false,
+  has_linked_slots: false,
+};
+
 export default function PlanningDashboardClient({
   initialDateLabel,
   initialTermLabel,
@@ -106,31 +107,31 @@ export default function PlanningDashboardClient({
     error: null,
     data: { notifications: [], unreadCount: 0 },
   });
+
   const [todaySlots, setTodaySlots] = useState<FetchState<TodaySlot[]>>({
     loading: true,
     error: null,
     data: [],
   });
+
   const [weekData, setWeekData] = useState<FetchState<WeekResponse>>({
     loading: true,
     error: null,
-    data: { slots_by_day: { Mon: [], Tue: [], Wed: [], Thu: [], Fri: [] }, events_by_day: { Mon: [], Tue: [], Wed: [], Thu: [], Fri: [] } },
+    data: EMPTY_WEEK,
   });
+
   const [progress, setProgress] = useState<FetchState<TermProgress>>({
     loading: true,
     error: null,
     data: { week_number: getWeekNumber(new Date()), subjects: [] },
   });
+
   const [setup, setSetup] = useState<FetchState<SetupStatus>>({
     loading: true,
     error: null,
-    data: {
-      has_timetable: false,
-      has_slots: false,
-      has_preferences: false,
-      has_linked_slots: false,
-    },
+    data: EMPTY_SETUP,
   });
+
   const [tipInput, setTipInput] = useState<{
     topic: string;
     class_name: string;
@@ -140,24 +141,28 @@ export default function PlanningDashboardClient({
   const refreshNotifications = useCallback(async () => {
     try {
       const res = await authedFetch("/api/notifications");
-      const json = await res.json();
-      if (!res.ok || !json?.ok) {
-        throw new Error(json?.error ?? "Failed to fetch notifications");
-      }
+      const json = (await res.json()) as {
+        ok: boolean;
+        error?: string;
+        data?: NotificationsResponse;
+      };
+      if (!res.ok || !json.ok) throw new Error(json.error ?? "Failed");
       const payload = json.data as NotificationsResponse;
       setNotifications({
         loading: false,
         error: null,
         data: {
-          notifications: sortNotificationsByPriority(payload.notifications).slice(0, 5),
+          notifications: sortNotificationsByPriority(
+            payload.notifications ?? []
+          ).slice(0, 5),
           unreadCount: payload.unreadCount ?? 0,
         },
       });
-    } catch (error: unknown) {
-      setNotifications((prev) => ({
+    } catch (err: unknown) {
+      setNotifications((prev: FetchState<NotificationsResponse>) => ({
         ...prev,
         loading: false,
-        error: error instanceof Error ? error.message : "Failed to fetch notifications",
+        error: err instanceof Error ? err.message : "Failed to fetch notifications",
       }));
     }
   }, []);
@@ -165,17 +170,17 @@ export default function PlanningDashboardClient({
   const refreshToday = useCallback(async () => {
     try {
       const res = await authedFetch("/api/planning/today");
-      const json = await res.json();
-      if (!res.ok || !json?.ok) {
-        throw new Error(json?.error ?? "Failed to fetch today slots");
-      }
+      const json = (await res.json()) as {
+        ok: boolean;
+        error?: string;
+        data?: TodaySlot[];
+      };
+      if (!res.ok || !json.ok) throw new Error(json.error ?? "Failed");
       const slots = (json.data ?? []) as TodaySlot[];
       setTodaySlots({ loading: false, error: null, data: slots });
-
       const firstUpcoming =
-        slots.find((slot) => slot.status === "now" || slot.status === "next") ??
-        slots.find((slot) => slot.status === "later");
-
+        slots.find((s) => s.status === "now" || s.status === "next") ??
+        slots.find((s) => s.status === "later");
       if (firstUpcoming?.topic) {
         setTipInput({
           topic: firstUpcoming.topic,
@@ -185,10 +190,10 @@ export default function PlanningDashboardClient({
       } else {
         setTipInput(null);
       }
-    } catch (error: unknown) {
+    } catch (err: unknown) {
       setTodaySlots({
         loading: false,
-        error: error instanceof Error ? error.message : "Failed to fetch today slots",
+        error: err instanceof Error ? err.message : "Failed to fetch today slots",
         data: [],
       });
       setTipInput(null);
@@ -198,16 +203,22 @@ export default function PlanningDashboardClient({
   const refreshWeek = useCallback(async () => {
     try {
       const res = await authedFetch("/api/planning/week");
-      const json = await res.json();
-      if (!res.ok || !json?.ok) {
-        throw new Error(json?.error ?? "Failed to fetch week data");
-      }
-      setWeekData({ loading: false, error: null, data: json.data as WeekResponse });
-    } catch (error: unknown) {
+      const json = (await res.json()) as {
+        ok: boolean;
+        error?: string;
+        data?: WeekResponse;
+      };
+      if (!res.ok || !json.ok) throw new Error(json.error ?? "Failed");
+      setWeekData({
+        loading: false,
+        error: null,
+        data: json.data ?? EMPTY_WEEK,
+      });
+    } catch (err: unknown) {
       setWeekData((prev) => ({
         ...prev,
         loading: false,
-        error: error instanceof Error ? error.message : "Failed to fetch week data",
+        error: err instanceof Error ? err.message : "Failed to fetch week data",
       }));
     }
   }, []);
@@ -215,16 +226,22 @@ export default function PlanningDashboardClient({
   const refreshProgress = useCallback(async () => {
     try {
       const res = await authedFetch("/api/planning/term-progress");
-      const json = await res.json();
-      if (!res.ok || !json?.ok) {
-        throw new Error(json?.error ?? "Failed to fetch term progress");
-      }
-      setProgress({ loading: false, error: null, data: json.data as TermProgress });
-    } catch (error: unknown) {
+      const json = (await res.json()) as {
+        ok: boolean;
+        error?: string;
+        data?: TermProgress;
+      };
+      if (!res.ok || !json.ok) throw new Error(json.error ?? "Failed");
+      setProgress({
+        loading: false,
+        error: null,
+        data: json.data ?? { week_number: 0, subjects: [] },
+      });
+    } catch (err: unknown) {
       setProgress((prev) => ({
         ...prev,
         loading: false,
-        error: error instanceof Error ? error.message : "Failed to fetch term progress",
+        error: err instanceof Error ? err.message : "Failed to fetch progress",
       }));
     }
   }, []);
@@ -238,24 +255,29 @@ export default function PlanningDashboardClient({
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         {
-          auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+            detectSessionInUrl: false,
+          },
           global: { headers: { Authorization: `Bearer ${token}` } },
         }
       );
+      const db = supabase as any;
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Unauthorized");
 
       const [timetableRes, prefRes] = await Promise.all([
-        supabase
+        db
           .from("teacher_timetable")
           .select("id")
           .eq("user_id", user.id)
           .order("updated_at", { ascending: false })
           .limit(1)
           .maybeSingle(),
-        supabase
+        db
           .from("notification_preferences")
           .select("id")
           .eq("user_id", user.id)
@@ -263,16 +285,21 @@ export default function PlanningDashboardClient({
           .maybeSingle(),
       ]);
 
-      const timetableId = timetableRes.data?.id ?? null;
+      const timetableId = (timetableRes.data as { id: string } | null)?.id ?? null;
       let hasSlots = false;
       let hasLinked = false;
+
       if (timetableId) {
-        const { data: slots } = await supabase
+        const { data: slots } = await db
           .from("timetable_slots")
           .select("id, scheme_entry_id")
           .eq("timetable_id", timetableId);
-        hasSlots = (slots ?? []).length > 0;
-        hasLinked = (slots ?? []).some((slot) => Boolean(slot.scheme_entry_id));
+        const slotRows = (slots ?? []) as Array<{
+          id: string;
+          scheme_entry_id: string | null;
+        }>;
+        hasSlots = slotRows.length > 0;
+        hasLinked = slotRows.some((s) => Boolean(s.scheme_entry_id));
       }
 
       setSetup({
@@ -281,15 +308,18 @@ export default function PlanningDashboardClient({
         data: {
           has_timetable: Boolean(timetableId),
           has_slots: hasSlots,
-          has_preferences: Boolean(prefRes.data?.id),
+          has_preferences: Boolean(
+            (prefRes.data as { id: string } | null)?.id
+          ),
           has_linked_slots: hasLinked,
         },
       });
-    } catch (error: unknown) {
+    } catch (err: unknown) {
       setSetup((prev) => ({
         ...prev,
         loading: false,
-        error: error instanceof Error ? error.message : "Failed to fetch setup status",
+        error:
+          err instanceof Error ? err.message : "Failed to fetch setup status",
       }));
     }
   }, []);
@@ -302,7 +332,13 @@ export default function PlanningDashboardClient({
       refreshProgress(),
       refreshSetup(),
     ]);
-  }, [refreshNotifications, refreshProgress, refreshSetup, refreshToday, refreshWeek]);
+  }, [
+    refreshNotifications,
+    refreshProgress,
+    refreshSetup,
+    refreshToday,
+    refreshWeek,
+  ]);
 
   useEffect(() => {
     void refreshAll();
@@ -310,31 +346,44 @@ export default function PlanningDashboardClient({
 
   useEffect(() => {
     const id = window.setInterval(() => {
-      void Promise.all([refreshNotifications(), refreshToday(), refreshWeek(), refreshProgress()]);
+      void Promise.all([
+        refreshNotifications(),
+        refreshToday(),
+        refreshWeek(),
+        refreshProgress(),
+      ]);
     }, 60_000);
     return () => window.clearInterval(id);
   }, [refreshNotifications, refreshProgress, refreshToday, refreshWeek]);
 
   const handleDismissNotification = useCallback(async (id: string) => {
     await authedFetch(`/api/notifications/${id}/dismiss`, { method: "POST" });
-    setNotifications((prev) => ({
+    setNotifications((prev: FetchState<NotificationsResponse>) => ({
       ...prev,
       data: {
         ...prev.data,
-        notifications: prev.data.notifications.filter((item) => item.id !== id),
+        notifications: prev.data.notifications.filter((n) => n.id !== id),
       },
     }));
   }, []);
 
   const handleOpenPack = useCallback(async (slotId: string) => {
-    await authedFetch(`/api/planning/slots/${slotId}/open-pack`, { method: "POST" });
+    await authedFetch(`/api/planning/slots/${slotId}/open-pack`, {
+      method: "POST",
+    });
     window.location.href = "/library";
   }, []);
 
   const handleMarkDone = useCallback(
     async (slotId: string) => {
-      await authedFetch(`/api/planning/slots/${slotId}/mark-done`, { method: "POST" });
-      await Promise.all([refreshToday(), refreshProgress(), refreshNotifications()]);
+      await authedFetch(`/api/planning/slots/${slotId}/mark-done`, {
+        method: "POST",
+      });
+      await Promise.all([
+        refreshToday(),
+        refreshProgress(),
+        refreshNotifications(),
+      ]);
     },
     [refreshNotifications, refreshProgress, refreshToday]
   );
@@ -380,7 +429,10 @@ export default function PlanningDashboardClient({
         onDismiss={handleDismissNotification}
         onAction={(notification) => {
           const type = notification.notification_type;
-          if (type === NotificationType.URGENT && notification.timetable_slot_id) {
+          if (
+            type === NotificationType.URGENT &&
+            notification.timetable_slot_id
+          ) {
             void handleOpenPack(notification.timetable_slot_id);
             return;
           }
@@ -397,38 +449,39 @@ export default function PlanningDashboardClient({
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <TodaysTimeline
           slots={todaySlots.data}
-          onOpenPack={(slot) => {
-            void handleOpenPack(slot.slot.id);
+          loading={todaySlots.loading}
+          error={todaySlots.error}
+          onOpenPack={(slotId: string) => {
+            void handleOpenPack(slotId);
           }}
-          onMarkDone={(slot) => {
-            void handleMarkDone(slot.slot.id);
+          onMarkDone={(slotId: string) => {
+            void handleMarkDone(slotId);
           }}
         />
-
         <div className="space-y-4">
           <WeekAtGlanceGrid
             slotsByDay={weekData.data.slots_by_day}
             eventsByDay={weekData.data.events_by_day}
-            todayLabel={currentDayLabelUtc()}
+            loading={weekData.loading}
+            error={weekData.error}
           />
           <TermProgressPanel
             progress={progress.data}
             loading={progress.loading}
+            error={progress.error}
           />
         </div>
       </section>
 
       <TimetableSetupWizardCard
         status={{
-          timetableExists: setup.data.has_timetable,
-          slotCount:
-            Object.values(weekData.data.slots_by_day).reduce(
-              (sum, daySlots) => sum + daySlots.length,
-              0
-            ) ?? 0,
-          hasPreferences: setup.data.has_preferences,
-          linkedSlotCount: setup.data.has_linked_slots ? 1 : 0,
+          has_timetable: setup.data.has_timetable,
+          has_slots: setup.data.has_slots,
+          has_preferences: setup.data.has_preferences,
+          has_linked_slots: setup.data.has_linked_slots,
         }}
+        loading={setup.loading}
+        error={setup.error}
       />
 
       <ForgeGuideTipCard tipInput={tipInput} />

@@ -19,7 +19,7 @@ type SetupPayload = {
 function normalizeTeachingDays(days: string[]) {
   const allowed = new Set(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
   return Array.from(
-    new Set(days.map((day) => day.trim()).filter((day) => allowed.has(day)))
+    new Set(days.map((d) => d.trim()).filter((d) => allowed.has(d)))
   );
 }
 
@@ -32,6 +32,8 @@ export async function POST(req: NextRequest) {
         { status: auth.status ?? 401 }
       );
     }
+
+    const db = auth.supabase as any;
 
     const body = (await req.json().catch(() => null)) as SetupPayload | null;
     if (!body?.timetable || !Array.isArray(body?.slots) || !body?.preferences) {
@@ -66,7 +68,7 @@ export async function POST(req: NextRequest) {
       teaching_days: teachingDays,
     };
 
-    const { data: upsertedTimetable, error: timetableError } = await auth.supabase
+    const { data: upsertedTimetable, error: timetableError } = await db
       .from("teacher_timetable")
       .upsert(timetablePayload, {
         onConflict: "user_id,term,academic_year",
@@ -77,14 +79,17 @@ export async function POST(req: NextRequest) {
 
     if (timetableError || !upsertedTimetable?.id) {
       return NextResponse.json(
-        { ok: false, error: timetableError?.message ?? "Failed to save timetable." },
+        {
+          ok: false,
+          error: timetableError?.message ?? "Failed to save timetable.",
+        },
         { status: 500 }
       );
     }
 
     const timetableId = upsertedTimetable.id;
 
-    const { error: deleteSlotsError } = await auth.supabase
+    const { error: deleteSlotsError } = await db
       .from("timetable_slots")
       .delete()
       .eq("timetable_id", timetableId);
@@ -108,7 +113,7 @@ export async function POST(req: NextRequest) {
         scheme_entry_id: slot.scheme_entry_id ?? null,
       }));
 
-      const { error: insertSlotsError } = await auth.supabase
+      const { error: insertSlotsError } = await db
         .from("timetable_slots")
         .insert(insertSlotsPayload);
 
@@ -136,19 +141,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const prefPayload = {
-      user_id: auth.user.id,
-      reminder_minutes: reminderMinutes,
-      delivery_method: deliveryMethod,
-      enabled: Boolean(preferences.enabled),
-    };
-
-    const { error: prefError } = await auth.supabase
+    const { error: prefError } = await db
       .from("notification_preferences")
-      .upsert(prefPayload, {
-        onConflict: "user_id",
-        ignoreDuplicates: false,
-      });
+      .upsert(
+        {
+          user_id: auth.user.id,
+          reminder_minutes: reminderMinutes,
+          delivery_method: deliveryMethod,
+          enabled: Boolean(preferences.enabled),
+        },
+        {
+          onConflict: "user_id",
+          ignoreDuplicates: false,
+        }
+      );
 
     if (prefError) {
       return NextResponse.json(
@@ -170,7 +176,9 @@ export async function POST(req: NextRequest) {
     );
   } catch (error: unknown) {
     const message =
-      error instanceof Error ? error.message : "Failed to save timetable setup.";
+      error instanceof Error
+        ? error.message
+        : "Failed to save timetable setup.";
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

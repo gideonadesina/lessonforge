@@ -6,7 +6,7 @@ type AuthUserContext = {
   ok: boolean;
   error?: string;
   status?: number;
-  supabase?: ReturnType<typeof createClient>;
+  supabase?: any;
   user?: { id: string; email: string | null };
 };
 
@@ -50,7 +50,7 @@ export function userScopedSupabaseClient(token: string) {
 export const createUserSupabaseClientWithToken = userScopedSupabaseClient;
 export const supabaseWithToken = userScopedSupabaseClient;
 
-export async function resolveAuthenticatedUser(supabase: ReturnType<typeof createClient>) {
+export async function resolveAuthenticatedUser(supabase: { auth: { getUser: () => Promise<{ data: { user: { id: string; email?: string | null } | null }; error: unknown }> } }) {
   const {
     data: { user },
     error,
