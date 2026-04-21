@@ -74,8 +74,8 @@ export async function POST(
       );
     }
 
-    const slotRes = await admin
-      .from("timetable_slots")
+    const slotRes = await (admin as any)
+  .from("timetable_slots")
       .select("id, timetable_id, class_name, subject, start_time, scheme_entry_id")
       .eq("id", slotId)
       .maybeSingle();
@@ -87,8 +87,8 @@ export async function POST(
     }
 
     const slot = slotRes.data as SlotRow;
-    const timetableRes = await admin
-      .from("teacher_timetable")
+   const timetableRes = await (admin as any)
+  .from("teacher_timetable")
       .select("id, user_id")
       .eq("id", slot.timetable_id)
       .maybeSingle();
@@ -139,7 +139,7 @@ export async function POST(
     const now = toUtcIsoNow();
 
     // Ignore duplicate insertion collisions because dedup is guaranteed by unique index.
-    const notificationRes = await admin.from("notifications").insert({
+    const notificationRes = await (admin as any).from("notifications").insert({
       user_id: user.id,
       notification_type: NotificationType.COMPLETED,
       message,
