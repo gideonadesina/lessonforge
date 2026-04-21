@@ -20,7 +20,9 @@ export async function POST(req: NextRequest, context: RouteContext) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    const supabase = userScopedSupabaseClient(token);
+    const supabase = userScopedSupabaseClient(
+      token
+    ) as Parameters<typeof resolveAuthenticatedUser>[0];
     const user = await resolveAuthenticatedUser(supabase);
     if (!user) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
