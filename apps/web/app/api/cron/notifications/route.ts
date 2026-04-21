@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isoUtcDate, startTimeToUtcDate, utcDayOfWeek, withMinutesOffset } from "@/lib/planning/notifications";
 
-// Called by external scheduler every 15 minutes.
+// Called by external scheduler.
 // Configure in Vercel dashboard cron settings or Supabase pg_cron.
+// NOTE: Vercel Hobby limits cron frequency; this project currently uses a reduced schedule.
+// Upgrading to Vercel Pro enables the intended 15-minute schedule.
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
