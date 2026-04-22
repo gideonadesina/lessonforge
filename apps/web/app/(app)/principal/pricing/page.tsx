@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import LessonForgeWordmark from "@/components/auth/LessonForgeWordmark";
 import AuthNotificationBanner from "@/components/auth/AuthNotificationBanner";
 import {
   SCHOOL_PRICING_PLANS,
@@ -121,17 +122,28 @@ export default function PrincipalPricingPage() {
 
   return (
     <div className="space-y-8 pb-8">
-      <section className="rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 via-amber-50/70 to-amber-50 px-6 py-8 shadow-sm sm:px-8">
+      <section className="rounded-[20px] border border-[#E2E8F0] bg-white px-6 py-8 shadow-[0_4px_24px_rgba(83,74,183,0.08)] sm:px-8">
+        <div className="mb-6 flex justify-center">
+          <LessonForgeWordmark href={null} />
+        </div>
         <div className="max-w-3xl space-y-3">
-          <p className="inline-flex rounded-full bg-amber-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-900">
+          <p
+            className="inline-flex rounded-full bg-[#EEEDFE] px-3 py-1 text-xs uppercase text-[#534AB7]"
+            style={{ fontFamily: '"Trebuchet MS", sans-serif', letterSpacing: "2.5px" }}
+          >
             School & Principal Pricing
           </p>
-          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
-            Deploy LessonForge school-wide. Manage teachers, share credits, scale safely.
+          <h1
+            className="text-3xl font-bold tracking-tight text-[#1E1B4B] sm:text-4xl"
+            style={{ fontFamily: '"Playfair Display", Georgia, serif' }}
+          >
+            Power your entire school.
           </h1>
-          <p className="text-sm leading-relaxed text-slate-600 sm:text-base">
-            Credits are shared across all teachers in your school. Principals manage the credit pool,
-            set department limits, track usage, and unlock advanced reporting.
+          <p
+            className="text-sm leading-relaxed text-[#475569] sm:text-base"
+            style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+          >
+            Generate as you go — plans, worksheets, slides, and more. Pick what fits your classroom.
           </p>
         </div>
       </section>
