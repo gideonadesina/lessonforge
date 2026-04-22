@@ -155,11 +155,15 @@ export default function DashboardPage() {
     setShowWelcome(false);
   }, [profile]);
 
-  useEffect(() => {
-    if (!showWelcome || !profile?.id) return;
-    void markWelcomeSeen();
-  }, [markWelcomeSeen, profile?.id, showWelcome]);
+const markWelcomeSeen = async () => {
+  // existing logic
+};
 
+useEffect(() => {
+  if (!showWelcome || !profile?.id) return;
+  void markWelcomeSeen();
+}, [profile?.id, showWelcome]);
+  
   useEffect(() => {
     const forgeWindow = window as Window & {
       __FORGE_CONTEXT__?: {
