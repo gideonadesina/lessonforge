@@ -155,14 +155,29 @@ export default function DashboardPage() {
     setShowWelcome(false);
   }, [profile]);
 
-const markWelcomeSeen = async () => {
-  // existing logic
-};
+const markWelcomeSeen = useCallback(async () => {
+  if (!profile?.id) return;
+  setFlowBusy(true);
+  try {
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        welcome_seen: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", profile.id);
+    if (error) throw error;
+  } catch (error: unknown) {
+    setMsg(`Could not start workspace: ${getErrorMessage(error)}`);
+  } finally {
+    setFlowBusy(false);
+  }
+}, [profile?.id, supabase]);
 
 useEffect(() => {
   if (!showWelcome || !profile?.id) return;
   void markWelcomeSeen();
-}, [profile?.id, showWelcome]);
+}, [markWelcomeSeen, profile?.id, showWelcome]);
   
   useEffect(() => {
     const forgeWindow = window as Window & {
@@ -410,10 +425,10 @@ useEffect(() => {
         <LessonForgeOnboardingCard
           profileId={profile.id}
           initialAnswers={profile.onboarding_answers}
-          onCompleted={() => {
-            setShowOnboarding(false);
-            setShowWelcome(true);
-            setWelcomeMarked(false);
+         onCompleted={() => {
+  setShowOnboarding(false);
+  setShowWelcome(true);
+}}
           }}
         />
       </div>
@@ -426,10 +441,9 @@ useEffect(() => {
         <LessonForgeWelcomeCard
           firstName={firstName}
           roleType="teacher"
-          onStart={() => {
-            setShowWelcome(false);
-            setWelcomeMarked(true);
-          }}
+         onStart={() => {
+  setShowWelcome(false);
+}}
         />
       </div>
     );
@@ -508,114 +522,6 @@ useEffect(() => {
         ) : null}
 
         <QuickActionsGrid />
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-                Planning reminders
-              </h2>
-              <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                Weekly topics and upcoming school events from your Planning
-                tools.
-              </p>
-            </div>
-
-            <Link
-              href="/planning"
-              className="inline-flex rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-            >
-              Open Planning
-            </Link>
-          </div>
-
-          {planningMsg ? (
-            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-400">
-              {planningMsg}
-            </div>
-          ) : null}
-
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-            <PlanningReminderCard title="This Week's Topic">
-              {loading ? (
-                <ReminderLoading />
-              ) : planningReminders.thisWeekTopic ? (
-                <div>
-                  <div className="text-sm font-semibold text-slate-900 dark:text-white">
-                    {planningReminders.thisWeekTopic.topic}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                    Week {planningReminders.thisWeekTopic.week_number} •{" "}
-                    {planningReminders.thisWeekTopic.class_name} •{" "}
-                    {planningReminders.thisWeekTopic.subject}
-                  </div>
-                </div>
-              ) : (
-                <EmptyReminder
-                  text={`No topic assigned for week ${planningReminders.currentWeek}.`}
-                />
-              )}
-            </PlanningReminderCard>
-
-            <PlanningReminderCard title="Next Topic">
-              {loading ? (
-                <ReminderLoading />
-              ) : planningReminders.nextTopic ? (
-                <div>
-                  <div className="text-sm font-semibold text-slate-900 dark:text-white">
-                    {planningReminders.nextTopic.topic}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                    Week {planningReminders.nextTopic.week_number} •{" "}
-                    {planningReminders.nextTopic.term}
-                  </div>
-                </div>
-              ) : (
-                <EmptyReminder text="No upcoming topic yet." />
-              )}
-            </PlanningReminderCard>
-
-            <PlanningReminderCard title="Upcoming Academic Event">
-              {loading ? (
-                <ReminderLoading />
-              ) : planningReminders.upcomingEvent ? (
-                <div>
-                  <div className="text-sm font-semibold text-slate-900 dark:text-white">
-                    {planningReminders.upcomingEvent.title}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                    {formatEventDate(
-                      planningReminders.upcomingEvent.event_date
-                    )}{" "}
-                    •{" "}
-                    {formatEventType(
-                      planningReminders.upcomingEvent.event_type
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <EmptyReminder text="No upcoming event in your calendar." />
-              )}
-            </PlanningReminderCard>
-
-            <PlanningReminderCard title="Pending Topics Count">
-              {loading ? (
-                <ReminderLoading />
-              ) : (
-                <div>
-                  <div className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-                    {planningReminders.pendingTopicsCount}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                    {planningReminders.pendingTopicsCount > 0
-                      ? "Topics are still not completed."
-                      : "All topics are completed. Great work."}
-                  </div>
-                </div>
-              )}
-            </PlanningReminderCard>
-          </div>
-        </section>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <section className="space-y-4 lg:col-span-10">
