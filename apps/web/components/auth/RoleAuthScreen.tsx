@@ -3,17 +3,17 @@
 import type { User } from "@supabase/supabase-js";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import AuthCard from "@/components/auth/AuthCard";
 import AuthHeader from "@/components/auth/AuthHeader";
 import AuthInput from "@/components/auth/AuthInput";
+import { AuthLoadingOverlay } from "@/components/auth/AuthLoadingOverlay";
+import AuthNotificationBanner from "@/components/auth/AuthNotificationBanner";
 import SocialLoginButton from "@/components/auth/SocialLoginButton";
 import type { AppRole } from "@/lib/auth/roles";
 import {
   ROLE_CONTENT,
-  clearPersistedActiveRole,
-  getRoleHomePath,
   persistActiveRole,
 } from "@/lib/auth/roles";
 import {
@@ -26,6 +26,7 @@ import { createBrowserSupabase } from "@/lib/supabase/browser";
 
 type SocialProvider = "google" | "microsoft";
 type Mode = "login" | "signup";
+type AuthBanner = "none" | "no-account";
 
 type RoleAuthScreenProps = {
   role: AppRole;
@@ -46,23 +47,12 @@ function isProfilePermissionError(message: string) {
   );
 }
 
-function hasOAuthCallbackParams() {
-  if (typeof window === "undefined") return false;
-  const searchParams = new URLSearchParams(window.location.search);
-  return (
-    searchParams.has("code") ||
-    searchParams.has("access_token") ||
-    searchParams.has("refresh_token") ||
-    searchParams.has("provider_token")
-  );
-}
-
 function normalizeAuthErrorMessage(error: unknown, fallback: string) {
   return getAuthErrorMessage(error, fallback);
 }
 
-function getNoAccountMessage() {
-  return "We couldn't find an account for this email yet. Please sign up first, then continue.";
+function getNoAccountWarmMessage() {
+  return "You haven't joined LessonForge yet — and great teachers deserve great tools. Let's get you started.";
 }
 
 function getUnavailableRoleMessage(requestedRoleLabel: string) {
@@ -71,12 +61,7 @@ function getUnavailableRoleMessage(requestedRoleLabel: string) {
 
 const SOCIAL_INTENT_STORAGE_KEY = "lessonforge:oauth-intent";
 const REFERRAL_STORAGE_KEY = "lessonforge:referral-code";
-
-function readSocialIntent(): Mode {
-  if (typeof window === "undefined") return "login";
-  const value = window.localStorage.getItem(SOCIAL_INTENT_STORAGE_KEY);
-  return value === "signup" ? "signup" : "login";
-}
+const OAUTH_LOADING_STORAGE_KEY = "lessonforge:oauth-loading-provider";
 
 function writeSocialIntent(mode: Mode) {
   if (typeof window === "undefined") return;
@@ -104,6 +89,22 @@ function clearStoredReferralCode() {
   window.localStorage.removeItem(REFERRAL_STORAGE_KEY);
 }
 
+function readOAuthLoadingProvider(): SocialProvider | null {
+  if (typeof window === "undefined") return null;
+  const provider = window.localStorage.getItem(OAUTH_LOADING_STORAGE_KEY);
+  return provider === "google" || provider === "microsoft" ? provider : null;
+}
+
+function writeOAuthLoadingProvider(provider: SocialProvider) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(OAUTH_LOADING_STORAGE_KEY, provider);
+}
+
+function clearOAuthLoadingProvider() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(OAUTH_LOADING_STORAGE_KEY);
+}
+
 export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -116,10 +117,29 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
   const [showPassword, setShowPassword] = useState(false);
 
   const [message, setMessage] = useState<string | null>(null);
+  const [authBanner, setAuthBanner] = useState<AuthBanner>("none");
   const [emailLoading, setEmailLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState<SocialProvider | null>(null);
+  const [oauthOverlayProvider, setOauthOverlayProvider] = useState<SocialProvider | null>(null);
+  const [oauthInlineError, setOauthInlineError] = useState(false);
+  const [lastOAuthProvider, setLastOAuthProvider] = useState<SocialProvider>("google");
 
   const roleConfig = ROLE_CONTENT[role];
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const current = new URL(window.location.href);
+    const hasCleanupParam =
+      current.searchParams.has("oauth_no_account") ||
+      current.searchParams.has("oauth_error") ||
+      current.searchParams.has("oauth_intent");
+    if (!hasCleanupParam) return;
+
+    current.searchParams.delete("oauth_no_account");
+    current.searchParams.delete("oauth_error");
+    current.searchParams.delete("oauth_intent");
+    window.history.replaceState({}, "", current.toString());
+  }, [searchParams]);
 
   const ensureProfile = useCallback(
     async (user: User, preferredName: string, preferredRole: AppRole) => {
@@ -225,10 +245,7 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
   );
 
 const resolveRoleAfterAuth = useCallback(
-  async (
-    requestedRole: AppRole,
-    options: { allowUnprovisioned?: boolean } = {}
-  ): Promise<RoleContextResponse> => {
+  async (requestedRole: AppRole): Promise<RoleContextResponse> => {
     const roleContext = await fetchRoleContext();
 
     if (!roleContext.availableRoles.length) {
@@ -251,9 +268,46 @@ const resolveRoleAfterAuth = useCallback(
     }
   }, [searchParams]);
 
+  useEffect(() => {
+    const provider = readOAuthLoadingProvider();
+    const returnedWithNoSession = searchParams.get("oauth_no_account") === "1";
+    const oauthError = searchParams.get("oauth_error") === "1";
+    const oauthIntent = searchParams.get("oauth_intent");
+    if (oauthIntent === "signup") {
+      setMode("signup");
+    } else if (oauthIntent === "login") {
+      setMode("login");
+    }
+    if (returnedWithNoSession) {
+      setAuthBanner("no-account");
+      setOauthInlineError(false);
+      clearOAuthLoadingProvider();
+      setOauthOverlayProvider(null);
+      setSocialLoading(null);
+      return;
+    }
+    if (oauthError) {
+      setOauthOverlayProvider(null);
+      setSocialLoading(null);
+      setOauthInlineError(true);
+      clearOAuthLoadingProvider();
+      return;
+    }
+
+    if (provider) {
+      setOauthOverlayProvider(provider);
+      setLastOAuthProvider(provider);
+    }
+  }, [searchParams]);
+
   async function handleSocialSignIn(provider: SocialProvider) {
     setMessage(null);
+    setAuthBanner("none");
+    setOauthInlineError(false);
     setSocialLoading(provider);
+    setOauthOverlayProvider(provider);
+    setLastOAuthProvider(provider);
+    writeOAuthLoadingProvider(provider);
 
     try {
       // Store the requested role for the callback route
@@ -273,10 +327,16 @@ const resolveRoleAfterAuth = useCallback(
 
       if (error) {
         setMessage(error.message);
+        setOauthOverlayProvider(null);
+        setOauthInlineError(true);
+        clearOAuthLoadingProvider();
         clearSocialIntent();
       }
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "Unable to sign in right now.");
+      setOauthOverlayProvider(null);
+      setOauthInlineError(true);
+      clearOAuthLoadingProvider();
       clearSocialIntent();
     } finally {
       setSocialLoading(null);
@@ -286,6 +346,8 @@ const resolveRoleAfterAuth = useCallback(
   async function handleEmailAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage(null);
+    setAuthBanner("none");
+    setOauthInlineError(false);
 
     const cleanName = fullName.trim();
     const cleanEmail = email.trim().toLowerCase();
@@ -342,8 +404,8 @@ const resolveRoleAfterAuth = useCallback(
             });
             persistActiveRole(role);
             clearSocialIntent();
-           window.location.href = homePath;
-return;
+            window.location.href = homePath;
+            return;
           }
 
           const nextRole =
@@ -387,7 +449,8 @@ return;
           normalizedText.includes("user not found") ||
           normalizedText.includes("invalid credentials")
         ) {
-          setMessage(getNoAccountMessage());
+          setAuthBanner("no-account");
+          setMessage(null);
         } else {
           setMessage(text);
         }
@@ -398,6 +461,7 @@ return;
         throw new Error("Unable to load your account after sign in.");
       }
 
+      setOauthInlineError(false);
       clearSocialIntent();
       const roleContext = await resolveRoleAfterAuth(role);
 
@@ -424,6 +488,8 @@ return;
       router.refresh();
     } catch (error: unknown) {
       setMessage(normalizeAuthErrorMessage(error, "Unable to sign in right now."));
+      setOauthOverlayProvider(null);
+      clearOAuthLoadingProvider();
       clearSocialIntent();
     } finally {
       setEmailLoading(false);
@@ -434,19 +500,50 @@ return;
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#FAF9F6] p-4 sm:p-6">
-      <AuthCard>
-        <AuthHeader role={role} />
+      {oauthOverlayProvider ? <AuthLoadingOverlay provider={oauthOverlayProvider} /> : null}
 
-        <div className="mt-6 inline-flex rounded-xl border border-violet-100 bg-violet-50/60 p-1">
+      <div className="w-full max-w-md space-y-4">
+        {authBanner === "no-account" ? (
+          <AuthNotificationBanner
+            type="info"
+            icon="👋"
+            message={getNoAccountWarmMessage()}
+            actions={[
+              {
+                label: "Create My Account →",
+                onClick: () => {
+                  setMode("signup");
+                  setAuthBanner("none");
+                },
+                variant: "primary",
+              },
+              {
+                label: "Try a different email",
+                onClick: () => {
+                  setEmail("");
+                  setPassword("");
+                  setAuthBanner("none");
+                },
+                variant: "ghost",
+              },
+            ]}
+          />
+        ) : null}
+
+        <AuthCard>
+          <AuthHeader role={role} />
+
+          <div className="mt-6 inline-flex rounded-[12px] border border-[#E2E8F0] bg-[#EEEDFE]/70 p-1">
           <button
             type="button"
             onClick={() => {
               setMode("login");
               clearSocialIntent();
             }}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
-              mode === "login" ? "bg-violet-700 text-white" : "text-slate-700 hover:bg-white"
+            className={`rounded-[10px] px-3 py-1.5 text-sm font-bold transition-all duration-200 ${
+              mode === "login" ? "bg-[#534AB7] text-white" : "text-[#475569] hover:bg-white"
             }`}
+            style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
           >
             Log in
           </button>
@@ -456,153 +553,211 @@ return;
               setMode("signup");
               clearSocialIntent();
             }}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
-              mode === "signup" ? "bg-violet-700 text-white" : "text-slate-700 hover:bg-white"
+            className={`rounded-[10px] px-3 py-1.5 text-sm font-bold transition-all duration-200 ${
+              mode === "signup" ? "bg-[#534AB7] text-white" : "text-[#475569] hover:bg-white"
             }`}
+            style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
           >
             Sign up
           </button>
-        </div>
+          </div>
 
-        <div className="mt-6 space-y-3">
-          <SocialLoginButton
-            provider="google"
-            loading={socialLoading === "google"}
-            onClick={() => handleSocialSignIn("google")}
-          />
-          <SocialLoginButton
-            provider="microsoft"
-            loading={socialLoading === "microsoft"}
-            onClick={() => handleSocialSignIn("microsoft")}
-          />
-        </div>
+          <div className="mt-6 space-y-3">
+            <SocialLoginButton
+              provider="google"
+              loading={socialLoading === "google"}
+              onClick={() => handleSocialSignIn("google")}
+            />
+            <SocialLoginButton
+              provider="microsoft"
+              loading={socialLoading === "microsoft"}
+              onClick={() => handleSocialSignIn("microsoft")}
+            />
+          </div>
 
-        <div className="my-6 flex items-center gap-3">
-          <div className="h-px flex-1 bg-slate-200" />
-          <span className="text-xs uppercase tracking-[0.1em] text-slate-500">
-            or continue with email
-          </span>
-          <div className="h-px flex-1 bg-slate-200" />
-        </div>
+          {oauthInlineError ? (
+            <div className="mt-4 rounded-[14px] border border-[#F59E0B]/25 bg-[#FFFBEB] px-4 py-3">
+              <p
+                className="text-sm text-[#92400E]"
+                style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+              >
+                Something went wrong connecting your account.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleSocialSignIn(lastOAuthProvider)}
+                  className="inline-flex items-center justify-center rounded-[12px] bg-gradient-to-br from-[#534AB7] to-[#3D35A0] px-4 py-2 text-sm font-bold text-white shadow-[0_4px_16px_rgba(83,74,183,0.35)] transition-all duration-200 hover:-translate-y-[1px] hover:shadow-[0_6px_18px_rgba(83,74,183,0.4)]"
+                  style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+                >
+                  Try Again
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOauthInlineError(false);
+                    setMessage(null);
+                    setOauthOverlayProvider(null);
+                    clearOAuthLoadingProvider();
+                  }}
+                  className="inline-flex items-center justify-center rounded-[12px] border-[1.5px] border-[#534AB7] px-4 py-2 text-sm font-bold text-[#534AB7] transition-all duration-200 hover:bg-[#EEEDFE]"
+                  style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+                >
+                  Use email instead
+                </button>
+              </div>
+            </div>
+          ) : null}
 
-        <form onSubmit={handleEmailAuth} className="space-y-4">
-          {mode === "signup" ? (
+          <div className="my-6 flex items-center gap-3">
+            <div className="h-px flex-1 bg-[#E2E8F0]" />
+            <span
+              className="text-xs uppercase tracking-[2.5px] text-[#94A3B8]"
+              style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+            >
+              or continue with email
+            </span>
+            <div className="h-px flex-1 bg-[#E2E8F0]" />
+          </div>
+
+          <form onSubmit={handleEmailAuth} className="space-y-4">
+            {mode === "signup" ? (
+              <AuthInput
+                label="Full name"
+                type="text"
+                placeholder="Your full name"
+                autoComplete="name"
+                value={fullName}
+                onChange={(event) => setFullName(event.target.value)}
+                disabled={isBusy}
+                required
+              />
+            ) : null}
+
             <AuthInput
-              label="Full name"
-              type="text"
-              placeholder="Your full name"
-              autoComplete="name"
-              value={fullName}
-              onChange={(event) => setFullName(event.target.value)}
+              label="Email"
+              type="email"
+              placeholder="you@school.com"
+              autoComplete="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
               disabled={isBusy}
               required
             />
-          ) : null}
 
-          <AuthInput
-            label="Email"
-            type="email"
-            placeholder="you@school.com"
-            autoComplete="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            disabled={isBusy}
-            required
-          />
-
-          <div className="space-y-2">
-            <label htmlFor="auth-password" className="block text-sm font-medium text-slate-700">
-              Password
-            </label>
-            <div className="relative">
-              <input
-                id="auth-password"
-                type={showPassword ? "text" : "password"}
-                placeholder={mode === "signup" ? "Minimum 6 characters" : "Enter your password"}
-                autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                disabled={isBusy}
-                required
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-16 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-4 focus:ring-violet-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((current) => !current)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                aria-label={showPassword ? "Hide password" : "Show password"}
-                disabled={isBusy}
+            <div className="space-y-2">
+              <label
+                htmlFor="auth-password"
+                className="block text-sm font-medium text-[#475569]"
+                style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
               >
-                {showPassword ? "Hide" : "Show"}
-              </button>
+              Password
+              </label>
+              <div className="relative">
+                <input
+                  id="auth-password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder={mode === "signup" ? "Minimum 6 characters" : "Enter your password"}
+                  autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  disabled={isBusy}
+                  required
+                  className="w-full rounded-[10px] border-[1.5px] border-[#E2E8F0] bg-white px-4 py-3 pr-16 text-sm text-[#1E1B4B] outline-none transition-all duration-200 placeholder:text-[#94A3B8] focus:border-[#534AB7] focus:ring-[3px] focus:ring-[rgba(83,74,183,0.15)] disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
+                  style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((current) => !current)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-[8px] border border-[#E2E8F0] bg-white px-2.5 py-1 text-xs font-bold text-[#475569] transition-all duration-200 hover:bg-[#EEEDFE]"
+                  style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  disabled={isBusy}
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
+
+              {mode === "login" ? (
+                <div className="flex justify-end">
+                  <Link
+                    href="/forgot-password"
+                    className="text-sm font-bold text-[#534AB7] transition-all duration-200 hover:text-[#3D35A0]"
+                    style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
+              ) : null}
             </div>
 
-            {mode === "login" ? (
-              <div className="flex justify-end">
-                <Link
-                  href="/forgot-password"
-                  className="text-sm font-medium text-indigo-700 hover:text-indigo-600"
-                >
-                  Forgot password?
-                </Link>
-              </div>
-            ) : null}
-          </div>
-
-          <button
-            type="submit"
-            disabled={isBusy}
-            className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-indigo-300/50 transition hover:from-indigo-500 hover:to-violet-500 disabled:cursor-not-allowed disabled:opacity-65"
-          >
-            {emailLoading
-              ? mode === "signup"
-                ? "Creating account..."
-                : "Signing in..."
-              : mode === "signup"
-              ? `Create ${roleConfig.label} account`
-              : `Sign in as ${roleConfig.label}`}
-          </button>
-        </form>
-
-        {message ? (
-          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-            {message}
-          </div>
-        ) : null}
-
-        <div className="mt-6 space-y-2 text-center text-sm text-slate-600">
-          <p>
-            {mode === "login" ? "Need an account?" : "Already have an account?"}{" "}
             <button
-              type="button"
-              onClick={() =>
-                setMode((current) => {
-                  const nextMode = current === "login" ? "signup" : "login";
-                  clearSocialIntent();
-                  return nextMode;
-                })
-              }
-              className="font-medium text-indigo-700 hover:text-indigo-600"
+              type="submit"
+              disabled={isBusy}
+              className="w-full rounded-[12px] bg-gradient-to-br from-[#534AB7] to-[#3D35A0] px-4 py-[13px] text-sm font-bold text-white shadow-[0_4px_16px_rgba(83,74,183,0.35)] transition-all duration-200 hover:-translate-y-[1px] hover:shadow-[0_6px_18px_rgba(83,74,183,0.4)] disabled:cursor-not-allowed disabled:opacity-65"
+              style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
             >
-              {mode === "login" ? "Sign up" : "Log in"}
+              {emailLoading
+                ? mode === "signup"
+                  ? "Creating account..."
+                  : "Signing in..."
+                : mode === "signup"
+                ? `Create ${roleConfig.label} account`
+                : `Sign in as ${roleConfig.label}`}
             </button>
-          </p>
-          {mode === "login" ? (
-            <p className="text-xs text-slate-500">
-              New to LessonForge? Create an account first, then come back to log in.
-            </p>
-          ) : null}
-          <p>
-            Not your role?{" "}
-            <Link
-              className="font-medium text-indigo-700 hover:text-indigo-600"
-              href="/select-role"
+          </form>
+
+          {message ? (
+            <div
+              className="mt-4 rounded-[14px] border px-4 py-3 text-sm"
+              style={{
+                background: "rgba(83,74,183,0.10)",
+                borderColor: "rgba(83,74,183,0.25)",
+                color: "#1E1B4B",
+                fontFamily: '"Trebuchet MS", sans-serif',
+              }}
             >
-              Change role
-            </Link>
-          </p>
-        </div>
-      </AuthCard>
+              {message}
+            </div>
+          ) : null}
+
+          <div
+            className="mt-6 space-y-2 text-center text-sm text-[#475569]"
+            style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+          >
+            <p>
+              {mode === "login" ? "Need an account?" : "Already have an account?"}{" "}
+              <button
+                type="button"
+                onClick={() =>
+                  setMode((current) => {
+                    const nextMode = current === "login" ? "signup" : "login";
+                    clearSocialIntent();
+                    return nextMode;
+                  })
+                }
+                className="font-bold text-[#534AB7] transition-all duration-200 hover:text-[#3D35A0]"
+              >
+                {mode === "login" ? "Sign up" : "Log in"}
+              </button>
+            </p>
+            {mode === "login" ? (
+              <p className="text-xs text-[#94A3B8]">
+                New to LessonForge? Create an account first, then come back to log in.
+              </p>
+            ) : null}
+            <p>
+              Not your role?{" "}
+              <Link
+                className="font-bold text-[#534AB7] transition-all duration-200 hover:text-[#3D35A0]"
+                href="/select-role"
+              >
+                Change role
+              </Link>
+            </p>
+          </div>
+        </AuthCard>
+      </div>
     </main>
   );
 }

@@ -264,8 +264,29 @@ export default function GeneratePage() {
   const [result, setResult] = useState<Generated | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
+  const [redirectingToUpgrade, setRedirectingToUpgrade] = useState(false);
 
   const hasInsufficientCredits = !profileLoading && creditsRemaining < LESSON_PACK_CREDIT_COST;
+
+  useEffect(() => {
+    if (
+      profileLoading ||
+      loading ||
+      isGenerating ||
+      !result ||
+      creditsRemaining > 0 ||
+      redirectingToUpgrade
+    ) {
+      return;
+    }
+
+    setRedirectingToUpgrade(true);
+    const timer = window.setTimeout(() => {
+      router.push("/pricing");
+    }, 1800);
+
+    return () => window.clearTimeout(timer);
+  }, [creditsRemaining, isGenerating, loading, profileLoading, redirectingToUpgrade, result, router]);
 
   useEffect(() => {
     (window as any).__FORGE_CONTEXT__ = {

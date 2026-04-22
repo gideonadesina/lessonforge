@@ -76,19 +76,28 @@ export default function SelectRolePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f7f2ea] px-5 py-8 sm:px-8 sm:py-12">
+    <div className="min-h-screen bg-[#FAF9F6] px-5 py-8 sm:px-8 sm:py-12">
       <div className="mx-auto flex w-full max-w-5xl flex-col items-center">
         <LessonForgeWordmark />
 
-        <div className="mt-14 w-full max-w-4xl rounded-[2rem] border border-violet-100/80 bg-white/95 p-6 shadow-[0_30px_70px_-46px_rgba(30,41,59,0.6)] sm:p-10">
+        <div className="mt-14 w-full max-w-4xl rounded-[20px] border border-[#E2E8F0] bg-white p-6 shadow-[0_4px_24px_rgba(83,74,183,0.08)] sm:p-10">
           <div className="mx-auto max-w-2xl text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-violet-700/80">
+            <p
+              className="text-[11px] uppercase tracking-[2.5px] text-[#534AB7]"
+              style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+            >
               Before you continue
             </p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+            <h1
+              className="mt-3 text-3xl font-bold tracking-tight text-[#1E1B4B] sm:text-4xl"
+              style={{ fontFamily: '"Playfair Display", Georgia, serif' }}
+            >
               How will you use LessonForge?
             </h1>
-            <p className="mt-4 text-sm leading-relaxed text-slate-600 sm:text-base">
+            <p
+              className="mt-4 text-sm leading-relaxed text-[#475569] sm:text-base"
+              style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+            >
               Choose your role to enter the right workspace and authentication flow.
             </p>
           </div>
@@ -111,12 +120,23 @@ export default function SelectRolePage() {
           </div>
 
           {message ? (
-            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+            <div
+              className="mt-6 rounded-[14px] border px-4 py-3 text-sm"
+              style={{
+                background: "rgba(83,74,183,0.10)",
+                borderColor: "rgba(83,74,183,0.25)",
+                color: "#1E1B4B",
+                fontFamily: '"Trebuchet MS", sans-serif',
+              }}
+            >
               {message}
             </div>
           ) : null}
 
-          <p className="mt-10 text-center text-xs leading-relaxed text-slate-500">
+          <p
+            className="mt-10 text-center text-xs leading-relaxed text-[#94A3B8]"
+            style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+          >
             By continuing, you agree to LessonForge terms and privacy standards.
           </p>
         </div>

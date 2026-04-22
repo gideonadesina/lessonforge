@@ -26,6 +26,9 @@ import {
   getWeekNumber,
   todayIsoDate,
 } from "@/lib/planning/utils";
+import LessonForgeOnboardingCard from "@/components/onboarding/LessonForgeOnboardingCard";
+import LessonForgeWelcomeCard from "@/components/onboarding/LessonForgeWelcomeCard";
+import AuthNotificationBanner from "@/components/auth/AuthNotificationBanner";
 
 type LessonRow = {
   id: string;
@@ -93,12 +96,17 @@ export default function DashboardPage() {
   const [schoolMembershipLoading, setSchoolMembershipLoading] = useState(true);
   const [hasSchoolMembership, setHasSchoolMembership] = useState(false);
   const [copiedReferral, setCopiedReferral] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [welcomeMarked, setWelcomeMarked] = useState(false);
+  const [flowBusy, setFlowBusy] = useState(false);
 
   const teacherName =
     (profile as any)?.full_name ||
     (profile as any)?.name ||
     userEmail?.split("@")[0] ||
     "Teacher";
+  const firstName = String(teacherName).trim().split(" ")[0] || "Teacher";
 
   const loadSchoolMembership = useCallback(async () => {
     setSchoolMembershipLoading(true);
@@ -139,6 +147,31 @@ export default function DashboardPage() {
       window.history.replaceState({}, "", next.toString());
     }
   }, [searchParams, showToast]);
+
+  useEffect(() => {
+    if (!profile) return;
+
+    if (!profile.onboarding_completed) {
+      setShowOnboarding(true);
+      setShowWelcome(false);
+      return;
+    }
+
+    if (!profile.welcome_seen) {
+      setShowOnboarding(false);
+      setShowWelcome(true);
+      return;
+    }
+
+    setShowOnboarding(false);
+    setShowWelcome(false);
+  }, [profile]);
+
+  useEffect(() => {
+    if (!showWelcome || !profile?.id || welcomeMarked) return;
+    setWelcomeMarked(true);
+    void markWelcomeSeen();
+  }, [profile?.id, showWelcome, welcomeMarked]);
 
   useEffect(() => {
     (window as any).__FORGE_CONTEXT__ = {
@@ -387,7 +420,7 @@ export default function DashboardPage() {
   const pendingItems = planningReminders.pendingTopicsCount;
 
   const isOutOfCredits = creditsRemaining <= 0;
-  const isLowCredits = creditsRemaining > 0 && creditsRemaining <= 5;
+  const isLowCredits = creditsRemaining > 0 && creditsRemaining <= 3;
 
   const referralCode =
     (profile as any)?.referral_code ||
@@ -418,8 +451,62 @@ export default function DashboardPage() {
       )}`
     : "#";
 
+  async function markWelcomeSeen() {
+    if (!profile?.id) return;
+    setFlowBusy(true);
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          welcome_seen: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", profile.id);
+      if (error) throw error;
+    } catch (error: unknown) {
+      setMsg(`Could not start workspace: ${getErrorMessage(error)}`);
+    } finally {
+      setFlowBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (showOnboarding || showWelcome) return;
+    if (creditsRemaining > 0) return;
+    router.replace("/pricing");
+  }, [creditsRemaining, router, showOnboarding, showWelcome]);
+
+  if (showOnboarding && profile) {
+    return (
+      <div className="min-h-screen bg-[#FAF9F6] px-4 py-8">
+        <LessonForgeOnboardingCard
+          profileId={profile.id}
+          initialAnswers={profile.onboarding_answers}
+          onCompleted={() => {
+            setShowOnboarding(false);
+            setShowWelcome(true);
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (showWelcome && profile) {
+    return (
+      <div className="min-h-screen bg-[#FAF9F6] px-4 py-8">
+        <LessonForgeWelcomeCard
+          firstName={firstName}
+          roleType="teacher"
+          onStart={() => {
+            setShowWelcome(false);
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:text-white">
+    <div className="min-h-screen bg-[#FAF9F6] text-[#1E1B4B]">
       <DashboardHeader />
       <ForgeGuideStrip />
 
@@ -431,32 +518,44 @@ export default function DashboardPage() {
       />
 
       <main className="mx-auto max-w-6xl space-y-6 px-6 py-8">
+        {flowBusy ? (
+          <AuthNotificationBanner
+            type="info"
+            icon="⏳"
+            message="Finalising your LessonForge workspace..."
+          />
+        ) : null}
+
+        {!isOutOfCredits ? (
+          isLowCredits ? (
+            <AuthNotificationBanner
+              type="warning"
+              icon={creditsRemaining === 1 ? "🔥" : "⚠️"}
+              message={
+                creditsRemaining === 1
+                  ? "This is your last credit — use it well! Then explore our plans to keep generating."
+                  : `Only ${creditsRemaining} credit${creditsRemaining > 1 ? "s" : ""} left — make them count.`
+              }
+              actions={[
+                {
+                  label: "View Plans",
+                  href: "/pricing",
+                  variant: "warning",
+                },
+              ]}
+            />
+          ) : (
+            <AuthNotificationBanner
+              type="info"
+              icon="⚡"
+              message={`You have ${creditsRemaining} credits · Start generating lesson packs and worksheets now.`}
+            />
+          )
+        ) : null}
+
         {msg ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+          <div className="rounded-[14px] border border-[#E2E8F0] bg-white p-4 text-sm text-[#475569] shadow-[0_4px_24px_rgba(83,74,183,0.08)]">
             {msg}
-          </div>
-        ) : null}
-
-        {isOutOfCredits ? (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900 shadow-sm dark:border-rose-900/50 dark:bg-rose-900/20 dark:text-rose-400">
-            <p className="font-semibold">You are out of credits.</p>
-            <p className="mt-1">
-              New generation actions are blocked, but your dashboard and saved
-              content remain available.
-            </p>
-            <Link
-              href="/settings"
-              className="mt-3 inline-flex rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-semibold text-rose-900 dark:border-rose-900 dark:bg-rose-900/20 dark:text-rose-400"
-            >
-              Recharge / Upgrade
-            </Link>
-          </div>
-        ) : null}
-
-        {isLowCredits ? (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-400">
-            Credits are running low ({creditsRemaining} left). Plan a manual
-            recharge soon to avoid interruptions.
           </div>
         ) : null}
 

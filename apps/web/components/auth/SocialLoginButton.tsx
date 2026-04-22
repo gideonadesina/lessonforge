@@ -69,12 +69,13 @@ export default function SocialLoginButton({
       type={type}
       disabled={disabled || loading}
       className={[
-        "flex w-full items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition",
-        "hover:border-slate-300 hover:bg-slate-50",
-        "focus:outline-none focus:ring-4 focus:ring-violet-100",
+        "flex w-full items-center justify-center gap-3 rounded-[12px] border-[1.5px] border-[#534AB7] bg-transparent px-4 py-3 text-sm font-bold text-[#534AB7] transition-all duration-200",
+        "hover:bg-[#EEEDFE]",
+        "focus:outline-none focus:ring-[3px] focus:ring-[rgba(83,74,183,0.15)]",
         "disabled:cursor-not-allowed disabled:opacity-70",
         className ?? "",
       ].join(" ")}
+      style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
       {...props}
     >
       <span className="flex h-5 w-5 items-center justify-center">

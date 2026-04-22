@@ -1,17 +1,46 @@
 import Link from "next/link";
+import { GraduationCap } from "lucide-react";
 
-export default function LessonForgeWordmark({ href = "/" }: { href?: string }) {
+type LessonForgeWordmarkProps = {
+  href?: string | null;
+  className?: string;
+};
+
+function WordmarkContent() {
   return (
-    <Link href={href} className="inline-flex items-center gap-3">
-      <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-violet-700 to-indigo-600 shadow-[0_10px_35px_-18px_rgba(79,70,229,0.8)]" />
+    <>
+      <div className="flex h-[44px] w-[44px] items-center justify-center rounded-[14px] bg-gradient-to-br from-[#534AB7] to-[#3D35A0] text-white shadow-[0_4px_14px_rgba(83,74,183,0.35)]">
+        <GraduationCap className="h-5 w-5" />
+      </div>
       <div className="leading-tight">
-        <div className="text-xl font-semibold tracking-tight text-slate-900">
+        <div
+          className="text-[20px] font-bold text-[#1E1B4B]"
+          style={{ fontFamily: '"Playfair Display", Georgia, serif' }}
+        >
           LessonForge
         </div>
-        <div className="text-xs font-medium uppercase tracking-[0.22em] text-violet-700/80">
-          School Workspace
+        <div
+          className="text-[10px] uppercase text-[#534AB7]"
+          style={{ fontFamily: '"Trebuchet MS", sans-serif', letterSpacing: "2.5px" }}
+        >
+          SCHOOL WORKSPACE
         </div>
       </div>
+    </>
+  );
+}
+
+export default function LessonForgeWordmark({
+  href = "/",
+  className,
+}: LessonForgeWordmarkProps) {
+  if (!href) {
+    return <div className={`inline-flex items-center gap-3 ${className ?? ""}`}><WordmarkContent /></div>;
+  }
+
+  return (
+    <Link href={href} className={`inline-flex items-center gap-3 ${className ?? ""}`}>
+      <WordmarkContent />
     </Link>
   );
 }

@@ -1,107 +1,141 @@
-/**
- * OAuth Callback Handler
- *
- * Client-side callback page that:
- * 1. Shows a full-screen loading overlay
- * 2. Waits for the Supabase browser client to exchange the OAuth code
- * 3. Calls the /api/auth/callback endpoint to complete setup
- * 4. Redirects to the target dashboard
- *
- * This approach ensures Supabase handles OAuth properly and the server
- * can process the setup with a valid session.
- */
-
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AuthLoadingOverlay } from "@/components/auth/AuthLoadingOverlay";
+import LessonForgeWordmark from "@/components/auth/LessonForgeWordmark";
+import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { getRoleHomePath, readStoredRole, type AppRole } from "@/lib/auth/roles";
 
 export default function OAuthCallbackPage() {
+  const router = useRouter();
+  const supabase = useMemo(() => createBrowserSupabase(), []);
+  const startedRef = useRef(false);
+  const redirectedRef = useRef(false);
+
+  const [provider, setProvider] = useState<"google" | "microsoft" | null>(null);
+  const [progress, setProgress] = useState(10);
   const [error, setError] = useState<string | null>(null);
-  const [showFallback, setShowFallback] = useState(false);
 
   useEffect(() => {
+    const storedProvider = window.localStorage.getItem("lessonforge:oauth-loading-provider");
+    setProvider(storedProvider === "microsoft" ? "microsoft" : "google");
+  }, []);
+
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+
     const handleCallback = async () => {
       try {
-        console.log("[OAuth Callback] Processing callback");
+        setProgress(18);
 
-        // Give Supabase browser client a moment to handle the OAuth exchange
-        // The code in URL triggers Supabase's built-in exchange
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        // Wait for Supabase to complete OAuth code exchange.
+        let sessionReady = false;
+        for (let attempt = 0; attempt < 10; attempt += 1) {
+          const { data } = await supabase.auth.getSession();
+          if (data.session?.user) {
+            sessionReady = true;
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 220));
+          setProgress((current) => Math.min(current + 4, 45));
+        }
 
-        // Call server-side setup endpoint
+        if (!sessionReady) {
+          throw new Error("Session was not established after sign-in.");
+        }
+
+        setProgress(62);
+        const intent =
+          window.localStorage.getItem("lessonforge:oauth-intent") === "signup"
+            ? "signup"
+            : "login";
         const response = await fetch("/api/auth/callback", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ intent }),
         });
 
         const result = await response.json();
 
-        if (!response.ok || !result.ok) {
+        if (!response.ok || !result.ok || typeof result.redirectUrl !== "string") {
+          if (result?.code === "account_not_registered") {
+            const role = (readStoredRole() ?? "teacher") as AppRole;
+            window.localStorage.removeItem("lessonforge:oauth-loading-provider");
+            router.replace(`/auth/${role}?oauth_no_account=1&oauth_intent=${intent}`);
+            return;
+          }
           throw new Error(result.error || "Setup failed");
         }
 
-        console.log("[OAuth Callback] Redirecting to", result.redirectUrl);
+        if (redirectedRef.current) return;
+        redirectedRef.current = true;
+        setProgress(100);
+        window.localStorage.removeItem("lessonforge:oauth-loading-provider");
         window.location.href = result.redirectUrl;
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Unknown error";
-        console.error("[OAuth Callback] Error:", message);
         setError(message);
-
-        // Show fallback after 5 seconds
-        setTimeout(() => setShowFallback(true), 5000);
+        setProgress(0);
+        window.localStorage.removeItem("lessonforge:oauth-loading-provider");
+        const role = (readStoredRole() ?? "teacher") as AppRole;
+        window.setTimeout(() => {
+          router.replace(`/auth/${role}?oauth_error=1`);
+        }, 800);
       }
     };
 
-    handleCallback();
-  }, []);
+    void handleCallback();
+  }, [router, supabase]);
 
   if (error) {
+    const role = readStoredRole() ?? "teacher";
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/95 backdrop-blur-sm">
-        <div className="flex flex-col items-center gap-6 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
-            <svg
-              className="h-6 w-6 text-red-600"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
+      <main className="flex min-h-screen items-center justify-center bg-[#FAF9F6] p-4">
+        <div className="w-full max-w-[420px] rounded-[20px] border border-[#E2E8F0] bg-white p-6 shadow-[0_4px_24px_rgba(83,74,183,0.08)]">
+          <div className="mb-5 flex justify-center">
+            <LessonForgeWordmark href={null} />
+          </div>
+          <div
+            className="rounded-[14px] border px-[18px] py-[14px]"
+            style={{
+              background: "rgba(245,158,11,0.10)",
+              borderColor: "rgba(245,158,11,0.25)",
+            }}
+          >
+            <p style={{ fontFamily: '"Trebuchet MS", sans-serif', color: "#92400E" }}>
+              Something went wrong connecting your account.
+            </p>
+            <p
+              className="mt-1 text-xs text-[#475569]"
+              style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+              {error}
+            </p>
           </div>
-
-          <div>
-            <h1 className="text-xl font-semibold text-slate-900">Setup Failed</h1>
-            <p className="mt-2 text-sm text-slate-600">{error}</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => router.replace(`/auth/${role}`)}
+              className="inline-flex items-center justify-center rounded-[12px] bg-gradient-to-br from-[#534AB7] to-[#3D35A0] px-4 py-2 text-sm font-bold text-white shadow-[0_4px_16px_rgba(83,74,183,0.35)] transition-all duration-200 hover:-translate-y-[1px] hover:shadow-[0_6px_18px_rgba(83,74,183,0.4)]"
+              style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+            >
+              Try Again
+            </button>
+            <button
+              type="button"
+              onClick={() => router.replace(`/auth/${role}`)}
+              className="inline-flex items-center justify-center rounded-[12px] border-[1.5px] border-[#534AB7] px-4 py-2 text-sm font-bold text-[#534AB7] transition-all duration-200 hover:bg-[#EEEDFE]"
+              style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+            >
+              Use email instead
+            </button>
           </div>
-
-          {showFallback && (
-            <div className="mt-4 flex w-full max-w-xs flex-col gap-3">
-              <a
-                href="/auth/teacher"
-                className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:from-indigo-500 hover:to-violet-500"
-              >
-                Try Again
-              </a>
-              <a
-                href="/select-role"
-                className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-              >
-                Select Role
-              </a>
-            </div>
-          )}
         </div>
-      </div>
+      </main>
     );
   }
 
-  return <AuthLoadingOverlay />;
+  return <AuthLoadingOverlay provider={provider} progress={progress} />;
 }

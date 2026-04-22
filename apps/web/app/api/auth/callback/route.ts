@@ -28,6 +28,7 @@ interface CallbackResponse {
   redirectUrl?: string;
   error?: string;
   stage?: string;
+  code?: "account_not_registered";
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse<CallbackResponse>> {
@@ -36,6 +37,13 @@ export async function POST(req: NextRequest): Promise<NextResponse<CallbackRespo
 
   try {
     console.log("[API /auth/callback] START");
+
+    const body = (await req.json().catch(() => null)) as
+      | {
+          intent?: "login" | "signup";
+        }
+      | null;
+    const intent = body?.intent === "signup" ? "signup" : "login";
 
     // ==================== Stage 1: Get Session ====================
     stages.push("getting_session");
@@ -90,22 +98,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<CallbackRespo
       email: user.email,
     });
 
-    // ==================== Stage 2: Ensure Profile ====================
-    stages.push("ensuring_profile");
-
-    await ensureUserProfile(user.id, {
-      email: user.email,
-      fullName:
-        typeof user.user_metadata?.full_name === "string"
-          ? user.user_metadata.full_name
-          : typeof user.user_metadata?.name === "string"
-          ? user.user_metadata.name
-          : null,
-    });
-
-    console.log("[API /auth/callback] Profile ensured", { userId: user.id });
-
-    // ==================== Stage 3: Resolve Roles ====================
+    // ==================== Stage 2: Resolve Roles ====================
     stages.push("resolving_roles");
 
     const roleContext = await resolveAuthRoleContext({
@@ -119,7 +112,36 @@ export async function POST(req: NextRequest): Promise<NextResponse<CallbackRespo
     console.log("[API /auth/callback] Roles resolved", {
       userId: user.id,
       availableRoles: roleContext.availableRoles,
+      isRegistered: roleContext.isRegistered,
     });
+
+    if (intent === "login" && !roleContext.isRegistered) {
+      await supabase.auth.signOut();
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "account_not_registered",
+          stage: "resolving_roles",
+          error: "No registered LessonForge account was found for this sign-in.",
+        },
+        { status: 404 }
+      );
+    }
+
+    // ==================== Stage 3: Ensure Profile ====================
+    stages.push("ensuring_profile");
+
+    await ensureUserProfile(user.id, {
+      email: user.email,
+      fullName:
+        typeof user.user_metadata?.full_name === "string"
+          ? user.user_metadata.full_name
+          : typeof user.user_metadata?.name === "string"
+          ? user.user_metadata.name
+          : null,
+    });
+
+    console.log("[API /auth/callback] Profile ensured", { userId: user.id });
 
     // ==================== Stage 4: Determine Target Role ====================
     stages.push("determining_role");
