@@ -208,7 +208,10 @@ function SuccessInner() {
             SCHOOL_PRICING_PLANS.find((plan) => normalize(plan.name) === normalize(schoolPlan)) ??
             SCHOOL_PRICING_PLANS.find((plan) => normalize(plan.id) === normalize(schoolPlan));
           const paidAmount = pickNumber(verifyData?.amount_major, verifyData?.amount, verifyData?.paid_amount_major);
-          const monthlyPriceNaira = matchedSchoolPlan?.priceNaira ?? normalizeNaira(paidAmount ?? 0);
+          const monthlyPriceNaira = Math.max(
+  0,
+  Number(matchedSchoolPlan?.priceNaira ?? normalizeNaira(paidAmount ?? 0))
+);
 
           setSchoolData({
             planName: toTitleCasePlan(schoolPlan || matchedSchoolPlan?.name || "School Plan"),
@@ -240,7 +243,10 @@ function SuccessInner() {
               profileRecord?.credits_balance
             ) ?? matchedTeacherPlan?.credits ?? 0;
           const paidAmount = pickNumber(verifyData?.amount_major, verifyData?.amount, verifyData?.paid_amount_major);
-          const monthlyPriceNaira = matchedTeacherPlan?.priceNaira ?? normalizeNaira(paidAmount ?? 0);
+         const monthlyPriceNaira = Math.max(
+  0,
+  Number(matchedTeacherPlan?.priceNaira ?? normalizeNaira(paidAmount ?? 0))
+);
 
           const firstName = pickString(
             profileRecord?.first_name,

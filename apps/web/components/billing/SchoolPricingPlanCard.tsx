@@ -13,7 +13,7 @@ export default function SchoolPricingPlanCard({
   onSelect,
   loading = false,
 }: SchoolPricingPlanCardProps) {
-  const lessonPacks = Math.floor(plan.credits / 4);
+  const lessonPacks = Math.floor(Number(plan.credits) / 4);
   const isEnterprise = plan.id === "enterprise";
 
   return (
