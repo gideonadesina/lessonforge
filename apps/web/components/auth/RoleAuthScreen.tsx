@@ -294,9 +294,14 @@ const resolveRoleAfterAuth = useCallback(
       return;
     }
 
-    if (provider) {
+   if (provider) {
       setOauthOverlayProvider(provider);
       setLastOAuthProvider(provider);
+      // Auto-clear after 30s so a failed OAuth never freezes the page permanently
+      setTimeout(() => {
+        clearOAuthLoadingProvider();
+        setOauthOverlayProvider(null);
+      }, 30000);
     }
   }, [searchParams]);
 

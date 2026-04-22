@@ -47,7 +47,11 @@ export default async function AppLayout({
   const pathname = headerStore.get("x-pathname") ?? "";
   const cookieStore = await Promise.resolve(cookies());
   const supabase = await createServerSupabase();
-  const { data, error } = await supabase.auth.getUser();
+  // getSession first so fresh OAuth cookies are read before getUser validates them
+const { data: sessionData } = await supabase.auth.getSession();
+const { data, error } = sessionData?.session
+  ? await supabase.auth.getUser()
+  : { data: { user: null }, error: new Error("No session") };
   const userMeta = (data?.user?.user_metadata as { app_role?: string; full_name?: string; name?: string } | null) ?? null;
   const user = data?.user;
 
