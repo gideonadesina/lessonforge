@@ -264,11 +264,50 @@ export default function GeneratePage() {
   const [result, setResult] = useState<Generated | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
+  const [redirectingToUpgrade, setRedirectingToUpgrade] = useState(false);
 
   const hasInsufficientCredits = !profileLoading && creditsRemaining < LESSON_PACK_CREDIT_COST;
 
   useEffect(() => {
-    (window as any).__FORGE_CONTEXT__ = {
+    if (
+      profileLoading ||
+      loading ||
+      isGenerating ||
+      !result ||
+      creditsRemaining > 0 ||
+      redirectingToUpgrade
+    ) {
+      return;
+    }
+
+    setRedirectingToUpgrade(true);
+    const timer = window.setTimeout(() => {
+      router.push("/pricing");
+    }, 1800);
+
+    return () => window.clearTimeout(timer);
+  }, [creditsRemaining, isGenerating, loading, profileLoading, redirectingToUpgrade, result, router]);
+
+  useEffect(() => {
+    const forgeWindow = window as Window & {
+      __FORGE_CONTEXT__?: {
+        page: string;
+        teacherName: string | undefined;
+        currentForm: {
+          curriculum: string;
+          schoolLevel: string;
+          subject: string;
+          grade: string;
+          age: string;
+          topic: string;
+          numberOfSlides: number;
+          durationMins: number;
+        };
+        currentLesson: Generated | null;
+        hasGeneratedResult: boolean;
+      };
+    };
+    forgeWindow.__FORGE_CONTEXT__ = {
       page: "generate",
       teacherName: undefined,
       currentForm: {
@@ -286,9 +325,9 @@ export default function GeneratePage() {
     };
 
     return () => {
-      const current = (window as any).__FORGE_CONTEXT__;
+      const current = forgeWindow.__FORGE_CONTEXT__;
       if (current?.page === "generate") {
-        delete (window as any).__FORGE_CONTEXT__;
+        delete forgeWindow.__FORGE_CONTEXT__;
       }
     };
   }, [
@@ -428,8 +467,8 @@ export default function GeneratePage() {
       completeProgress();
       setSaveMsg("✅ Auto-saved to Library");
       setIsGenerating(false);
-    } catch (e: any) {
-      setError(e?.message || "Something went wrong");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Something went wrong");
       setIsGenerating(false);
     } finally {
       setLoading(false);

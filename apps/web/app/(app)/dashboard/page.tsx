@@ -16,6 +16,9 @@ import WeeklyInsight from "@/components/dashboard/WeeklyInsight";
 import { listSchemeOfWork } from "@/lib/planning/scheme";
 import { listAcademicEvents } from "@/lib/planning/academicCalendar";
 import SchoolCodeInput from "@/components/SchoolCodeInput";
+import LessonForgeOnboardingCard from "@/components/onboarding/LessonForgeOnboardingCard";
+import LessonForgeWelcomeCard from "@/components/onboarding/LessonForgeWelcomeCard";
+import AuthNotificationBanner from "@/components/auth/AuthNotificationBanner";
 import type {
   AcademicCalendarRow,
   SchemeOfWorkRow,
@@ -93,12 +96,15 @@ export default function DashboardPage() {
   const [schoolMembershipLoading, setSchoolMembershipLoading] = useState(true);
   const [hasSchoolMembership, setHasSchoolMembership] = useState(false);
   const [copiedReferral, setCopiedReferral] = useState(false);
-
+  const [showOnboarding, setShowOnboarding] = useState(false);
+const [showWelcome, setShowWelcome] = useState(false);
+const [flowBusy, setFlowBusy] = useState(false);
   const teacherName =
     (profile as any)?.full_name ||
     (profile as any)?.name ||
     userEmail?.split("@")[0] ||
     "Teacher";
+    const firstName = String(teacherName).trim().split(" ")[0] || "Teacher";
 
   const loadSchoolMembership = useCallback(async () => {
     setSchoolMembershipLoading(true);
@@ -141,7 +147,59 @@ export default function DashboardPage() {
   }, [searchParams, showToast]);
 
   useEffect(() => {
-    (window as any).__FORGE_CONTEXT__ = {
+    if (!profile) return;
+
+    if (!profile.onboarding_completed) {
+      setShowOnboarding(true);
+      setShowWelcome(false);
+      return;
+    }
+
+    if (!profile.welcome_seen) {
+      setShowOnboarding(false);
+      setShowWelcome(true);
+      return;
+    }
+
+    setShowOnboarding(false);
+    setShowWelcome(false);
+  }, [profile]);
+
+const markWelcomeSeen = useCallback(async () => {
+  if (!profile?.id) return;
+  setFlowBusy(true);
+  try {
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        welcome_seen: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", profile.id);
+    if (error) throw error;
+  } catch (error: unknown) {
+    setMsg(`Could not start workspace: ${getErrorMessage(error)}`);
+  } finally {
+    setFlowBusy(false);
+  }
+}, [profile?.id, supabase]);
+
+useEffect(() => {
+  if (!showWelcome || !profile?.id) return;
+  void markWelcomeSeen();
+}, [markWelcomeSeen, profile?.id, showWelcome]);
+  
+  useEffect(() => {
+    const forgeWindow = window as Window & {
+      __FORGE_CONTEXT__?: {
+        page: string;
+        teacherName: string;
+        credits: number;
+        plan: string;
+        recentLessons: LessonRow[];
+      };
+    };
+    forgeWindow.__FORGE_CONTEXT__ = {
       page: "dashboard",
       teacherName,
       credits: creditsRemaining,
@@ -399,27 +457,56 @@ export default function DashboardPage() {
     ? `https://lessonforge.app/signup?ref=${encodeURIComponent(referralCode)}`
     : "";
 
-  async function copyReferralLink() {
-    if (!referralLink) return;
+ async function copyReferralLink() {
+  if (!referralLink) return;
 
-    try {
-      await navigator.clipboard.writeText(referralLink);
-      setCopiedReferral(true);
-      showToast("🔗 Referral link copied!");
-      setTimeout(() => setCopiedReferral(false), 2000);
-    } catch {
-      showToast("Could not copy referral link.");
-    }
+  try {
+    await navigator.clipboard.writeText(referralLink);
+    setCopiedReferral(true);
+    showToast("🔗 Referral link copied!");
+    setTimeout(() => setCopiedReferral(false), 2000);
+  } catch {
+    showToast("Could not copy referral link.");
+  }
+}
+
+  useEffect(() => {
+    if (showOnboarding || showWelcome) return;
+    if (creditsRemaining > 0) return;
+    router.replace("/pricing");
+  }, [creditsRemaining, router, showOnboarding, showWelcome]);
+
+  if (showOnboarding && profile) {
+    return (
+      <div className="min-h-screen bg-[#FAF9F6] px-4 py-8">
+       <LessonForgeOnboardingCard
+  profileId={profile.id}
+  initialAnswers={profile.onboarding_answers}
+  onCompleted={() => {
+    setShowOnboarding(false);
+    setShowWelcome(true);
+  }}
+/>
+      </div>
+    );
   }
 
-  const whatsappReferralLink = referralLink
-    ? `https://wa.me/?text=${encodeURIComponent(
-        `I’ve been using LessonForge to create lesson packs faster. Sign up with my link: ${referralLink}`
-      )}`
-    : "#";
+  if (showWelcome && profile) {
+    return (
+      <div className="min-h-screen bg-[#FAF9F6] px-4 py-8">
+        <LessonForgeWelcomeCard
+          firstName={firstName}
+          roleType="teacher"
+         onStart={() => {
+  setShowWelcome(false);
+}}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:text-white">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text-primary)]">
       <DashboardHeader />
       <ForgeGuideStrip />
 
@@ -432,7 +519,7 @@ export default function DashboardPage() {
 
       <main className="mx-auto max-w-6xl space-y-6 px-6 py-8">
         {msg ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 text-sm text-[var(--text-secondary)] shadow-sm">
             {msg}
           </div>
         ) : null}
@@ -446,7 +533,7 @@ export default function DashboardPage() {
             </p>
             <Link
               href="/settings"
-              className="mt-3 inline-flex rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-semibold text-rose-900 dark:border-rose-900 dark:bg-rose-900/20 dark:text-rose-400"
+              className="mt-3 inline-flex rounded-lg border border-rose-300 bg-[var(--card)] px-3 py-2 text-xs font-semibold text-rose-900 dark:border-rose-900 dark:bg-rose-900/20 dark:text-rose-400"
             >
               Recharge / Upgrade
             </Link>
@@ -463,10 +550,10 @@ export default function DashboardPage() {
         {!schoolMembershipLoading && !hasSchoolMembership ? (
           <section className="rounded-2xl border border-violet-200 bg-violet-50/50 p-4 shadow-sm dark:border-violet-900/50 dark:bg-violet-900/10">
             <div className="mb-3">
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+              <h2 className="text-sm font-bold text-[var(--text-primary)]">
                 Join your school workspace
               </h2>
-              <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+              <p className="mt-1 text-xs text-[var(--text-secondary)]">
                 Enter your school code from your principal to activate your
                 teacher seat.
               </p>
@@ -479,114 +566,6 @@ export default function DashboardPage() {
         ) : null}
 
         <QuickActionsGrid />
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-                Planning reminders
-              </h2>
-              <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                Weekly topics and upcoming school events from your Planning
-                tools.
-              </p>
-            </div>
-
-            <Link
-              href="/planning"
-              className="inline-flex rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-            >
-              Open Planning
-            </Link>
-          </div>
-
-          {planningMsg ? (
-            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-400">
-              {planningMsg}
-            </div>
-          ) : null}
-
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-            <PlanningReminderCard title="This Week's Topic">
-              {loading ? (
-                <ReminderLoading />
-              ) : planningReminders.thisWeekTopic ? (
-                <div>
-                  <div className="text-sm font-semibold text-slate-900 dark:text-white">
-                    {planningReminders.thisWeekTopic.topic}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                    Week {planningReminders.thisWeekTopic.week_number} •{" "}
-                    {planningReminders.thisWeekTopic.class_name} •{" "}
-                    {planningReminders.thisWeekTopic.subject}
-                  </div>
-                </div>
-              ) : (
-                <EmptyReminder
-                  text={`No topic assigned for week ${planningReminders.currentWeek}.`}
-                />
-              )}
-            </PlanningReminderCard>
-
-            <PlanningReminderCard title="Next Topic">
-              {loading ? (
-                <ReminderLoading />
-              ) : planningReminders.nextTopic ? (
-                <div>
-                  <div className="text-sm font-semibold text-slate-900 dark:text-white">
-                    {planningReminders.nextTopic.topic}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                    Week {planningReminders.nextTopic.week_number} •{" "}
-                    {planningReminders.nextTopic.term}
-                  </div>
-                </div>
-              ) : (
-                <EmptyReminder text="No upcoming topic yet." />
-              )}
-            </PlanningReminderCard>
-
-            <PlanningReminderCard title="Upcoming Academic Event">
-              {loading ? (
-                <ReminderLoading />
-              ) : planningReminders.upcomingEvent ? (
-                <div>
-                  <div className="text-sm font-semibold text-slate-900 dark:text-white">
-                    {planningReminders.upcomingEvent.title}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                    {formatEventDate(
-                      planningReminders.upcomingEvent.event_date
-                    )}{" "}
-                    •{" "}
-                    {formatEventType(
-                      planningReminders.upcomingEvent.event_type
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <EmptyReminder text="No upcoming event in your calendar." />
-              )}
-            </PlanningReminderCard>
-
-            <PlanningReminderCard title="Pending Topics Count">
-              {loading ? (
-                <ReminderLoading />
-              ) : (
-                <div>
-                  <div className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-                    {planningReminders.pendingTopicsCount}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                    {planningReminders.pendingTopicsCount > 0
-                      ? "Topics are still not completed."
-                      : "All topics are completed. Great work."}
-                  </div>
-                </div>
-              )}
-            </PlanningReminderCard>
-          </div>
-        </section>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <section className="space-y-4 lg:col-span-10">
@@ -613,8 +592,8 @@ function PlanningReminderCard({
   children: React.ReactNode;
 }) {
   return (
-    <article className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
-      <div className="text-xs font-semibold text-slate-600 dark:text-slate-400">{title}</div>
+    <article className="rounded-xl border border-[var(--border)] bg-[var(--card-alt)] p-4">
+      <div className="text-xs font-semibold text-[var(--text-secondary)]">{title}</div>
       <div className="mt-2">{children}</div>
     </article>
   );
@@ -623,12 +602,12 @@ function PlanningReminderCard({
 function ReminderLoading() {
   return (
     <div className="space-y-2">
-      <div className="h-4 w-24 rounded bg-slate-200 dark:bg-slate-700" />
-      <div className="h-3 w-36 rounded bg-slate-200 dark:bg-slate-700" />
+      <div className="h-4 w-24 rounded bg-[var(--border)]" />
+      <div className="h-3 w-36 rounded bg-[var(--border)]" />
     </div>
   );
 }
 
 function EmptyReminder({ text }: { text: string }) {
-  return <div className="text-sm text-slate-600 dark:text-slate-400">{text}</div>;
+  return <div className="text-sm text-[var(--text-secondary)]">{text}</div>;
 }

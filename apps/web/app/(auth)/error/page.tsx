@@ -4,6 +4,7 @@
  */
 
 import Link from "next/link";
+import LessonForgeWordmark from "@/components/auth/LessonForgeWordmark";
 
 interface AuthErrorPageProps {
   searchParams: Promise<{
@@ -47,12 +48,23 @@ export default async function AuthErrorPage({ searchParams }: AuthErrorPageProps
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#FAF9F6] p-4 sm:p-6">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        {/* Error Icon */}
+      <div className="w-full max-w-md space-y-4">
+        <div className="rounded-[14px] border border-[rgba(245,158,11,0.25)] bg-[rgba(245,158,11,0.10)] px-[18px] py-[14px] animate-fade-slide-down">
+          <p style={{ fontFamily: '"Trebuchet MS", sans-serif', color: "#92400E" }}>
+            We hit a temporary sign-in issue — let us get you back in.
+          </p>
+        </div>
+
+      <div className="w-full rounded-[20px] border border-[#E2E8F0] bg-white p-8 shadow-[0_4px_24px_rgba(83,74,183,0.08)]">
         <div className="flex justify-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
+          <LessonForgeWordmark href={null} />
+        </div>
+
+        {/* Error Icon */}
+        <div className="mt-6 flex justify-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#FFFBEB]">
             <svg
-              className="h-6 w-6 text-red-600"
+              className="h-6 w-6 text-[#F59E0B]"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -68,12 +80,20 @@ export default async function AuthErrorPage({ searchParams }: AuthErrorPageProps
         </div>
 
         {/* Error Title */}
-        <h1 className="mt-6 text-center text-2xl font-bold text-slate-900">
+        <h1
+          className="mt-6 text-center text-2xl font-bold text-[#1E1B4B]"
+          style={{ fontFamily: '"Playfair Display", Georgia, serif' }}
+        >
           {getErrorTitle(code)}
         </h1>
 
         {/* Error Description */}
-        <p className="mt-3 text-center text-slate-600">{getErrorDescription(code)}</p>
+        <p
+          className="mt-3 text-center text-[#475569]"
+          style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+        >
+          {getErrorDescription(code)}
+        </p>
 
         {/* Error Details (for debugging) */}
         {process.env.NODE_ENV === "development" && (
@@ -92,25 +112,31 @@ export default async function AuthErrorPage({ searchParams }: AuthErrorPageProps
         <div className="mt-8 flex flex-col gap-3">
           <Link
             href="/auth/teacher"
-            className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-indigo-300/50 transition hover:from-indigo-500 hover:to-violet-500"
+            className="inline-flex items-center justify-center rounded-[12px] bg-gradient-to-br from-[#534AB7] to-[#3D35A0] px-4 py-[13px] text-sm font-bold text-white shadow-[0_4px_16px_rgba(83,74,183,0.35)] transition-all duration-200 hover:-translate-y-[1px] hover:shadow-[0_6px_18px_rgba(83,74,183,0.4)]"
+            style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
           >
             Try Again
           </Link>
           <Link
             href="/select-role"
-            className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            className="inline-flex items-center justify-center rounded-[12px] border-[1.5px] border-[#534AB7] bg-transparent px-4 py-[13px] text-sm font-bold text-[#534AB7] transition-all duration-200 hover:bg-[#EEEDFE]"
+            style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
           >
             Change Role
           </Link>
         </div>
 
         {/* Support Link */}
-        <p className="mt-6 text-center text-xs text-slate-500">
+        <p
+          className="mt-6 text-center text-xs text-[#94A3B8]"
+          style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+        >
           Still having trouble?{" "}
-          <a href="mailto:support@lessonforge.edu" className="font-medium text-indigo-700 hover:text-indigo-600">
+          <a href="mailto:support@lessonforge.edu" className="font-bold text-[#534AB7] hover:text-[#3D35A0]">
             Contact support
           </a>
         </p>
+      </div>
       </div>
     </main>
   );

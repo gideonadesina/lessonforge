@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import LessonForgeWordmark from "@/components/auth/LessonForgeWordmark";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -44,8 +45,8 @@ export default function ResetPasswordPage() {
 
       setMsg("Password updated ✅ Redirecting to login…");
       setTimeout(() => router.push("/login"), 900);
-    } catch (err: any) {
-      setMsg(String(err?.message ?? err));
+    } catch (err: unknown) {
+      setMsg(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -53,17 +54,15 @@ export default function ResetPasswordPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="border-b bg-white/80 backdrop-blur sticky top-0 z-10">
+      <header className="sticky top-0 z-10 border-b border-[#E2E8F0] bg-white/90 backdrop-blur">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 shadow-md" />
-            <div className="leading-tight">
-              <div className="font-semibold text-slate-900">LessonForge</div>
-              <div className="text-[11px] text-slate-500">AI Lesson Planning</div>
-            </div>
-          </Link>
+          <LessonForgeWordmark />
 
-          <Link href="/login" className="text-sm text-slate-600 hover:text-slate-900 transition">
+          <Link
+            href="/login"
+            className="text-sm font-bold text-[#534AB7] transition-all duration-200 hover:text-[#3D35A0]"
+            style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+          >
             Back to Login
           </Link>
         </div>

@@ -1,81 +1,92 @@
-/**
- * Full-screen loading overlay shown during OAuth callback processing.
- * Clean, deterministic, teacher-premium-first aesthetic.
- */
-
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import LessonForgeWordmark from "@/components/auth/LessonForgeWordmark";
 
 interface AuthLoadingOverlayProps {
-  /** Title text to display */
+  provider?: "google" | "microsoft" | null;
+  progress?: number;
   title?: string;
-  /** Subtitle/message text */
   subtitle?: string;
-  /** Show fallback message after timeout */
-  showFallback?: boolean;
-  /** Callback when fallback is shown (timeout occurred) */
-  onTimeout?: () => void;
 }
 
 export function AuthLoadingOverlay({
-  title = "Finishing setup...",
-  subtitle = "Setting up your workspace",
-  showFallback = false,
-  onTimeout,
+  provider = null,
+  progress,
+  title,
+  subtitle,
 }: AuthLoadingOverlayProps) {
-  const [showMessage, setShowMessage] = useState(false);
+  const [internalProgress, setInternalProgress] = useState(8);
 
   useEffect(() => {
-    if (!showFallback) return;
+    if (typeof progress === "number") return;
 
-    const timer = setTimeout(() => {
-      setShowMessage(true);
-      onTimeout?.();
-    }, 300);
+    const timer = window.setInterval(() => {
+      setInternalProgress((current) => {
+        if (current >= 96) return current;
+        if (current < 30) return Math.min(current + 6, 30);
+        if (current < 70) return Math.min(current + 4, 70);
+        return Math.min(current + 2, 96);
+      });
+    }, 420);
 
-    return () => clearTimeout(timer);
-  }, [showFallback, onTimeout]);
+    return () => window.clearInterval(timer);
+  }, [progress]);
+
+  const displayProgress =
+    typeof progress === "number"
+      ? Math.max(0, Math.min(progress, 100))
+      : internalProgress;
+
+  const status = useMemo(() => {
+    if (title) return title;
+    if (displayProgress >= 100) return "You are in! ✓";
+    if (displayProgress >= 70) return "Almost ready for you...";
+    if (displayProgress >= 30) return "Setting up your workspace...";
+    return "Verifying your account...";
+  }, [displayProgress, title]);
+
+  const statusColor = displayProgress >= 100 ? "#059669" : "#475569";
+
+  const providerCopy =
+    subtitle ??
+    (provider === "microsoft"
+      ? "Secured by Microsoft"
+      : provider === "google"
+      ? "Secured by Google"
+      : "Secured by LessonForge");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/95 backdrop-blur-sm">
-      <div className="flex flex-col items-center gap-6 text-center">
-        {/* Animated spinner */}
-        <div className="relative h-12 w-12">
-          <div className="absolute inset-0 rounded-full border-4 border-slate-200" />
-          <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-gradient-to-r border-t-from-indigo-600 border-t-to-violet-600 animate-spin" />
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-[rgba(250,249,246,0.96)] p-4 backdrop-blur-[12px]">
+      <div className="w-full max-w-[400px] rounded-[20px] border border-[#E2E8F0] bg-white px-6 py-7 shadow-[0_4px_24px_rgba(83,74,183,0.08)]">
+        <div className="flex justify-center">
+          <LessonForgeWordmark href={null} />
         </div>
 
-        {/* Main text */}
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
-          <p className="mt-2 text-sm text-slate-600">{subtitle}</p>
+        <div className="mt-6 h-[6px] w-full overflow-hidden rounded-full bg-[#EEEDFE]">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-[#534AB7] to-[#7C75D4] transition-[width] duration-500 ease-in-out"
+            style={{ width: `${displayProgress}%` }}
+          />
         </div>
 
-        {/* Fallback message (shown after timeout) */}
-        {showMessage && (
-          <div className="mt-4 max-w-sm rounded-lg border border-amber-200 bg-amber-50 p-4 animate-fade-in">
-            <p className="text-sm font-medium text-amber-900">
-              Setup is taking longer than expected.
-            </p>
-            <p className="mt-2 text-xs text-amber-700">
-              This might mean our servers are busy. Would you like to continue to your dashboard or try again?
-            </p>
-          </div>
-        )}
+        <p
+          className="mt-4 text-center text-sm font-normal"
+          style={{ fontFamily: '"Trebuchet MS", sans-serif', color: statusColor }}
+        >
+          {status}
+        </p>
+        <p
+          className="mt-2 text-center text-xs text-[#94A3B8]"
+          style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+        >
+          {providerCopy}
+        </p>
       </div>
     </div>
   );
 }
 
-/**
- * Alternative: A more minimal loading state if needed.
- */
 export function MinimalAuthLoading() {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-white">
-      {/* Minimal pulse animation */}
-      <div className="h-3 w-3 rounded-full bg-indigo-600 animate-pulse" />
-    </div>
-  );
+  return <AuthLoadingOverlay />;
 }
