@@ -126,23 +126,23 @@ export default function PrincipalTopbar({
   const canSwitchRole = availableRoles.length > 1;
  
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:px-5">
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 shadow-sm md:px-5">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
        <div className="flex items-center gap-3 min-w-0">
   <button
     type="button"
     onClick={onOpenMenu}
-    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 lg:hidden"
+    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] text-[var(--text-secondary)] lg:hidden"
     aria-label="Open menu"
   >
     <Menu className="h-5 w-5" />
   </button>
 
   <div className="hidden md:flex flex-col leading-tight min-w-0">
-  <span className="text-sm font-bold text-violet-800 truncate">
+  <span className="text-sm font-bold text-violet-700 dark:text-violet-400 truncate">
     {schoolName || "Your School"}
   </span>
-  <span className="text-sm font-semibold text-slate-900 truncate">
+  <span className="text-sm font-semibold text-[var(--text-primary)] truncate">
     {principalName}
   </span>
 </div>
@@ -150,10 +150,10 @@ export default function PrincipalTopbar({
 
         <div className="min-w-0 flex-1">
           <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />
             <input
               placeholder="Search principal workspace..."
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-3 text-sm text-slate-700 outline-none transition focus:border-violet-400 focus:bg-white"
+              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--card-alt)] py-3 pl-10 pr-3 text-sm text-[var(--text-primary)] outline-none transition placeholder:text-[var(--text-tertiary)] focus:border-violet-400"
             />
           </div>
         </div>
@@ -161,7 +161,7 @@ export default function PrincipalTopbar({
         <div className="flex shrink-0 items-center justify-end gap-2">
           <button
             type="button"
-            className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
+            className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] text-[var(--text-secondary)] transition hover:bg-[var(--card-alt)]"
             aria-label="Notifications"
           >
             <Bell className="h-4 w-4" />
@@ -184,32 +184,32 @@ export default function PrincipalTopbar({
             </button>
 
             {quickOpen ? (
-              <div className="absolute right-0 z-40 mt-2 w-56 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
+              <div className="absolute right-0 z-40 mt-2 w-56 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-2 shadow-lg">
                 <Link
                   href="/principal/teachers"
                   onClick={() => setQuickOpen(false)}
-                  className="block rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
+                  className="block rounded-xl px-3 py-2 text-sm text-[var(--text-secondary)] transition hover:bg-[var(--card-alt)]"
                 >
                   Add teacher
                 </Link>
                 <Link
                   href="/principal/generate"
                   onClick={() => setQuickOpen(false)}
-                  className="block rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
+                  className="block rounded-xl px-3 py-2 text-sm text-[var(--text-secondary)] transition hover:bg-[var(--card-alt)]"
                 >
                   Generate content
                 </Link>
                 <Link
                   href="/principal/billing"
                   onClick={() => setQuickOpen(false)}
-                  className="block rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
+                  className="block rounded-xl px-3 py-2 text-sm text-[var(--text-secondary)] transition hover:bg-[var(--card-alt)]"
                 >
                   Upgrade slots
                 </Link>
                 <Link
                   href="/principal/analytics"
                   onClick={() => setQuickOpen(false)}
-                  className="block rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
+                  className="block rounded-xl px-3 py-2 text-sm text-[var(--text-secondary)] transition hover:bg-[var(--card-alt)]"
                 >
                   View reports
                 </Link>
@@ -221,21 +221,21 @@ export default function PrincipalTopbar({
             <button
               type="button"
               onClick={() => setProfileOpen((value) => !value)}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-1.5 transition hover:bg-slate-50"
+              className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 transition hover:bg-[var(--card-alt)]"
             >
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">
                 {avatarInitial}
               </span>
-              <ChevronDown className="h-4 w-4 text-slate-500" />
+              <ChevronDown className="h-4 w-4 text-[var(--text-tertiary)]" />
             </button>
 
             {profileOpen ? (
-              <div className="absolute right-0 z-40 mt-2 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
-                <div className="rounded-xl bg-slate-50 px-3 py-2">
-                  <p className="truncate text-sm font-semibold text-slate-900">
+              <div className="absolute right-0 z-40 mt-2 w-64 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-2 shadow-lg">
+                <div className="rounded-xl bg-[var(--card-alt)] px-3 py-2">
+                  <p className="truncate text-sm font-semibold text-[var(--text-primary)]">
                     {principalName}
                   </p>
-                  <p className="truncate text-xs text-slate-500">
+                  <p className="truncate text-xs text-[var(--text-secondary)]">
                     {email || "No email"}
                   </p>
                   <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-violet-700">
@@ -244,8 +244,8 @@ export default function PrincipalTopbar({
                 </div>
 
                 {canSwitchRole ? (
-                  <div className="mt-2 rounded-xl border border-slate-200 bg-white p-1.5">
-                    <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <div className="mt-2 rounded-xl border border-[var(--border)] bg-[var(--card)] p-1.5">
+                    <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
                       Switch workspace
                     </div>
                     {availableRoles.map((candidateRole) => {
@@ -267,7 +267,7 @@ export default function PrincipalTopbar({
                             "flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-sm transition",
                             isActive
                               ? "cursor-default bg-violet-50 text-violet-700"
-                              : "text-slate-700 hover:bg-slate-50",
+                              : "text-[var(--text-secondary)] hover:bg-[var(--card-alt)]",
                             switchingRole ? "opacity-70" : "",
                           ].join(" ")}
                         >
@@ -287,7 +287,7 @@ export default function PrincipalTopbar({
                 <Link
                   href="/settings"
                   onClick={() => setProfileOpen(false)}
-                  className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
+                  className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-[var(--text-secondary)] transition hover:bg-[var(--card-alt)]"
                 >
                   <Settings className="h-4 w-4" />
                   Settings
@@ -296,7 +296,7 @@ export default function PrincipalTopbar({
                 <Link
                   href="/select-role"
                   onClick={() => setProfileOpen(false)}
-                  className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
+                  className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-[var(--text-secondary)] transition hover:bg-[var(--card-alt)]"
                 >
                   <ShieldCheck className="h-4 w-4" />
                   Workspace center

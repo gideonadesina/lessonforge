@@ -118,15 +118,15 @@ export default function SchoolPage() {
       {/* Header */}
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">School</h1>
-          <p className="mt-1 text-sm text-slate-600">Manage your school membership & license access.</p>
+          <h1 className="text-2xl font-bold text-[var(--text-primary)]">School</h1>
+          <p className="mt-1 text-sm text-[var(--text-secondary)]">Manage your school membership & license access.</p>
         </div>
 
         <div className="flex gap-2">
           <button
             onClick={loadMe}
             disabled={loading}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100 disabled:opacity-60"
+            className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] hover:bg-slate-100 disabled:opacity-60"
           >
             {loading ? "Loading..." : "Refresh"}
           </button>
@@ -148,7 +148,7 @@ export default function SchoolPage() {
       ) : null}
 
       {loading ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 text-sm text-[var(--text-secondary)]">
           Loading school info...
         </div>
       ) : null}
@@ -156,9 +156,9 @@ export default function SchoolPage() {
       {/* If no school */}
       {!loading && !school ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-sm font-semibold text-slate-900">Not joined yet</div>
-            <p className="mt-2 text-sm text-slate-700 leading-relaxed">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
+            <div className="text-sm font-semibold text-[var(--text-primary)]">Not joined yet</div>
+            <p className="mt-2 text-sm text-[var(--text-secondary)] leading-relaxed">
               If your headteacher purchased a school license, they will share a code with teachers. Enter it below to
               join the school workspace.
             </p>
@@ -168,15 +168,15 @@ export default function SchoolPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-sm font-semibold text-slate-900">How it works</div>
-            <ul className="mt-3 space-y-2 text-sm text-slate-700 list-disc pl-5">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
+            <div className="text-sm font-semibold text-[var(--text-primary)]">How it works</div>
+            <ul className="mt-3 space-y-2 text-sm text-[var(--text-secondary)] list-disc pl-5">
               <li>Headteacher buys a license (seats = number of teachers).</li>
               <li>Teachers enter the shared code to activate.</li>
               <li>Access is monthly and managed by the school.</li>
             </ul>
 
-            <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
+            <div className="mt-4 rounded-xl bg-[var(--card-alt)] p-3 text-xs text-[var(--text-secondary)]">
               Tip: If you don’t have a code, ask your admin or continue with individual subscriptions.
             </div>
           </div>
@@ -187,11 +187,11 @@ export default function SchoolPage() {
       {!loading && school ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {/* School card */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm lg:col-span-2">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="text-xs text-slate-500">School</div>
-                <div className="mt-1 text-xl font-extrabold text-slate-900">{school.name || "Unnamed School"}</div>
+                <div className="text-xs text-[var(--text-tertiary)]">School</div>
+                <div className="mt-1 text-xl font-extrabold text-[var(--text-primary)]">{school.name || "Unnamed School"}</div>
 
                 <div className="mt-2 flex flex-wrap gap-2">
                   <span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
@@ -199,7 +199,7 @@ export default function SchoolPage() {
                   </span>
 
                   {membership?.joined_at ? (
-                    <span className="rounded-full bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+                    <span className="rounded-full bg-[var(--card-alt)] px-3 py-1 text-xs font-semibold text-[var(--text-secondary)]">
                       Joined {timeAgo(membership.joined_at)}
                     </span>
                   ) : null}
@@ -212,22 +212,22 @@ export default function SchoolPage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-                <div className="text-xs text-slate-500">Your account</div>
-                <div className="mt-1 font-semibold text-slate-900">{me?.user.email ?? "—"}</div>
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-alt)] px-4 py-3 text-sm">
+                <div className="text-xs text-[var(--text-tertiary)]">Your account</div>
+                <div className="mt-1 font-semibold text-[var(--text-primary)]">{me?.user.email ?? "—"}</div>
               </div>
             </div>
 
-            <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
+            <div className="mt-4 rounded-xl bg-[var(--card-alt)] p-3 text-xs text-[var(--text-secondary)]">
               School license access is managed by your admin. If your seat is revoked, you’ll return to individual mode.
             </div>
           </div>
 
           {/* License card */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-sm font-semibold text-slate-900">License seats</div>
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
+            <div className="text-sm font-semibold text-[var(--text-primary)]">License seats</div>
 
-            <div className="mt-3 space-y-2 text-sm text-slate-700">
+            <div className="mt-3 space-y-2 text-sm text-[var(--text-secondary)]">
               <div className="flex items-center justify-between">
                 <span>Total seats</span>
                 <span className="font-semibold">{license?.seats_total ?? "—"}</span>
@@ -244,7 +244,7 @@ export default function SchoolPage() {
               </div>
             </div>
 
-            <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600">
+            <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 text-xs text-[var(--text-secondary)]">
               If this is wrong, contact the school admin to update seats.
             </div>
           </div>

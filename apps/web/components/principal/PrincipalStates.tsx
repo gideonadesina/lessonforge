@@ -4,7 +4,7 @@ import Link from "next/link";
 
 export function PrincipalLoadingState() {
   return (
-    <div className="rounded-3xl border border-violet-100 bg-amber-50/70 p-8 text-sm text-slate-700 shadow-sm">
+    <div className="rounded-3xl border border-[var(--border)] bg-[var(--card-alt)] p-8 text-sm text-[var(--text-secondary)] shadow-sm">
       Loading principal workspace...
     </div>
   );
@@ -12,18 +12,18 @@ export function PrincipalLoadingState() {
 
 export function PrincipalForbiddenState() {
   return (
-    <div className="rounded-3xl border border-red-200 bg-red-50 p-8 shadow-sm">
-      <h1 className="text-2xl font-black text-slate-900">Principal access only</h1>
-      <p className="mt-2 text-sm text-red-700">This route is restricted to principal and school-admin accounts.</p>
+    <div className="rounded-3xl border border-red-200 bg-red-50 p-8 shadow-sm dark:border-red-900/50 dark:bg-red-900/20">
+      <h1 className="text-2xl font-black text-red-900 dark:text-red-300">Principal access only</h1>
+      <p className="mt-2 text-sm text-red-700 dark:text-red-400">This route is restricted to principal and school-admin accounts.</p>
     </div>
   );
 }
 
 export function PrincipalOnboardingRequiredState() {
   return (
-    <div className="rounded-2xl border border-violet-100 bg-white p-5 shadow-[0_6px_24px_rgba(88,28,135,0.08)]">
-      <h2 className="text-lg font-black text-slate-900">Complete your school setup first</h2>
-      <p className="mt-2 text-sm text-slate-600">
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-[0_6px_24px_rgba(88,28,135,0.08)]">
+      <h2 className="text-lg font-black text-[var(--text-primary)]">Complete your school setup first</h2>
+      <p className="mt-2 text-sm text-[var(--text-secondary)]">
         Finish onboarding in the principal dashboard before using this page.
       </p>
       <Link

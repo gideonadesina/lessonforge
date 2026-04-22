@@ -24,7 +24,7 @@ export default function PrincipalPlanningPage() {
   if (onboardingRequired) return <PrincipalOnboardingRequiredState />;
 
   return (
-    <div className="space-y-5 rounded-3xl bg-amber-50/70 p-4 md:p-6">
+    <div className="space-y-5 rounded-3xl bg-[var(--bg)] p-4 md:p-6">
       <PrincipalPageHeader
         eyebrow="Academic Planning"
         title="Planning Oversight"
@@ -32,7 +32,9 @@ export default function PrincipalPlanningPage() {
       />
 
       {error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-400">
+          {error}
+        </div>
       ) : null}
 
       {dashboard ? (
@@ -53,16 +55,16 @@ export default function PrincipalPlanningPage() {
               <SectionCard title="Milestone progress" subtitle="Visual progress against current scheme milestones.">
                 <div>
                   <div className="mb-2 flex items-center justify-between text-sm">
-                    <span className="font-semibold text-slate-800">Scheme of work progress</span>
+                    <span className="font-semibold text-[var(--text-primary)]">Scheme of work progress</span>
                     <span className="font-bold text-violet-700">{dashboard.planning.schemeProgressPercent}%</span>
                   </div>
-                  <div className="h-2.5 w-full rounded-full bg-slate-200">
+                  <div className="h-2.5 w-full rounded-full bg-[var(--border)]">
                     <div
                       className="h-2.5 rounded-full bg-gradient-to-r from-violet-500 to-purple-600"
                       style={{ width: `${dashboard.planning.schemeProgressPercent}%` }}
                     />
                   </div>
-                  <p className="mt-2 text-xs text-slate-600">
+                  <p className="mt-2 text-xs text-[var(--text-secondary)]">
                     {dashboard.planning.completedSchemeMilestones} / {dashboard.planning.totalSchemeMilestones} milestones completed.
                   </p>
                 </div>
@@ -81,10 +83,10 @@ export default function PrincipalPlanningPage() {
                 }
               >
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 text-sm text-[var(--text-secondary)]">
                     Review upcoming events and identify staffing conflicts before deadlines.
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 text-sm text-[var(--text-secondary)]">
                     Monitor completion pace and nudge teams when milestone progress slows.
                   </div>
                 </div>
@@ -95,16 +97,16 @@ export default function PrincipalPlanningPage() {
               <SectionCard title="Upcoming academic events" subtitle="Events surfaced from planning data.">
                 <div className="space-y-2">
                   {dashboard.planning.upcomingAcademicEvents.map((event) => (
-                    <div key={event.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2">
+                    <div key={event.id} className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2">
                       <div>
-                        <div className="text-sm font-semibold text-slate-900">{event.title}</div>
-                        <div className="text-xs uppercase tracking-wide text-slate-500">{event.category}</div>
+                        <div className="text-sm font-semibold text-[var(--text-primary)]">{event.title}</div>
+                        <div className="text-xs uppercase tracking-wide text-[var(--text-tertiary)]">{event.category}</div>
                       </div>
-                      <div className="text-xs font-semibold text-slate-600">{event.startsAt}</div>
+                      <div className="text-xs font-semibold text-[var(--text-secondary)]">{event.startsAt}</div>
                     </div>
                   ))}
                   {!dashboard.planning.upcomingAcademicEvents.length ? (
-                    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+                    <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--text-secondary)]">
                       No upcoming events yet.
                     </div>
                   ) : null}

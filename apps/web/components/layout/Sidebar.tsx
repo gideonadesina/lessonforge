@@ -184,14 +184,14 @@ export default function Sidebar({
     )}&background=6366f1&color=fff`;
 
   const SidebarCard = ({ onNavigate }: { onNavigate?: () => void }) => (
-     <aside className="flex h-full min-h-0 flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm bg-white dark:bg-[#0B1530] dark:border-[#1A2847]">
+    <aside className="flex h-full min-h-0 flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm text-[var(--text-primary)]">
       {/* User */}
-       <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 pb-4 dark:border-[#1A2847]">
+      <div className="flex shrink-0 items-center gap-3 border-b border-[var(--border)] pb-4">
         <label className="relative cursor-pointer">
           <img
             src={avatar}
             alt="avatar"
-            className="h-12 w-12 rounded-full border border-slate-200 object-cover dark:border-[#1A2847]"
+            className="h-12 w-12 rounded-full border border-[var(--border)] object-cover"
           />
           <input
             type="file"
@@ -203,11 +203,11 @@ export default function Sidebar({
         </label>
 
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-slate-900 dark:text-white">
+          <div className="truncate text-sm font-semibold text-[var(--text-primary)]">
             {profile?.full_name || "Your Name"}
           </div>
-          <div className="truncate text-xs text-slate-500 dark:text-[#94A3B8]">{email}</div>
-          <div className="text-[11px] text-slate-400 dark:text-slate-500">
+          <div className="truncate text-xs text-[var(--text-secondary)]">{email}</div>
+          <div className="text-[11px] text-[var(--text-tertiary)]">
             {uploading ? "Uploading..." : "Click photo to change"}
           </div>
         </div>
@@ -218,7 +218,7 @@ export default function Sidebar({
         {!isPrincipalArea ? (
           (navSections as NavSection[]).map((section: NavSection) => (
             <div key={section.label}>
-              <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+              <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--text-tertiary)]">
                 {section.label}
               </div>
               <div className="mt-2 flex flex-col gap-1">
@@ -239,7 +239,7 @@ export default function Sidebar({
                           "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition",
                           active
                             ? "bg-violet-50 text-violet-700 border border-violet-100 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-900"
-                            : "text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]",
+                            : "text-[var(--text-secondary)] hover:bg-[var(--card-alt)]",
                         ].join(" ")}
                       >
                         <Icon className="h-4 w-4" />
@@ -261,7 +261,7 @@ export default function Sidebar({
                                   "rounded-lg px-3 py-1.5 text-xs font-medium transition",
                                   childActive
                                     ? "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400"
-                                    : "text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-[#101827]",
+                                    : "text-[var(--text-secondary)] hover:bg-[var(--card-alt)]",
                                 ].join(" ")}
                               >
                                 {child.label}
@@ -294,7 +294,7 @@ export default function Sidebar({
                     "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition",
                     active
                       ? "bg-violet-50 text-violet-700 border border-violet-100 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-900"
-                      : "text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800",
+                      : "text-[var(--text-secondary)] hover:bg-[var(--card-alt)]",
                   ].join(" ")}
                 >
                   <Icon className="h-4 w-4" />
@@ -316,7 +316,7 @@ export default function Sidebar({
                             "rounded-lg px-3 py-1.5 text-xs font-medium transition",
                             childActive
                               ? "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400"
-                              : "text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800",
+                              : "text-[var(--text-secondary)] hover:bg-[var(--card-alt)]",
                           ].join(" ")}
                         >
                           {child.label}
@@ -365,10 +365,10 @@ export default function Sidebar({
         <div className="flex h-full min-h-0 flex-col">
           {/* Drawer header */}
           <div className="mb-3 flex shrink-0 items-center justify-between">
-            <div className="font-semibold text-slate-900">Menu</div>
+            <div className="font-semibold text-[var(--text-primary)]">Menu</div>
             <button
               aria-label="Close menu"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] text-[var(--text-secondary)] hover:bg-[var(--card-alt)]"
               onClick={() => setOpen(false)}
             >
               ✕

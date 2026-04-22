@@ -15,23 +15,23 @@ export default function TeacherCheckoutPlaceholderPage() {
   );
 
   return (
-    <div className="mx-auto max-w-2xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="mx-auto max-w-2xl rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
       <div className="inline-flex rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-violet-700">
         Checkout setup in progress
       </div>
 
-      <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-slate-900">
+      <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-[var(--text-primary)]">
         Teacher checkout is almost ready
       </h1>
-      <p className="mt-2 text-sm leading-relaxed text-slate-600">
+      <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
         This screen is the integration placeholder for the Paystack checkout initialization
         flow. Backend wiring can now plug in here without redesigning the pricing UI.
       </p>
 
       {selectedPlan ? (
         <div className="mt-5 rounded-2xl border border-violet-100 bg-violet-50/50 p-4 text-sm">
-          <p className="font-semibold text-slate-900">Selected plan: {selectedPlan.name}</p>
-          <p className="mt-1 text-slate-700">
+          <p className="font-semibold text-[var(--text-primary)]">Selected plan: {selectedPlan.name}</p>
+          <p className="mt-1 text-[var(--text-secondary)]">
             {formatNaira(selectedPlan.priceNaira)} • {selectedPlan.credits} credits
           </p>
         </div>
@@ -46,7 +46,7 @@ export default function TeacherCheckoutPlaceholderPage() {
         </Link>
         <Link
           href="/dashboard"
-          className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-2.5 text-sm font-semibold text-[var(--text-secondary)] hover:bg-[var(--card-alt)]"
         >
           Return to dashboard
         </Link>

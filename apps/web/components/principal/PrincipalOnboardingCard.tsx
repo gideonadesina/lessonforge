@@ -71,7 +71,7 @@ export default function PrincipalOnboardingCard({ getToken, onCompleted, setPare
     <SectionCard
       title="School setup"
       subtitle="Set up your principal workspace in three quick steps."
-      action={<div className="text-xs text-slate-500">Step {step} of 3</div>}
+      action={<div className="text-xs text-[var(--text-secondary)]">Step {step} of 3</div>}
     >
       <div className="grid grid-cols-3 gap-2 pb-2">
         {[1, 2, 3].map((n) => (
@@ -82,21 +82,21 @@ export default function PrincipalOnboardingCard({ getToken, onCompleted, setPare
       {step === 1 ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">Principal name</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Principal name</span>
             <input
               value={principalName}
               onChange={(e) => setPrincipalName(e.target.value)}
               placeholder="e.g. Amaka Nwosu"
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-500"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-violet-500"
             />
           </label>
           <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">School name</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">School name</span>
             <input
               value={schoolName}
               onChange={(e) => setSchoolName(e.target.value)}
               placeholder="e.g. Meadowfield College"
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-500"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-violet-500"
             />
           </label>
         </div>
@@ -104,9 +104,9 @@ export default function PrincipalOnboardingCard({ getToken, onCompleted, setPare
 
       {step === 2 ? (
         <div className="space-y-3">
-          <div className="rounded-xl border border-slate-200 bg-amber-50/60 p-4">
-            <p className="text-sm font-semibold text-slate-900">Choose teacher slots</p>
-            <p className="mt-1 text-sm text-slate-600">
+          <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 dark:border-amber-900/50 dark:bg-amber-900/20">
+            <p className="text-sm font-semibold text-[var(--text-primary)]">Choose teacher slots</p>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">
               We map your teacher count to the best school plan for a one-time purchase.
             </p>
             <div className="mt-4 flex items-center gap-3">
@@ -118,7 +118,7 @@ export default function PrincipalOnboardingCard({ getToken, onCompleted, setPare
                 onChange={(e) => setTeacherSlots(Number(e.target.value))}
                 className="w-full accent-violet-600"
               />
-              <div className="min-w-[64px] rounded-lg border border-violet-200 bg-white px-2 py-1 text-center text-sm font-bold text-violet-700">
+              <div className="min-w-[64px] rounded-lg border border-violet-200 bg-[var(--card)] px-2 py-1 text-center text-sm font-bold text-violet-700 dark:border-violet-900">
                 {teacherSlots}
               </div>
             </div>
@@ -128,22 +128,22 @@ export default function PrincipalOnboardingCard({ getToken, onCompleted, setPare
 
       {step === 3 ? (
         <div className="space-y-3">
-          <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-4">
-            <p className="text-sm font-bold text-slate-900">Payment summary</p>
+          <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-4 dark:border-violet-900 dark:bg-violet-900/20">
+            <p className="text-sm font-bold text-[var(--text-primary)]">Payment summary</p>
             {(() => {
               const selectedPlan = SCHOOL_PRICING_PLANS.find(
                 (plan) => plan.id === resolvePlanId(teacherSlots)
               );
               return (
-            <div className="mt-2 grid grid-cols-1 gap-2 text-sm text-slate-700 md:grid-cols-2">
+            <div className="mt-2 grid grid-cols-1 gap-2 text-sm text-[var(--text-secondary)] md:grid-cols-2">
               <div>
-                School: <span className="font-semibold text-slate-900">{schoolName || "—"}</span>
+                School: <span className="font-semibold text-[var(--text-primary)]">{schoolName || "—"}</span>
               </div>
               <div>
-                Principal: <span className="font-semibold text-slate-900">{principalName || "—"}</span>
+                Principal: <span className="font-semibold text-[var(--text-primary)]">{principalName || "—"}</span>
               </div>
               <div>
-                Teacher slots: <span className="font-semibold text-slate-900">{teacherSlots}</span>
+                Teacher slots: <span className="font-semibold text-[var(--text-primary)]">{teacherSlots}</span>
               </div>
               <div>
                 Plan:{" "}
@@ -162,7 +162,7 @@ export default function PrincipalOnboardingCard({ getToken, onCompleted, setPare
             </div>
               );
             })()}
-            <p className="mt-3 text-xs text-slate-500">
+            <p className="mt-3 text-xs text-[var(--text-tertiary)]">
               Onboarding uses one-time payment. Credits are assigned per purchase and do not expire.
             </p>
           </div>
@@ -173,7 +173,7 @@ export default function PrincipalOnboardingCard({ getToken, onCompleted, setPare
         <button
           onClick={() => setStep((s) => (s > 1 ? ((s - 1) as 1 | 2 | 3) : s))}
           disabled={busy || step === 1}
-          className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-sm font-semibold text-[var(--text-secondary)] hover:bg-[var(--card-alt)] disabled:opacity-50"
         >
           Back
         </button>

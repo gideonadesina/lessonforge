@@ -292,9 +292,9 @@ export default function ExamBuilderPage() {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900">Exam Builder</h1>
-        <p className="mt-1 text-sm text-slate-600">
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
+        <h1 className="text-2xl font-bold text-[var(--text-primary)]">Exam Builder</h1>
+        <p className="mt-1 text-sm text-[var(--text-secondary)]">
           Dedicated formal assessment generator for structured, printable school exams.
         </p>
       </div>
@@ -318,11 +318,11 @@ export default function ExamBuilderPage() {
         </div>
 
         <section className="space-y-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-base font-bold text-slate-900">Exam Paper Preview</h2>
-                <p className="text-xs text-slate-600">
+                <h2 className="text-base font-bold text-[var(--text-primary)]">Exam Paper Preview</h2>
+                <p className="text-xs text-[var(--text-secondary)]">
                   Printable formal paper layout with objective, theory, and marking guide.
                 </p>
               </div>
@@ -332,21 +332,21 @@ export default function ExamBuilderPage() {
                   className={`rounded-xl px-3 py-2 text-xs font-semibold ${
                     teacherMode
                       ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                      : "border border-slate-200 bg-white text-slate-800 hover:bg-slate-50"
+                      : "border border-[var(--border)] bg-[var(--card)] text-[var(--text-primary)] hover:bg-[var(--card-alt)]"
                   }`}
                 >
                   {teacherMode ? "Teacher Copy ON" : "Teacher Copy"}
                 </button>
                 <button
                   onClick={() => window.print()}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--card-alt)]"
                 >
                   Print
                 </button>
                 <button
                   onClick={downloadPdf}
                   disabled={!active || downloadingPdf}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--card-alt)] disabled:opacity-60"
                 >
                   {downloadingPdf ? "Downloading..." : "Download PDF"}
                 </button>
@@ -362,7 +362,7 @@ export default function ExamBuilderPage() {
           </div>
 
           {!active ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-[var(--card-alt)] p-6 text-sm text-[var(--text-secondary)]">
               Empty state: generate a new exam or open one from your saved exams to see the full paper preview
               and marking guide.
             </div>

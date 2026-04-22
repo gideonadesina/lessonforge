@@ -19,22 +19,22 @@ export default function CreditsCard({
   const lessonsRemaining = Math.max(0, Math.floor(creditsRemaining / 1));
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-200 dark:border-[#1A2847] bg-white dark:bg-[#0B1530]">
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
             Credits
           </div>
 
           <div className="mt-3 flex items-baseline gap-2">
-            <div className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+            <div className="text-2xl font-extrabold tracking-tight text-[var(--text-primary)]">
               {creditsRemaining}
             </div>
-            <div className="text-sm text-slate-500">/ {totalCredits}</div>
+            <div className="text-sm text-[var(--text-secondary)]">/ {totalCredits}</div>
           </div>
 
           {/* Progress bar */}
-          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-[#1A2847]">
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[var(--border)]">
             <div
               className={`h-full transition-all duration-300 ${
                 isLowCredits ? "bg-amber-500" : "bg-violet-600"
@@ -43,7 +43,7 @@ export default function CreditsCard({
             />
           </div>
 
-          <div className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+          <div className="mt-2 text-xs text-[var(--text-secondary)]">
             {lessonsRemaining} lessons remaining
           </div>
 
@@ -55,7 +55,7 @@ export default function CreditsCard({
         </div>
       </div>
 
-      <div className="mt-4 border-t border-slate-200 pt-3 dark:border-slate-200 dark:border-[#1A2847]">
+      <div className="mt-4 border-t border-[var(--border)] pt-3">
         <Link
           href="/pricing"
           className="text-xs font-semibold text-violet-700 transition hover:text-violet-800"

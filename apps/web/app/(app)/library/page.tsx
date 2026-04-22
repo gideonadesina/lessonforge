@@ -114,15 +114,15 @@ export default function LibraryPage() {
       return (
         <div className="space-y-2">
           {"question" in value ? (
-            <div className="text-sm text-slate-800">
+            <div className="text-sm text-[var(--text-primary)]">
               {safeRender(value.question)}
             </div>
           ) : null}
 
           {"markingGuide" in value ? (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <div className="text-xs font-semibold text-slate-700">Marking Guide</div>
-              <div className="mt-1 text-sm text-slate-700">
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--card-alt)] p-3">
+              <div className="text-xs font-semibold text-[var(--text-secondary)]">Marking Guide</div>
+              <div className="mt-1 text-sm text-[var(--text-secondary)]">
                 {safeRender(value.markingGuide)}
               </div>
             </div>
@@ -135,8 +135,8 @@ export default function LibraryPage() {
       <div className="space-y-2">
         {Object.entries(value).map(([key, val]) => (
           <div key={key}>
-            <div className="text-xs font-semibold text-slate-600 uppercase">{key}</div>
-            <div className="text-sm text-slate-800">{safeRender(val)}</div>
+            <div className="text-xs font-semibold text-[var(--text-secondary)] uppercase">{key}</div>
+            <div className="text-sm text-[var(--text-primary)]">{safeRender(val)}</div>
           </div>
         ))}
       </div>
@@ -172,11 +172,11 @@ export default function LibraryPage() {
   return (
     <div className="space-y-6">
       {/* Meta header - ALWAYS visible immediately */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <div className="text-xs text-slate-500">Lesson Pack</div>
-        <div className="mt-1 text-xl font-extrabold text-slate-900">{topic || "Lesson"}</div>
-        <div className="mt-1 text-sm text-slate-600">
-          {subject ? <span className="font-semibold text-slate-800">{subject}</span> : null}
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
+        <div className="text-xs text-[var(--text-tertiary)]">Lesson Pack</div>
+        <div className="mt-1 text-xl font-extrabold text-[var(--text-primary)]">{topic || "Lesson"}</div>
+        <div className="mt-1 text-sm text-[var(--text-secondary)]">
+          {subject ? <span className="font-semibold text-[var(--text-primary)]">{subject}</span> : null}
           {meta?.grade ? <span> • {meta.grade}</span> : null}
           {meta?.curriculum ? <span> • {meta.curriculum}</span> : null}
           {meta?.durationMins ? <span> • {meta.durationMins} mins</span> : null}
@@ -189,25 +189,25 @@ export default function LibraryPage() {
         fallback={<SectionSkeleton title="Lesson Plan" />}
       >
         {lessonPlan ? (
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-5">
-            <h3 className="text-sm font-bold text-slate-900">Lesson Plan</h3>
+          <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-5">
+            <h3 className="text-sm font-bold text-[var(--text-primary)]">Lesson Plan</h3>
 
           {lessonPlan?.title ? (
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
                 Title
               </div>
-              <div className="mt-1 text-sm text-slate-800">{safeRender(lessonPlan.title)}</div>
+              <div className="mt-1 text-sm text-[var(--text-primary)]">{safeRender(lessonPlan.title)}</div>
             </div>
           ) : null}
 
           {Array.isArray(lessonPlan?.performanceObjectives) &&
           lessonPlan.performanceObjectives.length ? (
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
                 Performance Objectives
               </div>
-              <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
+              <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-[var(--text-primary)]">
                {lessonPlan.performanceObjectives.map((item: any, i: number) => (
   <li key={i}>{safeRender(item)}</li>
 ))}
@@ -218,10 +218,10 @@ export default function LibraryPage() {
           {Array.isArray(lessonPlan?.instructionalMaterials) &&
           lessonPlan.instructionalMaterials.length ? (
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
                 Instructional Materials
               </div>
-              <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
+              <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-[var(--text-primary)]">
                 {lessonPlan.instructionalMaterials.map((item: any, i: number) => (
                   <li key={i}>{safeRender(item)}</li>
                 ))}
@@ -231,10 +231,10 @@ export default function LibraryPage() {
 
           {lessonPlan?.previousKnowledge ? (
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
                 Previous Knowledge
               </div>
-              <div className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
+              <div className="mt-1 whitespace-pre-wrap text-sm text-[var(--text-primary)]">
                 {safeRender(lessonPlan.previousKnowledge)}
               </div>
             </div>
@@ -242,10 +242,10 @@ export default function LibraryPage() {
 
           {lessonPlan?.introduction ? (
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
                 Introduction
               </div>
-             <div className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
+             <div className="mt-1 whitespace-pre-wrap text-sm text-[var(--text-primary)]">
   {safeRender(lessonPlan.introduction)}
 </div>
             </div>
@@ -253,35 +253,35 @@ export default function LibraryPage() {
 
           {Array.isArray(lessonPlan?.steps) && lessonPlan.steps.length ? (
             <div className="space-y-3">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
                 Lesson Delivery Steps
               </div>
 
               {lessonPlan.steps.map((step: any, i: number) => (
                 <div
                   key={i}
-                  className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--card-alt)] p-4 space-y-2"
                 >
-                  <div className="font-semibold text-slate-900">
+                  <div className="font-semibold text-[var(--text-primary)]">
                     Step {step?.step ?? i + 1}: {safeRender(step?.title || "Lesson Step")}
                   </div>
 
                   {step?.teacherActivity ? (
-                    <div className="text-sm text-slate-800">
+                    <div className="text-sm text-[var(--text-primary)]">
                       <span className="font-semibold">Teacher Activity:</span>{" "}
                       {safeRender(step.teacherActivity)}
                     </div>
                   ) : null}
 
                   {step?.learnerActivity ? (
-                    <div className="text-sm text-slate-800">
+                    <div className="text-sm text-[var(--text-primary)]">
                       <span className="font-semibold">Learner Activity:</span>{" "}
                       {safeRender(step.learnerActivity)}
                     </div>
                   ) : null}
 
                   {step?.concretisedLearningPoint ? (
-                    <div className="text-sm text-slate-800">
+                    <div className="text-sm text-[var(--text-primary)]">
                       <span className="font-semibold">Learning Point:</span>{" "}
                       {safeRender(step.concretisedLearningPoint)}
                     </div>
@@ -293,26 +293,26 @@ export default function LibraryPage() {
 
           {Array.isArray(lessonPlan?.evaluation) && lessonPlan.evaluation.length ? (
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
                 Evaluation
               </div>
               <div className="mt-2 space-y-2">
                 {lessonPlan.evaluation.map((item: any, i: number) => (
-                  <div key={i} className="rounded border border-slate-200 p-2">
+                  <div key={i} className="rounded border border-[var(--border)] p-2">
                     {typeof item === "object" && item?.question ? (
                       <>
-                        <p className="text-sm font-medium text-slate-800">{item.question}</p>
+                        <p className="text-sm font-medium text-[var(--text-primary)]">{item.question}</p>
                         {item.questionType && (
-                          <p className="text-xs text-slate-600 uppercase">Type: {item.questionType}</p>
+                          <p className="text-xs text-[var(--text-secondary)] uppercase">Type: {item.questionType}</p>
                         )}
                         {item.markingGuide && (
-                          <p className="mt-1 text-sm text-slate-700">
+                          <p className="mt-1 text-sm text-[var(--text-secondary)]">
                             <span className="font-medium">Guide:</span> {item.markingGuide}
                           </p>
                         )}
                       </>
                     ) : (
-                      <p className="text-sm text-slate-800">{safeRender(item)}</p>
+                      <p className="text-sm text-[var(--text-primary)]">{safeRender(item)}</p>
                     )}
                   </div>
                 ))}
@@ -322,10 +322,10 @@ export default function LibraryPage() {
 
           {Array.isArray(lessonPlan?.assignment) && lessonPlan.assignment.length ? (
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
                 Assignment
               </div>
-              <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
+              <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-[var(--text-primary)]">
                 {lessonPlan.assignment.map((item: any, i: number) => (
                   <li key={i}>{safeRender(item)}</li>
                 ))}
@@ -336,10 +336,10 @@ export default function LibraryPage() {
           {Array.isArray(lessonPlan?.realLifeConnection) &&
           lessonPlan.realLifeConnection.length ? (
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
                 Real-life Connection
               </div>
-              <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
+              <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-[var(--text-primary)]">
                {lessonPlan.realLifeConnection.map((item: any, i: number) => (
   <li key={i}>{safeRender(item)}</li>
 ))}
@@ -356,34 +356,34 @@ export default function LibraryPage() {
         fallback={<SectionSkeleton title="Lesson Notes" />}
       >
         {gen?.lessonNotes ? (
-          <section className="rounded-2xl border border-slate-200 bg-white p-4">
-            <h3 className="text-sm font-bold text-slate-900">Lesson Notes</h3>
+          <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
+            <h3 className="text-sm font-bold text-[var(--text-primary)]">Lesson Notes</h3>
           <div className="mt-2">
             {typeof gen.lessonNotes === "string" ? (
-              <div className="whitespace-pre-wrap text-sm text-slate-800 leading-relaxed">
+              <div className="whitespace-pre-wrap text-sm text-[var(--text-primary)] leading-relaxed">
                 {safeRender(gen.lessonNotes)}
               </div>
             ) : (
               <div className="space-y-3">
                 {gen.lessonNotes.introduction && (
                   <div>
-                    <p className="text-xs font-semibold text-slate-700 uppercase">Introduction</p>
-                    <p className="mt-1 text-sm text-slate-800 leading-relaxed">
+                    <p className="text-xs font-semibold text-[var(--text-secondary)] uppercase">Introduction</p>
+                    <p className="mt-1 text-sm text-[var(--text-primary)] leading-relaxed">
                       {gen.lessonNotes.introduction}
                     </p>
                   </div>
                 )}
                 {gen.lessonNotes.keyConcepts?.length ? (
                   <div>
-                    <p className="text-xs font-semibold text-slate-700 uppercase">Key Concepts</p>
+                    <p className="text-xs font-semibold text-[var(--text-secondary)] uppercase">Key Concepts</p>
                     <div className="mt-2 space-y-2">
                       {gen.lessonNotes.keyConcepts.map((concept: any, i: number) => (
                         <div key={i} className="border-l-2 border-violet-200 pl-2">
-                          <p className="text-sm font-medium text-slate-800">
+                          <p className="text-sm font-medium text-[var(--text-primary)]">
                             {concept.subheading || `Concept ${i + 1}`}
                           </p>
                           {concept.content && (
-                            <p className="mt-1 text-sm text-slate-700">{concept.content}</p>
+                            <p className="mt-1 text-sm text-[var(--text-secondary)]">{concept.content}</p>
                           )}
                         </div>
                       ))}
@@ -392,27 +392,27 @@ export default function LibraryPage() {
                 ) : null}
                 {gen.lessonNotes.workedExamples?.length ? (
                   <div>
-                    <p className="text-xs font-semibold text-slate-700 uppercase">Worked Examples</p>
+                    <p className="text-xs font-semibold text-[var(--text-secondary)] uppercase">Worked Examples</p>
                     <div className="mt-2 space-y-3">
                       {gen.lessonNotes.workedExamples.map((example: any, i: number) => (
-                        <div key={i} className="rounded border border-slate-200 p-2">
-                          <p className="text-sm font-medium text-slate-800">
+                        <div key={i} className="rounded border border-[var(--border)] p-2">
+                          <p className="text-sm font-medium text-[var(--text-primary)]">
                             {example.title || `Example ${i + 1}`}
                           </p>
                           {example.problem && (
-                            <p className="mt-1 text-sm text-slate-700">
+                            <p className="mt-1 text-sm text-[var(--text-secondary)]">
                               <span className="font-medium">Problem:</span> {example.problem}
                             </p>
                           )}
                           {example.steps?.length ? (
-                            <ol className="mt-1 list-decimal pl-5 text-sm text-slate-700">
+                            <ol className="mt-1 list-decimal pl-5 text-sm text-[var(--text-secondary)]">
                               {example.steps.map((step: any, j: number) => (
                                 <li key={j}>{step}</li>
                               ))}
                             </ol>
                           ) : null}
                           {example.finalAnswer && (
-                            <p className="mt-1 text-sm text-slate-700">
+                            <p className="mt-1 text-sm text-[var(--text-secondary)]">
                               <span className="font-medium">Answer:</span> {example.finalAnswer}
                             </p>
                           )}
@@ -423,8 +423,8 @@ export default function LibraryPage() {
                 ) : null}
                 {gen.lessonNotes.summaryPoints?.length ? (
                   <div>
-                    <p className="text-xs font-semibold text-slate-700 uppercase">Summary Points</p>
-                    <ul className="mt-2 list-disc pl-5 text-sm text-slate-800">
+                    <p className="text-xs font-semibold text-[var(--text-secondary)] uppercase">Summary Points</p>
+                    <ul className="mt-2 list-disc pl-5 text-sm text-[var(--text-primary)]">
                       {gen.lessonNotes.summaryPoints.map((point: any, i: number) => (
                         <li key={i}>{point}</li>
                       ))}
@@ -433,13 +433,13 @@ export default function LibraryPage() {
                 ) : null}
                 {gen.lessonNotes.keyVocabulary?.length ? (
                   <div>
-                    <p className="text-xs font-semibold text-slate-700 uppercase">Key Vocabulary</p>
+                    <p className="text-xs font-semibold text-[var(--text-secondary)] uppercase">Key Vocabulary</p>
                     <div className="mt-2 space-y-1">
                       {gen.lessonNotes.keyVocabulary.map((item: any, i: number) => (
                         <div key={i} className="flex gap-2 text-sm">
-                          <span className="font-medium text-slate-800">{item.word}</span>
-                          <span className="text-slate-600">:</span>
-                          <span className="text-slate-700">{item.meaning}</span>
+                          <span className="font-medium text-[var(--text-primary)]">{item.word}</span>
+                          <span className="text-[var(--text-secondary)]">:</span>
+                          <span className="text-[var(--text-secondary)]">{item.meaning}</span>
                         </div>
                       ))}
                     </div>
@@ -459,7 +459,7 @@ export default function LibraryPage() {
       >
         {slides.length ? (
           <section className="space-y-4">
-            <h3 className="text-sm font-bold text-slate-900">Slides</h3>
+            <h3 className="text-sm font-bold text-[var(--text-primary)]">Slides</h3>
 
           <div className="grid gap-6">
             {slides.map((s, i) => {
@@ -474,13 +474,13 @@ export default function LibraryPage() {
               return (
                 <div
                   key={i}
-                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4"
+                  className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm space-y-4"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="text-lg font-bold text-slate-900">
+                    <div className="text-lg font-bold text-[var(--text-primary)]">
                       {i + 1}. {title}
                     </div>
-                    <span className="text-[11px] font-semibold px-2 py-1 rounded-full border bg-slate-50 text-slate-700">
+                    <span className="text-[11px] font-semibold px-2 py-1 rounded-full border bg-[var(--card-alt)] text-[var(--text-secondary)]">
                       Slide {i + 1}
                     </span>
                   </div>
@@ -507,7 +507,7 @@ export default function LibraryPage() {
   <button
     type="button"
     onClick={() => setPreviewImage({ src: img, title })}
-    className="rounded-lg border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-800 hover:bg-slate-100"
+    className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 font-semibold text-[var(--text-primary)] hover:bg-slate-100"
   >
     View full image
   </button>
@@ -515,20 +515,20 @@ export default function LibraryPage() {
   <button
     type="button"
     onClick={() => handleDownloadImage(img, title)}
-    className="rounded-lg border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-800 hover:bg-slate-100"
+    className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 font-semibold text-[var(--text-primary)] hover:bg-slate-100"
   >
     Download image
   </button>
 </div>
                   {/* Bullets */}
                   {bullets.length ? (
-                    <ul className="list-disc pl-6 space-y-2 text-slate-800 font-medium">
+                    <ul className="list-disc pl-6 space-y-2 text-[var(--text-primary)] font-medium">
                       {bullets.map((b, j) => (
                         <li key={j}>{safeRender(b)}</li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-sm text-slate-600">No bullet points.</p>
+                    <p className="text-sm text-[var(--text-secondary)]">No bullet points.</p>
                   )}
 
                   {/* Video link */}
@@ -544,7 +544,7 @@ export default function LibraryPage() {
                   </div>
 
                   {/* Activity */}
-                  <div className="rounded-xl border bg-yellow-50 p-3 text-sm text-slate-900">
+                  <div className="rounded-xl border bg-yellow-50 p-3 text-sm text-[var(--text-primary)]">
                     <span className="font-bold">👩🏽‍🏫 Classroom Activity:</span> {activity}
                   </div>
                 </div>
@@ -562,20 +562,20 @@ export default function LibraryPage() {
       >
         {mcq.length ? (
           <section className="space-y-4">
-            <h3 className="text-sm font-bold text-slate-900">📝 Multiple Choice Questions</h3>
+            <h3 className="text-sm font-bold text-[var(--text-primary)]">📝 Multiple Choice Questions</h3>
 
           <div className="space-y-4">
             {mcq.map((q, i) => {
               const options: string[] = Array.isArray(q?.options) ? q.options : [];
               return (
-                <div key={i} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="font-semibold text-slate-900">
+                <div key={i} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
+                  <div className="font-semibold text-[var(--text-primary)]">
                     {i + 1}. {safeRender(q?.q || q?.question || "Question")}
                   </div>
 
                   <div className="mt-3 space-y-2">
                     {options.slice(0, 4).map((opt, j) => (
-                      <div key={j} className="flex items-start gap-3 text-sm text-slate-800">
+                      <div key={j} className="flex items-start gap-3 text-sm text-[var(--text-primary)]">
                         <span className="font-bold text-violet-700 min-w-[22px]">
                           {String.fromCharCode(65 + j)}.
                         </span>
@@ -598,18 +598,18 @@ export default function LibraryPage() {
       >
         {theory.length ? (
           <section className="space-y-4">
-            <h3 className="text-sm font-bold text-slate-900">✍️ Theory Questions</h3>
+            <h3 className="text-sm font-bold text-[var(--text-primary)]">✍️ Theory Questions</h3>
           <div className="space-y-4">
             {theory.map((q, i) => (
-              <div key={i} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="font-semibold text-slate-900">
+              <div key={i} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
+                <div className="font-semibold text-[var(--text-primary)]">
                   {i + 1}. {safeRender(q?.q || q?.question || "Question")}
                 </div>
 
                 {q?.markingGuide ? (
-                  <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="text-xs font-semibold text-slate-700">Marking Guide</div>
-                    <div className="mt-1 text-sm text-slate-700">{safeRender(q.markingGuide)}</div>
+                  <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--card-alt)] p-3">
+                    <div className="text-xs font-semibold text-[var(--text-secondary)]">Marking Guide</div>
+                    <div className="mt-1 text-sm text-[var(--text-secondary)]">{safeRender(q.markingGuide)}</div>
                   </div>
                 ) : null}
               </div>
@@ -625,9 +625,9 @@ export default function LibraryPage() {
         fallback={null}
       >
         {liveApps.length ? (
-          <section className="rounded-2xl border border-slate-200 bg-white p-4">
-            <h3 className="text-sm font-bold text-slate-900">Real-life Applications</h3>
-          <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-slate-800">
+          <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
+            <h3 className="text-sm font-bold text-[var(--text-primary)]">Real-life Applications</h3>
+          <ul className="mt-2 list-disc pl-6 space-y-1 text-sm text-[var(--text-primary)]">
            {liveApps.map((x: any, i: number) => (
   <li key={i}>{safeRender(x)}</li>
 ))}
@@ -983,46 +983,46 @@ export default function LibraryPage() {
       {/* Header */}
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">My Lesson Library</h1>
-          <p className="mt-1 text-sm text-slate-600">
+          <h1 className="text-2xl font-bold text-[var(--text-primary)]">My Lesson Library</h1>
+          <p className="mt-1 text-sm text-[var(--text-secondary)]">
             Search, reuse, and review your saved lessons.
           </p>
           {email ? (
-            <div className="mt-1 text-xs text-slate-500">
-              Signed in as <span className="font-semibold text-slate-700">{email}</span>
+            <div className="mt-1 text-xs text-[var(--text-tertiary)]">
+              Signed in as <span className="font-semibold text-[var(--text-secondary)]">{email}</span>
             </div>
           ) : null}
         </div>
 
         <button
           onClick={load}
-          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-100 md:w-auto"
+          className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-medium text-[var(--text-primary)] hover:bg-slate-100 md:w-auto"
         >
           Refresh
         </button>
       </div>
 
       {/* Controls */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
           <div className="md:col-span-2">
-            <div className="mb-1 text-xs font-medium text-slate-600">
+            <div className="mb-1 text-xs font-medium text-[var(--text-secondary)]">
               Search by subject, topic, grade...
             </div>
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="e.g., Inflation, CRK, Grade 10..."
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
             />
           </div>
 
           <div>
-            <div className="mb-1 text-xs font-medium text-slate-600">Subject</div>
+            <div className="mb-1 text-xs font-medium text-[var(--text-secondary)]">Subject</div>
             <select
               value={subjectFilter}
               onChange={(e) => setSubjectFilter(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
             >
               {subjects.map((s) => (
                 <option key={s} value={s}>
@@ -1033,11 +1033,11 @@ export default function LibraryPage() {
           </div>
 
           <div>
-            <div className="mb-1 text-xs font-medium text-slate-600">Grade</div>
+            <div className="mb-1 text-xs font-medium text-[var(--text-secondary)]">Grade</div>
             <select
               value={gradeFilter}
               onChange={(e) => setGradeFilter(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
             >
               {grades.map((g) => (
                 <option key={g} value={g}>
@@ -1048,11 +1048,11 @@ export default function LibraryPage() {
           </div>
 
           <div>
-            <div className="mb-1 text-xs font-medium text-slate-600">Sort</div>
+            <div className="mb-1 text-xs font-medium text-[var(--text-secondary)]">Sort</div>
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value as SortMode)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
             >
               <option value="newest">Newest first</option>
               <option value="oldest">Oldest first</option>
@@ -1060,12 +1060,12 @@ export default function LibraryPage() {
           </div>
 
           <div className="md:col-span-3">
-            <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
+            <div className="rounded-xl bg-[var(--card-alt)] p-3 text-xs text-[var(--text-secondary)]">
               🔒 Your library is private to your account (RLS). Avoid student names or sensitive info.
             </div>
           </div>
 
-          <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700">
+          <div className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 text-xs text-[var(--text-secondary)]">
             <span>Total</span>
             <span className="font-semibold">{filtered.length}</span>
           </div>
@@ -1080,14 +1080,14 @@ export default function LibraryPage() {
       ) : null}
 
       {loading ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 text-sm text-[var(--text-secondary)]">
           Loading your library...
         </div>
       ) : null}
 
       {/* Grid */}
       {!loading && filtered.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 text-sm text-[var(--text-secondary)]">
           No lessons found. Generate one first.
         </div>
       ) : null}
@@ -1095,7 +1095,7 @@ export default function LibraryPage() {
       {!loading && filtered.length > 0 ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {filtered.map((l) => (
-            <div key={l.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div key={l.id} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="flex flex-wrap gap-2">
@@ -1105,22 +1105,22 @@ export default function LibraryPage() {
                       </span>
                     ) : null}
                     {l.grade ? (
-                      <span className="rounded-full bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+                      <span className="rounded-full bg-[var(--card-alt)] px-3 py-1 text-xs font-semibold text-[var(--text-secondary)]">
                         {l.grade}
                       </span>
                     ) : null}
                   </div>
 
-                  <div className="mt-3 text-lg font-bold text-slate-900">
+                  <div className="mt-3 text-lg font-bold text-[var(--text-primary)]">
                     {l.topic || "Untitled lesson"}
                   </div>
 
-                  <div className="mt-1 text-xs text-slate-500">{timeAgo(l.created_at)}</div>
+                  <div className="mt-1 text-xs text-[var(--text-tertiary)]">{timeAgo(l.created_at)}</div>
                 </div>
 
                 <button
                   onClick={() => setActive(l)}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-slate-100"
                 >
                   View
                 </button>
@@ -1137,7 +1137,7 @@ export default function LibraryPage() {
                 <button
                   onClick={() => onDelete(l.id)}
                   disabled={busyId === l.id}
-                  className="rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
+                  className="rounded-xl border border-red-200 bg-[var(--card)] px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
                 >
                   {busyId === l.id ? "Deleting..." : "Delete"}
                 </button>
@@ -1150,11 +1150,11 @@ export default function LibraryPage() {
       {/* Modal */}
       {active ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-[96vw] max-w-6xl h-[92vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
-           <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-4">
+          <div className="w-[96vw] max-w-6xl h-[92vh] bg-[var(--card)] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+           <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] p-4">
   <div>
-    <div className="text-lg font-bold text-slate-900">{active.topic || "Lesson"}</div>
-    <div className="mt-1 text-xs text-slate-500">
+    <div className="text-lg font-bold text-[var(--text-primary)]">{active.topic || "Lesson"}</div>
+    <div className="mt-1 text-xs text-[var(--text-tertiary)]">
       {active.subject || "—"} • {active.grade || "—"} • {timeAgo(active.created_at)}
     </div>
   </div>
@@ -1162,23 +1162,23 @@ export default function LibraryPage() {
   <div className="flex items-center gap-2">
     <button
       onClick={() => handleDownloadLessonStructureFromRow(active)}
-      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100"
+      className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-slate-100"
     >
       Download Structure
     </button>
 
     <button
       onClick={() => setActive(null)}
-      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100"
+      className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-slate-100"
     >
       Close
     </button>
   </div>
   {previewImage ? (
   <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
-    <div className="w-full max-w-5xl rounded-2xl bg-white p-4 shadow-2xl">
+    <div className="w-full max-w-5xl rounded-2xl bg-[var(--card)] p-4 shadow-2xl">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="text-base font-bold text-slate-900">
+        <div className="text-base font-bold text-[var(--text-primary)]">
           {previewImage.title}
         </div>
 
@@ -1186,7 +1186,7 @@ export default function LibraryPage() {
           <button
             type="button"
             onClick={() => handleDownloadImage(previewImage.src, previewImage.title)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100"
+            className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] hover:bg-slate-100"
           >
             Download
           </button>
@@ -1201,7 +1201,7 @@ export default function LibraryPage() {
         </div>
       </div>
 
-      <div className="max-h-[75vh] overflow-auto rounded-xl border bg-slate-50 p-2">
+      <div className="max-h-[75vh] overflow-auto rounded-xl border bg-[var(--card-alt)] p-2">
         <img
           src={previewImage.src}
           alt={previewImage.title}
@@ -1224,20 +1224,20 @@ export default function LibraryPage() {
                   isSectionReady={isSectionReady}
                 />
               ) : (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center space-y-3">
-                  <div className="text-sm font-medium text-slate-700">No content available</div>
-                  <div className="text-xs text-slate-600">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--card-alt)] p-6 text-center space-y-3">
+                  <div className="text-sm font-medium text-[var(--text-secondary)]">No content available</div>
+                  <div className="text-xs text-[var(--text-secondary)]">
                     This lesson doesn't have saved content yet. Delete and regenerate it.
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-2 border-t border-slate-200 p-4">
+            <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] p-4">
               <button
                 onClick={() => onDelete(active.id)}
                 disabled={busyId === active.id}
-                className="rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
+                className="rounded-xl border border-red-200 bg-[var(--card)] px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
               >
                 {busyId === active.id ? "Deleting..." : "Delete"}
               </button>

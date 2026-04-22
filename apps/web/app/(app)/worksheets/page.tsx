@@ -643,8 +643,8 @@ export default function WorksheetsPage() {
     <div className="space-y-5">
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Worksheets</h1>
-          <p className="mt-1 text-sm text-slate-600">
+          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Worksheets</h1>
+          <p className="mt-1 text-sm text-[var(--text-secondary)]">
             Generate, upload, edit, and export worksheets (PDF / DOCX).
           </p>
         </div>
@@ -654,19 +654,19 @@ export default function WorksheetsPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search worksheets..."
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+            className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
           />
         </div>
       </div>
  
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
         <div className="mb-4 flex gap-2">
           <button
             onClick={() => setSourceMode("generated")}
             className={`rounded-xl px-3 py-2 text-xs font-semibold ${
               sourceMode === "generated"
                 ? "bg-violet-600 text-white"
-                : "border border-slate-200 bg-white text-slate-800"
+                : "border border-[var(--border)] bg-[var(--card)] text-[var(--text-primary)]"
             }`}
           >
             Generate
@@ -676,7 +676,7 @@ export default function WorksheetsPage() {
             className={`rounded-xl px-3 py-2 text-xs font-semibold ${
               sourceMode === "uploaded"
                 ? "bg-violet-600 text-white"
-                : "border border-slate-200 bg-white text-slate-800"
+                : "border border-[var(--border)] bg-[var(--card)] text-[var(--text-primary)]"
             }`}
           >
             Upload
@@ -688,7 +688,7 @@ export default function WorksheetsPage() {
             <input
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
             />
           </Field>
  
@@ -696,7 +696,7 @@ export default function WorksheetsPage() {
             <input
               value={grade}
               onChange={(e) => setGrade(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
             />
           </Field>
  
@@ -704,7 +704,7 @@ export default function WorksheetsPage() {
             <input
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
             />
           </Field>
  
@@ -712,7 +712,7 @@ export default function WorksheetsPage() {
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
             />
           </Field>
  
@@ -720,7 +720,7 @@ export default function WorksheetsPage() {
             <input
               value={schoolName}
               onChange={(e) => setSchoolName(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
             />
           </Field>
  
@@ -728,7 +728,7 @@ export default function WorksheetsPage() {
             <input
               value={className}
               onChange={(e) => setClassName(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
             />
           </Field>
  
@@ -737,7 +737,7 @@ export default function WorksheetsPage() {
               type="date"
               value={worksheetDate}
               onChange={(e) => setWorksheetDate(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
             />
           </Field>
  
@@ -745,7 +745,7 @@ export default function WorksheetsPage() {
             <select
               value={worksheetType}
               onChange={(e) => setWorksheetType(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
             >
               <option>Mixed</option>
               <option>Multiple Choice</option>
@@ -758,7 +758,7 @@ export default function WorksheetsPage() {
             <select
               value={difficulty}
               onChange={(e) => setDifficulty(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
             >
               <option>Easy</option>
               <option>Medium</option>
@@ -773,7 +773,7 @@ export default function WorksheetsPage() {
               max={50}
               value={numQuestions}
               onChange={(e) => setNumQuestions(toSafeInt(e.target.value, 10))}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
             />
           </Field>
  
@@ -784,7 +784,7 @@ export default function WorksheetsPage() {
               max={180}
               value={durationMins}
               onChange={(e) => setDurationMins(toSafeInt(e.target.value, 30))}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
             />
           </Field>
  
@@ -792,7 +792,7 @@ export default function WorksheetsPage() {
             <select
               value={printLayout}
               onChange={(e) => setPrintLayout(e.target.value as PrintLayout)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
             >
               <option value="standard">standard</option>
               <option value="exam">exam</option>
@@ -804,7 +804,7 @@ export default function WorksheetsPage() {
             <select
               value={contentMode}
               onChange={(e) => setContentMode(e.target.value as ContentMode)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
             >
               <option value="normal">normal</option>
               <option value="diagram">diagram</option>
@@ -819,7 +819,7 @@ export default function WorksheetsPage() {
               value={instructionsText}
               onChange={(e) => setInstructionsText(e.target.value)}
               rows={3}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
             />
           </Field>
  
@@ -830,7 +830,7 @@ export default function WorksheetsPage() {
                   type="file"
                   accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg"
                   onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
                 />
               </Field>
  
@@ -839,7 +839,7 @@ export default function WorksheetsPage() {
                   rows={4}
                   value={uploadedWorksheetText}
                   onChange={(e) => setUploadedWorksheetText(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
                 />
               </Field>
  
@@ -848,7 +848,7 @@ export default function WorksheetsPage() {
                   rows={4}
                   value={uploadedAnswerKeyText}
                   onChange={(e) => setUploadedAnswerKeyText(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
                 />
               </Field>
             </>
@@ -878,13 +878,13 @@ export default function WorksheetsPage() {
         ) : null}
       </div>
  
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
         <div className="flex items-center justify-between">
-          <div className="text-sm font-semibold text-slate-900">My Worksheets</div>
+          <div className="text-sm font-semibold text-[var(--text-primary)]">My Worksheets</div>
           <button
             onClick={loadList}
             disabled={listLoading}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100 disabled:opacity-60"
+            className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-slate-100 disabled:opacity-60"
           >
             {listLoading ? "Refreshing..." : "Refresh"}
           </button>
@@ -892,17 +892,17 @@ export default function WorksheetsPage() {
  
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
           {filtered.map((w) => (
-            <div key={w.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div key={w.id} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-slate-900">
+                  <div className="truncate text-sm font-semibold text-[var(--text-primary)]">
                     {w.title || w.topic}
                   </div>
-                  <div className="mt-1 text-xs text-slate-500">
+                  <div className="mt-1 text-xs text-[var(--text-tertiary)]">
                     {w.subject} • {w.grade}
                   </div>
                 </div>
-                <div className="text-[10px] text-slate-500">{timeAgo(w.created_at)}</div>
+                <div className="text-[10px] text-[var(--text-tertiary)]">{timeAgo(w.created_at)}</div>
               </div>
  
               <div className="mt-3 flex flex-wrap gap-2">
@@ -915,7 +915,7 @@ export default function WorksheetsPage() {
               <div className="mt-4 flex gap-2">
                 <button
                   onClick={() => openFromRow(w)}
-                  className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100"
+                  className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-slate-100"
                 >
                   View
                 </button>
@@ -930,7 +930,7 @@ export default function WorksheetsPage() {
           ))}
  
           {!listLoading && filtered.length === 0 ? (
-            <div className="md:col-span-2 lg:col-span-3 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+            <div className="md:col-span-2 lg:col-span-3 rounded-xl bg-[var(--card-alt)] p-4 text-sm text-[var(--text-secondary)]">
               No worksheets yet.
             </div>
           ) : null}
@@ -939,13 +939,13 @@ export default function WorksheetsPage() {
  
       {open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-5xl rounded-2xl bg-white shadow-xl">
-            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 p-4">
+          <div className="w-full max-w-5xl rounded-2xl bg-[var(--card)] shadow-xl">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] p-4">
               <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-slate-900">
+                <div className="truncate text-sm font-semibold text-[var(--text-primary)]">
                   {active?.generated?.title || active?.meta?.title || active?.meta?.topic || "Worksheet"}
                 </div>
-                <div className="mt-1 text-xs text-slate-500">
+                <div className="mt-1 text-xs text-[var(--text-tertiary)]">
                   {active?.meta?.subject} • {active?.meta?.grade} • {active?.meta?.source ?? "generated"}
                 </div>
               </div>
@@ -954,7 +954,7 @@ export default function WorksheetsPage() {
                 <select
                   value={printMode}
                   onChange={(e) => setPrintMode(e.target.value as PrintMode)}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 outline-none"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] outline-none"
                 >
                   <option value="student">Student copy</option>
                   <option value="teacher">Teacher copy</option>
@@ -962,7 +962,7 @@ export default function WorksheetsPage() {
  
                 <button
                   onClick={() => printGenerated(printMode)}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-slate-100"
                 >
                   Print
                 </button>
@@ -970,7 +970,7 @@ export default function WorksheetsPage() {
                 <button
                   disabled={exporting}
                   onClick={() => downloadExport("pdf")}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100 disabled:opacity-60"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-slate-100 disabled:opacity-60"
                 >
                   Export PDF
                 </button>
@@ -978,7 +978,7 @@ export default function WorksheetsPage() {
                 <button
                   disabled={exporting}
                   onClick={() => downloadExport("docx")}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100 disabled:opacity-60"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-slate-100 disabled:opacity-60"
                 >
                   Export DOCX
                 </button>
@@ -986,7 +986,7 @@ export default function WorksheetsPage() {
                 {!editing ? (
                   <button
                     onClick={startEdit}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100"
+                    className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-slate-100"
                   >
                     Edit
                   </button>
@@ -1004,7 +1004,7 @@ export default function WorksheetsPage() {
                         setEditing(false);
                         setDraft(null);
                       }}
-                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100"
+                      className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-slate-100"
                     >
                       Cancel
                     </button>
@@ -1018,7 +1018,7 @@ export default function WorksheetsPage() {
                     setEditing(false);
                     setDraft(null);
                   }}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-slate-100"
                 >
                   Close
                 </button>
@@ -1027,7 +1027,7 @@ export default function WorksheetsPage() {
  
             <div className="max-h-[75vh] space-y-4 overflow-auto p-4">
               {active?.meta?.source === "uploaded" && active?.meta?.file_url ? (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--card-alt)] p-3 text-sm">
                   Uploaded file:{" "}
                   <a
                     href={active.meta.file_url}
@@ -1041,13 +1041,13 @@ export default function WorksheetsPage() {
               ) : null}
  
               {editing && draft ? (
-                <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--card-alt)] p-4">
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                     <Field label="Title">
                       <input
                         value={draft.title}
                         onChange={(e) => setDraft((d) => (d ? { ...d, title: e.target.value } : d))}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
                       />
                     </Field>
  
@@ -1055,7 +1055,7 @@ export default function WorksheetsPage() {
                       <input
                         value={draft.schoolName}
                         onChange={(e) => setDraft((d) => (d ? { ...d, schoolName: e.target.value } : d))}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
                       />
                     </Field>
  
@@ -1063,7 +1063,7 @@ export default function WorksheetsPage() {
                       <input
                         value={draft.className}
                         onChange={(e) => setDraft((d) => (d ? { ...d, className: e.target.value } : d))}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
                       />
                     </Field>
  
@@ -1072,7 +1072,7 @@ export default function WorksheetsPage() {
                         type="date"
                         value={draft.worksheetDate}
                         onChange={(e) => setDraft((d) => (d ? { ...d, worksheetDate: e.target.value } : d))}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
                       />
                     </Field>
  
@@ -1082,7 +1082,7 @@ export default function WorksheetsPage() {
                         onChange={(e) =>
                           setDraft((d) => (d ? { ...d, printLayout: e.target.value as PrintLayout } : d))
                         }
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
                       >
                         <option value="standard">standard</option>
                         <option value="exam">exam</option>
@@ -1096,7 +1096,7 @@ export default function WorksheetsPage() {
                         onChange={(e) =>
                           setDraft((d) => (d ? { ...d, contentMode: e.target.value as ContentMode } : d))
                         }
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
                       >
                         <option value="normal">normal</option>
                         <option value="diagram">diagram</option>
@@ -1112,7 +1112,7 @@ export default function WorksheetsPage() {
                       rows={3}
                       value={draft.instructionsText}
                       onChange={(e) => setDraft((d) => (d ? { ...d, instructionsText: e.target.value } : d))}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
                     />
                   </Field>
  
@@ -1121,7 +1121,7 @@ export default function WorksheetsPage() {
                       rows={10}
                       value={draft.worksheet}
                       onChange={(e) => setDraft((d) => (d ? { ...d, worksheet: e.target.value } : d))}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
                     />
                   </Field>
  
@@ -1130,7 +1130,7 @@ export default function WorksheetsPage() {
                       rows={8}
                       value={draft.answerKey}
                       onChange={(e) => setDraft((d) => (d ? { ...d, answerKey: e.target.value } : d))}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
                     />
                   </Field>
                 </div>
@@ -1139,17 +1139,17 @@ export default function WorksheetsPage() {
                   {active?.generated?.worksheet ? (
                     <>
                       <div className="flex items-center justify-between">
-                        <div className="text-xs font-semibold text-slate-900">Worksheet</div>
+                        <div className="text-xs font-semibold text-[var(--text-primary)]">Worksheet</div>
                         <button
                           onClick={() => copy(active.generated?.worksheet ?? "")}
-                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100"
+                          className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-slate-100"
                         >
                           Copy
                         </button>
                       </div>
  
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <div className="whitespace-pre-wrap text-sm leading-6 text-slate-900">
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--card-alt)] p-3">
+                        <div className="whitespace-pre-wrap text-sm leading-6 text-[var(--text-primary)]">
                           {active.generated.worksheet}
                         </div>
                       </div>
@@ -1157,8 +1157,8 @@ export default function WorksheetsPage() {
                   ) : null}
  
                   {Array.isArray(active?.generated?.visuals) && active.generated.visuals.length > 0 ? (
-                    <div className="rounded-xl border border-slate-200 bg-white p-3">
-                      <div className="text-xs font-semibold text-slate-900">
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
+                      <div className="text-xs font-semibold text-[var(--text-primary)]">
                         {active.generated.contentMode === "coloring"
                           ? "Coloring Outline Pictures"
                           : "Diagram / Practical Outline Pictures"}
@@ -1167,13 +1167,13 @@ export default function WorksheetsPage() {
                         {active.generated.visuals.map((v, idx) => (
                           <div
                             key={`${v.label}-${idx}`}
-                            className="rounded-xl border border-slate-200 bg-slate-50 p-2"
+                            className="rounded-xl border border-[var(--border)] bg-[var(--card-alt)] p-2"
                           >
-                            <div className="mb-2 text-xs font-medium text-slate-700">{v.label}</div>
+                            <div className="mb-2 text-xs font-medium text-[var(--text-secondary)]">{v.label}</div>
                             <img
                               src={v.imageDataUrl}
                               alt={v.label}
-                              className="w-full rounded-lg border border-slate-200 bg-white"
+                              className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)]"
                             />
                           </div>
                         ))}
@@ -1182,18 +1182,18 @@ export default function WorksheetsPage() {
                   ) : null}
  
                   {active?.generated?.answerKey ? (
-                    <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
                       <div className="flex items-center justify-between">
-                        <div className="text-xs font-semibold text-slate-900">Answer Key</div>
+                        <div className="text-xs font-semibold text-[var(--text-primary)]">Answer Key</div>
                         <button
                           onClick={() => copy(active.generated?.answerKey ?? "")}
-                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100"
+                          className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-slate-100"
                         >
                           Copy
                         </button>
                       </div>
-                      <div className="mt-2 rounded-xl bg-slate-50 p-3">
-                        <div className="whitespace-pre-wrap text-sm leading-6 text-slate-900">
+                      <div className="mt-2 rounded-xl bg-[var(--card-alt)] p-3">
+                        <div className="whitespace-pre-wrap text-sm leading-6 text-[var(--text-primary)]">
                           {active.generated.answerKey}
                         </div>
                       </div>
@@ -1201,7 +1201,7 @@ export default function WorksheetsPage() {
                   ) : null}
                 </>
               ) : (
-                <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+                <div className="rounded-xl bg-[var(--card-alt)] p-4 text-sm text-[var(--text-secondary)]">
                   This item currently has no generated worksheet text.
                 </div>
               )}
@@ -1224,7 +1224,7 @@ function Field({
 }) {
   return (
     <div className={span ?? ""}>
-      <div className="mb-1 text-xs font-medium text-slate-600">{label}</div>
+      <div className="mb-1 text-xs font-medium text-[var(--text-secondary)]">{label}</div>
       {children}
     </div>
   );
@@ -1232,7 +1232,7 @@ function Field({
  
 function Pill({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
+    <span className="rounded-full border border-[var(--border)] bg-[var(--card-alt)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
       {children}
     </span>
   );

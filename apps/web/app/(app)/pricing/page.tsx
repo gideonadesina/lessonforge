@@ -51,15 +51,15 @@ export default function PricingPage() {
 
   return (
     <div className="space-y-8 pb-8">
-      <section className="rounded-3xl border border-violet-100 bg-gradient-to-br from-[#FFFEFC] via-[#F9F5FF] to-[#F3EEFF] px-6 py-8 shadow-sm sm:px-8">
+      <section className="rounded-3xl border border-violet-100 bg-gradient-to-br from-[var(--bg)] via-violet-50 to-violet-100/40 px-6 py-8 shadow-sm dark:via-violet-900/30 dark:to-violet-900/10 sm:px-8">
         <div className="max-w-3xl space-y-3">
           <p className="inline-flex rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-violet-700">
             Teacher pricing
           </p>
-          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
+          <h1 className="text-3xl font-extrabold tracking-tight text-[var(--text-primary)] sm:text-4xl">
             Spend less time planning. Create stronger lesson packs faster.
           </h1>
-          <p className="text-sm leading-relaxed text-slate-600 sm:text-base">
+          <p className="text-sm leading-relaxed text-[var(--text-secondary)] sm:text-base">
             Choose a LessonForge credit plan built for teachers. Generate lesson plans, slides,
             classroom activities, and assessments with a polished, repeatable workflow.
           </p>
@@ -77,22 +77,22 @@ export default function PricingPage() {
         ))}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-sm">
-        <p className="font-semibold text-slate-900">{getCreditUsageNote()}</p>
+      <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 text-sm text-[var(--text-secondary)] shadow-sm">
+        <p className="font-semibold text-[var(--text-primary)]">{getCreditUsageNote()}</p>
         <p className="mt-2">
-          <span className="font-semibold text-slate-900">New users get </span>
+          <span className="font-semibold text-[var(--text-primary)]">New users get </span>
           <span className="font-bold text-violet-700">{NEW_USER_FREE_CREDITS} free credits</span>
           <span> ({freeLessonPacks} free lesson packs)</span>
         </p>
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-bold text-slate-900">Frequently asked questions</h2>
+      <section className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
+        <h2 className="text-xl font-bold text-[var(--text-primary)]">Frequently asked questions</h2>
         <div className="mt-4 space-y-4">
           {FAQ_ITEMS.map((item) => (
-            <article key={item.question} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-              <h3 className="text-sm font-semibold text-slate-900">{item.question}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-600">{item.answer}</p>
+            <article key={item.question} className="rounded-2xl border border-[var(--border)] bg-[var(--card-alt)] p-4">
+              <h3 className="text-sm font-semibold text-[var(--text-primary)]">{item.question}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">{item.answer}</p>
             </article>
           ))}
         </div>

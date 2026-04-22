@@ -23,7 +23,7 @@ export default function PrincipalGeneratePage() {
   if (onboardingRequired) return <PrincipalOnboardingRequiredState />;
 
   return (
-    <div className="space-y-5 rounded-3xl bg-amber-50/70 p-4 md:p-6">
+    <div className="space-y-5 rounded-3xl bg-[var(--bg)] p-4 md:p-6">
       <PrincipalPageHeader
         eyebrow="Generation Workspace"
         title="Principal Generate"
@@ -31,7 +31,7 @@ export default function PrincipalGeneratePage() {
       />
 
       {error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-400">{error}</div>
       ) : null}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
@@ -49,10 +49,10 @@ export default function PrincipalGeneratePage() {
             }
           >
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 text-sm text-[var(--text-secondary)]">
                 Provide teachers with priority topics and weekly objectives before generation starts.
               </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 text-sm text-[var(--text-secondary)]">
                 Review generated volume in analytics and library pages to maintain quality standards.
               </div>
             </div>
@@ -62,13 +62,13 @@ export default function PrincipalGeneratePage() {
         <aside className="space-y-4 xl:col-span-4">
           <SectionCard title="Quick route links" subtitle="Principal shortcuts for daily workflow.">
             <div className="grid grid-cols-1 gap-2">
-              <Link href="/principal/library" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50">
+              <Link href="/principal/library" className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--card-alt)]">
                 Open principal library
               </Link>
-              <Link href="/principal/teachers" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50">
+              <Link href="/principal/teachers" className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--card-alt)]">
                 Open teacher management
               </Link>
-              <Link href="/principal/analytics" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50">
+              <Link href="/principal/analytics" className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--card-alt)]">
                 Open analytics
               </Link>
             </div>
@@ -76,12 +76,12 @@ export default function PrincipalGeneratePage() {
 
           {dashboard ? (
             <SectionCard title="School output summary" subtitle="Current production context.">
-              <div className="space-y-2 text-sm text-slate-700">
-                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-                  Lessons generated: <span className="font-semibold text-slate-900">{dashboard.overview.totalLessonsGenerated}</span>
+              <div className="space-y-2 text-sm text-[var(--text-secondary)]">
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2">
+                  Lessons generated: <span className="font-semibold text-[var(--text-primary)]">{dashboard.overview.totalLessonsGenerated}</span>
                 </div>
-                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-                  Active teachers: <span className="font-semibold text-slate-900">{dashboard.overview.activeTeachers}</span>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2">
+                  Active teachers: <span className="font-semibold text-[var(--text-primary)]">{dashboard.overview.activeTeachers}</span>
                 </div>
               </div>
             </SectionCard>

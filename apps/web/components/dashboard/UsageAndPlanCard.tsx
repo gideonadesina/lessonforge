@@ -16,14 +16,14 @@ export default function UsageAndPlanCard({
   const percentageUsed = Math.min(100, Math.round((creditsRemaining / 200) * 100));
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-[#1A2847] bg-white dark:bg-[#0B1530]">
+    <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         {/* Left: Plan Info */}
         <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
             Plan
           </div>
-          <div className="mt-2 text-2xl font-extrabold text-slate-900 dark:text-white">
+          <div className="mt-2 text-2xl font-extrabold text-[var(--text-primary)]">
             {planLabel}
           </div>
           <Link
@@ -36,21 +36,21 @@ export default function UsageAndPlanCard({
 
         {/* Right: Credits & Usage */}
         <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
             Credits & Usage
           </div>
           <div className="mt-2">
             <div className="flex items-baseline gap-2">
-              <div className="text-2xl font-extrabold text-slate-900 dark:text-white">
+              <div className="text-2xl font-extrabold text-[var(--text-primary)]">
                 {creditsRemaining}
               </div>
-              <div className="text-sm text-slate-600 dark:text-slate-400">
+              <div className="text-sm text-[var(--text-secondary)]">
                 credits available
               </div>
             </div>
 
             {/* Progress Bar */}
-            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-[#1A2847]">
+            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[var(--border)]">
               <div
                 className={`h-full transition-all ${
                   isLowCredits ? "bg-amber-500" : "bg-violet-600"
@@ -60,7 +60,7 @@ export default function UsageAndPlanCard({
             </div>
 
             <div className="mt-2 flex items-center justify-between">
-              <div className="text-xs text-slate-600 dark:text-slate-400">
+              <div className="text-xs text-[var(--text-secondary)]">
                 ~{lessonsRemaining} lesson packs remaining
               </div>
               {isLowCredits && (

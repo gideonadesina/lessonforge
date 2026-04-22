@@ -266,21 +266,21 @@ export default function Topbar({
 
   return (
     <>
-      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between bg-white dark:bg-[#0B1530] dark:border-[#1A2847] text-slate-900 dark:text-white">
+      <div className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-[var(--text-primary)] shadow-sm md:flex-row md:items-center md:justify-between">
         <div className="min-w-0 flex items-center gap-3">
           <button
             onClick={onMenu}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white xl:hidden dark:border-[#1A2847] dark:bg-[#101827] dark:text-slate-300"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] text-[var(--text-secondary)] xl:hidden"
             aria-label="Open menu"
           >
             <span className="text-xl leading-none">☰</span>
           </button>
 
           <div className="min-w-0">
-            <div className="text-sm font-semibold text-slate-900 dark:text-white">
+            <div className="text-sm font-semibold text-[var(--text-primary)]">
               Welcome 👋
             </div>
-            <div className="truncate text-xs text-slate-500 dark:text-slate-400">
+            <div className="truncate text-xs text-[var(--text-secondary)]">
               {userEmail || "Signed in"}
             </div>
           </div>
@@ -293,7 +293,7 @@ export default function Topbar({
                 ? "Search principal workspace..."
                 : "Search lessons, topics..."
             }
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-violet-400 dark:border-[#1A2847] dark:bg-[#101827] dark:text-white dark:placeholder-slate-400 dark:focus:border-violet-500"
+            className="w-full rounded-xl border border-[var(--border)] bg-[var(--card-alt)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-none focus:border-violet-400"
           />
         </div>
 
@@ -303,7 +303,7 @@ export default function Topbar({
               <button
                 type="button"
                 onClick={() => setRoleMenuOpen((current) => !current)}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 dark:border-[#1A2847] bg-white dark:bg-[#0B1530] dark:text-slate-200 dark:hover:bg-[#101827]"
+                className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--card-alt)]"
               >
                 {switchingRole
                   ? "Switching..."
@@ -313,7 +313,7 @@ export default function Topbar({
               </button>
 
               {roleMenuOpen ? (
-                <div className="absolute right-0 z-50 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-md dark:border-[#1A2847] bg-white dark:bg-[#0B1530]">
+                <div className="absolute right-0 z-50 mt-2 w-56 rounded-xl border border-[var(--border)] bg-[var(--card)] p-2 shadow-md">
                   {availableRoles.map((candidateRole) => {
                     const isActive = candidateRole === activeRole;
                     const isSwitching = switchingRole === candidateRole;
@@ -330,7 +330,7 @@ export default function Topbar({
                           "flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-sm transition",
                           isActive
                             ? "cursor-default bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400"
-                            : "text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]",
+                            : "text-[var(--text-secondary)] hover:bg-[var(--card-alt)]",
                         ].join(" ")}
                       >
                         <span>{ROLE_CONTENT[candidateRole].label}</span>
@@ -359,13 +359,13 @@ export default function Topbar({
             <>
               <Link
                 href="/principal/generate"
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 dark:border-slate-600 bg-white dark:bg-[#0B1530]bg-[#0B1530] dark:text-slate-100 dark:hover:bg-[#101827]"
+                className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--card-alt)]"
               >
                 Generate
               </Link>
               <Link
                 href="/principal/library"
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 dark:border-slate-600 bg-white dark:bg-[#0B1530] dark:text-slate-100 dark:hover:bg-[#101827]"
+                className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--card-alt)]"
               >
                 Library
               </Link>
@@ -382,7 +382,7 @@ export default function Topbar({
                 <button
                   type="button"
                   onClick={() => setBellOpen((current) => !current)}
-                  className="relative rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 dark:border-[#1A2847] dark:bg-[#0B1530] dark:text-slate-200 dark:hover:bg-[#101827]"
+                  className="relative rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--card-alt)]"
                   aria-label="Notifications"
                 >
                   <span aria-hidden>🔔</span>
@@ -407,18 +407,18 @@ export default function Topbar({
                   onClick={() => {
                     void handleShareReferral();
                   }}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 dark:border-[#1A2847] bg-white dark:bg-[#0B1530] dark:text-slate-200 dark:hover:bg-[#101827]"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--card-alt)]"
                 >
                   Share
                 </button>
 
                 {shareMenuOpen ? (
-                  <div className="absolute right-0 z-50 mt-2 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg dark:border-[#1A2847] bg-white dark:bg-[#0B1530]">
+                  <div className="absolute right-0 z-50 mt-2 w-64 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-2 shadow-lg">
                     <div className="px-2 pb-2 pt-1">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
                         Share referral
                       </div>
-                      <div className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                      <div className="mt-1 text-xs text-[var(--text-secondary)]">
                         Invite teachers and share your LessonForge referral link.
                       </div>
                     </div>
@@ -428,7 +428,7 @@ export default function Topbar({
                         href={whatsappShareUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]"
+                        className="block rounded-xl px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--card-alt)]"
                       >
                         WhatsApp
                       </a>
@@ -437,21 +437,21 @@ export default function Topbar({
                         href={twitterShareUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]"
+                        className="block rounded-xl px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--card-alt)]"
                       >
                         X / Twitter
                       </a>
 
                       <a
                         href={emailShareUrl}
-                        className="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]"
+                        className="block rounded-xl px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--card-alt)]"
                       >
                         Email
                       </a>
 
                       <a
                         href={smsShareUrl}
-                        className="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]"
+                        className="block rounded-xl px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--card-alt)]"
                       >
                         SMS
                       </a>
@@ -461,7 +461,7 @@ export default function Topbar({
                         onClick={() => {
                           void copyReferralLink();
                         }}
-                        className="block w-full rounded-xl px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#101827]"
+                        className="block w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--text-secondary)] hover:bg-[var(--card-alt)]"
                       >
                         Copy link
                       </button>
@@ -475,7 +475,7 @@ export default function Topbar({
           <button
             onClick={logout}
             disabled={loading}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-100 disabled:opacity-60 dark:border-[#1A2847] bg-white bg-white dark:bg-[#0B1530] dark:text-slate-200 dark:hover:bg-[#101827]"
+            className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--card-alt)] disabled:opacity-60"
           >
             {loading ? "Logging out..." : "Logout"}
           </button>
@@ -499,7 +499,7 @@ export default function Topbar({
                 "whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition",
                 pathname === link.href
                   ? "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900 dark:bg-violet-900/30 dark:text-violet-400"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-[#1A2847] dark:bg-[#0B1530] dark:text-slate-300 dark:hover:bg-[#101827]",
+                  : "border-[var(--border)] bg-[var(--card)] text-[var(--text-secondary)] hover:bg-[var(--card-alt)]",
               ].join(" ")}
             >
               {link.label}

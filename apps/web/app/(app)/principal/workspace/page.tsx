@@ -53,7 +53,7 @@ export default function PrincipalWorkspacePage() {
   if (onboardingRequired) return <PrincipalOnboardingRequiredState />;
 
   return (
-    <div className="space-y-5 rounded-3xl bg-amber-50/70 p-4 md:p-6">
+    <div className="space-y-5 rounded-3xl bg-[var(--card-alt)] p-4 md:p-6">
       <PrincipalPageHeader
         eyebrow="School Workspace"
         title="School Identity & Access"
@@ -61,7 +61,7 @@ export default function PrincipalWorkspacePage() {
       />
 
       {error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-400">{error}</div>
       ) : null}
 
       {dashboard ? (
@@ -69,27 +69,27 @@ export default function PrincipalWorkspacePage() {
           <div className="space-y-4 xl:col-span-7">
             <SectionCard title="School profile" subtitle="Core workspace identity for your principal area.">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <div className="rounded-xl border border-slate-200 bg-white p-3">
-                  <div className="text-xs uppercase tracking-wide text-slate-500">School name</div>
-                  <div className="mt-1 text-sm font-bold text-slate-900">{dashboard.school.name}</div>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
+                  <div className="text-xs uppercase tracking-wide text-[var(--text-tertiary)]">School name</div>
+                  <div className="mt-1 text-sm font-bold text-[var(--text-primary)]">{dashboard.school.name}</div>
                 </div>
-                <div className="rounded-xl border border-slate-200 bg-white p-3">
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Principal name</div>
-                  <div className="mt-1 text-sm font-bold text-slate-900">{dashboard.school.principalName || "—"}</div>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
+                  <div className="text-xs uppercase tracking-wide text-[var(--text-tertiary)]">Principal name</div>
+                  <div className="mt-1 text-sm font-bold text-[var(--text-primary)]">{dashboard.school.principalName || "—"}</div>
                 </div>
-                <div className="rounded-xl border border-slate-200 bg-white p-3">
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Workspace created</div>
-                  <div className="mt-1 text-sm font-bold text-slate-900">{formatDateOnly(dashboard.school.createdAt)}</div>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
+                  <div className="text-xs uppercase tracking-wide text-[var(--text-tertiary)]">Workspace created</div>
+                  <div className="mt-1 text-sm font-bold text-[var(--text-primary)]">{formatDateOnly(dashboard.school.createdAt)}</div>
                 </div>
-                <div className="rounded-xl border border-slate-200 bg-white p-3">
-                  <div className="text-xs uppercase tracking-wide text-slate-500">School ID</div>
-                  <div className="mt-1 break-all font-mono text-xs text-slate-700">{dashboard.school.id}</div>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
+                  <div className="text-xs uppercase tracking-wide text-[var(--text-tertiary)]">School ID</div>
+                  <div className="mt-1 break-all font-mono text-xs text-[var(--text-secondary)]">{dashboard.school.id}</div>
                 </div>
               </div>
             </SectionCard>
 
             <SectionCard title="Workspace guidance" subtitle="Share these instructions with your teaching team.">
-              <ol className="list-decimal space-y-2 pl-5 text-sm text-slate-700">
+              <ol className="list-decimal space-y-2 pl-5 text-sm text-[var(--text-secondary)]">
                 <li>Teachers sign in and join your school using the active school code.</li>
                 <li>Monitor roster and engagement in the Teachers and Analytics pages.</li>
                 <li>Regenerate code any time you need to rotate access security.</li>
@@ -100,16 +100,16 @@ export default function PrincipalWorkspacePage() {
           <aside className="space-y-4 xl:col-span-5">
             <SectionCard title="School code" subtitle="Use this code to onboard teachers to this workspace.">
               <div className="space-y-3">
-                <div className="rounded-xl border border-violet-200 bg-violet-50 p-3">
+                <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 dark:border-violet-900 dark:bg-violet-900/20">
                   <div className="text-xs uppercase tracking-wide text-violet-700">Active code</div>
-                  <div className="mt-1 break-all font-mono text-2xl font-black tracking-wider text-slate-900">
+                  <div className="mt-1 break-all font-mono text-2xl font-black tracking-wider text-[var(--text-primary)]">
                     {dashboard.school.code}
                   </div>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <button
                     onClick={() => copySchoolCode(dashboard.school.code)}
-                    className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-semibold text-[var(--text-secondary)] hover:bg-[var(--card-alt)]"
                   >
                     Copy code
                   </button>

@@ -5,7 +5,7 @@ import { TeacherStatus } from "@/lib/principal/types";
 const STATUS_STYLE: Record<TeacherStatus, string> = {
   active: "bg-emerald-50 text-emerald-700 border-emerald-200",
   pending: "bg-amber-50 text-amber-700 border-amber-200",
-  disabled: "bg-slate-100 text-slate-700 border-slate-200",
+  disabled: "bg-[var(--card-alt)] text-[var(--text-secondary)] border-[var(--border)]",
   removed: "bg-rose-50 text-rose-700 border-rose-200",
 };
 

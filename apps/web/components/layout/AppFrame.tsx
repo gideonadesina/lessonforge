@@ -22,7 +22,7 @@ export default function AppFrame({
   }
 
   return (
-    <div className="min-h-screen bg-[#FAF9F6] dark:bg-[#08122b]">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text-primary)]">
       <Sidebar open={sidebarOpen} setOpen={setSidebarOpen} />
 
         <main className="xl:pl-72">
