@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@supabase/supabase-js";
+
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,7 +44,7 @@ type ConsumeCreditRpcResult = {
 };
 
 async function consumeSlidesCredits(
-  supabase: ReturnType<typeof createClient>
+  supabase: SupabaseClient
 ): Promise<
   | { ok: true }
   | { ok: false; type: "rpc_error"; detail: string }
@@ -61,6 +63,7 @@ async function consumeSlidesCredits(
     }
 
     const result = (creditData ?? null) as ConsumeCreditRpcResult | null;
+
     if (!result?.ok) {
       return {
         ok: false,

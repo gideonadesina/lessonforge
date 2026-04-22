@@ -107,24 +107,26 @@ function normalizeInput(
   if (!userId) return { ok: false, error: "Missing user_id in metadata" };
   if (!plan) return { ok: false, error: "Missing or invalid school plan_id in metadata" };
 
-  return {
-    ok: true,
-    input: {
-      reference,
-      schoolId,
-      userId,
-      plan,
-      amount: typeof paystackData?.amount === "number" ? paystackData.amount : null,
-      currency: paystackData?.currency ? String(paystackData.currency) : null,
-      paystackCustomerCode: String(paystackData?.customer?.customer_code ?? ""),
-      paystackSubscriptionCode: String(
-        paystackData?.subscription?.subscription_code ?? ""
-      ),
-      paystackEmail: String(paystackData?.customer?.email ?? ""),
-      payerPayload: paystackData,
-      flow: "school_webhook",
-    },
-  };
+ const ps = paystackData as any;
+
+return {
+  ok: true,
+  input: {
+    reference,
+    schoolId,
+    userId,
+    plan,
+    amount: typeof paystackData?.amount === "number" ? paystackData.amount : null,
+    currency: paystackData?.currency ? String(paystackData.currency) : null,
+    paystackCustomerCode: String(ps?.customer?.customer_code ?? ""),
+    paystackSubscriptionCode: String(
+      ps?.subscription?.subscription_code ?? ""
+    ),
+    paystackEmail: String(ps?.customer?.email ?? ""),
+    payerPayload: paystackData,
+    flow: "school_webhook",
+  },
+};
 }
 
 /**
