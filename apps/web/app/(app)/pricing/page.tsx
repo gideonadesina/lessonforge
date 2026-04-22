@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import {
-  LESSON_PACK_CREDIT_COST,
   NEW_USER_FREE_CREDITS,
   TEACHER_PRICING_PLANS,
   estimateLessonPacks,

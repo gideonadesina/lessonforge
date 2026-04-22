@@ -289,7 +289,25 @@ export default function GeneratePage() {
   }, [creditsRemaining, isGenerating, loading, profileLoading, redirectingToUpgrade, result, router]);
 
   useEffect(() => {
-    (window as any).__FORGE_CONTEXT__ = {
+    const forgeWindow = window as Window & {
+      __FORGE_CONTEXT__?: {
+        page: string;
+        teacherName: string | undefined;
+        currentForm: {
+          curriculum: string;
+          schoolLevel: string;
+          subject: string;
+          grade: string;
+          age: string;
+          topic: string;
+          numberOfSlides: number;
+          durationMins: number;
+        };
+        currentLesson: Generated | null;
+        hasGeneratedResult: boolean;
+      };
+    };
+    forgeWindow.__FORGE_CONTEXT__ = {
       page: "generate",
       teacherName: undefined,
       currentForm: {
@@ -307,9 +325,9 @@ export default function GeneratePage() {
     };
 
     return () => {
-      const current = (window as any).__FORGE_CONTEXT__;
+      const current = forgeWindow.__FORGE_CONTEXT__;
       if (current?.page === "generate") {
-        delete (window as any).__FORGE_CONTEXT__;
+        delete forgeWindow.__FORGE_CONTEXT__;
       }
     };
   }, [
@@ -449,8 +467,8 @@ export default function GeneratePage() {
       completeProgress();
       setSaveMsg("✅ Auto-saved to Library");
       setIsGenerating(false);
-    } catch (e: any) {
-      setError(e?.message || "Something went wrong");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Something went wrong");
       setIsGenerating(false);
     } finally {
       setLoading(false);

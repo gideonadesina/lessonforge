@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { AuthLoadingOverlay } from "@/components/auth/AuthLoadingOverlay";
 import LessonForgeWordmark from "@/components/auth/LessonForgeWordmark";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
-import { getRoleHomePath, readStoredRole, type AppRole } from "@/lib/auth/roles";
+import { readStoredRole, type AppRole } from "@/lib/auth/roles";
 
 export default function OAuthCallbackPage() {
   const router = useRouter();

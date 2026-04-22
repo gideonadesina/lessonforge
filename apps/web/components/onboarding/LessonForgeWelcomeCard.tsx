@@ -52,7 +52,7 @@ export default function LessonForgeWelcomeCard({ firstName, roleType, onStart }:
         message={
           isPrincipal
             ? `Welcome to LessonForge, ${firstName}! Your school workspace is set up. Explore with 8 complimentary credits.`
-            : `Welcome to LessonForge, ${firstName}! Your teaching workspace is ready. You've been given 8 free credits to explore.`
+            : `Welcome to LessonForge, ${firstName}! Your teaching workspace is ready. You have been given 8 free credits to explore.`
         }
         subtext="8 credits ≈ 2 lesson packs · 8 worksheets · or mix as you go"
       />
@@ -67,14 +67,14 @@ export default function LessonForgeWelcomeCard({ firstName, roleType, onStart }:
           style={{ fontFamily: '"Playfair Display", Georgia, serif' }}
         >
           {isPrincipal
-            ? "Your school's AI-powered resource engine is ready."
+            ? "Your school\u2019s AI-powered resource engine is ready."
             : "Your AI-powered teaching assistant is ready."}
         </h1>
         <p
           className="mt-4 text-center text-[11px] uppercase text-[#534AB7]"
           style={{ fontFamily: '"Trebuchet MS", sans-serif', letterSpacing: "2.5px" }}
         >
-          HERE'S WHAT YOU CAN CREATE
+          HERE&apos;S WHAT YOU CAN CREATE
         </p>
 
         <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">

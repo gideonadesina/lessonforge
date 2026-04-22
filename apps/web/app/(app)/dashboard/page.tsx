@@ -3,14 +3,12 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { signOutAndRedirect } from "@/lib/auth/logout";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { useProfile } from "@/lib/useProfile";
 import { useToast } from "@/components/ui/ToastProvider";
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import ForgeGuideStrip from "@/components/dashboard/ForgeGuideStrip";
 import QuickActionsGrid from "@/components/dashboard/QuickActionsGrid";
-import PlanningStatusCard from "@/components/dashboard/PlanningStatusCard";
 import RecentActivity from "@/components/dashboard/RecentActivity";
 import WeeklyInsight from "@/components/dashboard/WeeklyInsight";
 import { listSchemeOfWork } from "@/lib/planning/scheme";
@@ -64,10 +62,6 @@ function relativeTime(iso: string) {
   return `${days}d ago`;
 }
 
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
-}
-
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
   return String(error);
@@ -95,17 +89,11 @@ export default function DashboardPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [schoolMembershipLoading, setSchoolMembershipLoading] = useState(true);
   const [hasSchoolMembership, setHasSchoolMembership] = useState(false);
-  const [copiedReferral, setCopiedReferral] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
-  const [welcomeMarked, setWelcomeMarked] = useState(false);
   const [flowBusy, setFlowBusy] = useState(false);
 
-  const teacherName =
-    (profile as any)?.full_name ||
-    (profile as any)?.name ||
-    userEmail?.split("@")[0] ||
-    "Teacher";
+  const teacherName = profile?.full_name || userEmail?.split("@")[0] || "Teacher";
   const firstName = String(teacherName).trim().split(" ")[0] || "Teacher";
 
   const loadSchoolMembership = useCallback(async () => {
@@ -168,13 +156,21 @@ export default function DashboardPage() {
   }, [profile]);
 
   useEffect(() => {
-    if (!showWelcome || !profile?.id || welcomeMarked) return;
-    setWelcomeMarked(true);
+    if (!showWelcome || !profile?.id) return;
     void markWelcomeSeen();
-  }, [profile?.id, showWelcome, welcomeMarked]);
+  }, [markWelcomeSeen, profile?.id, showWelcome]);
 
   useEffect(() => {
-    (window as any).__FORGE_CONTEXT__ = {
+    const forgeWindow = window as Window & {
+      __FORGE_CONTEXT__?: {
+        page: string;
+        teacherName: string;
+        credits: number;
+        plan: string;
+        recentLessons: LessonRow[];
+      };
+    };
+    forgeWindow.__FORGE_CONTEXT__ = {
       page: "dashboard",
       teacherName,
       credits: creditsRemaining,
@@ -273,14 +269,6 @@ export default function DashboardPage() {
     };
   }, [router, supabase]);
 
-  async function logout() {
-    setMsg(null);
-    await signOutAndRedirect({
-      signOut: () => supabase.auth.signOut(),
-      to: "/login",
-    });
-  }
-
   async function deleteLesson(id: string) {
     const ok = window.confirm("Delete this item? This cannot be undone.");
     if (!ok) return;
@@ -319,31 +307,6 @@ export default function DashboardPage() {
       recent7d,
     };
   }, [lessons, worksheetsCount]);
-
-  const activityBars = useMemo(() => {
-    const days = 7;
-    const buckets = Array.from({ length: days }, () => 0);
-    const now = new Date();
-    const start = new Date(now);
-    start.setDate(now.getDate() - (days - 1));
-    start.setHours(0, 0, 0, 0);
-
-    for (const lesson of lessons) {
-      const t = new Date(lesson.created_at);
-      if (Number.isNaN(t.getTime())) continue;
-      const diffDays = Math.floor(
-        (t.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)
-      );
-      if (diffDays >= 0 && diffDays < days) buckets[diffDays] += 1;
-    }
-
-    const max = Math.max(1, ...buckets);
-
-    return buckets.map((value) => ({
-      value,
-      heightPct: clamp(Math.round((value / max) * 100), 6, 100),
-    }));
-  }, [lessons]);
 
   const recent = useMemo(() => lessons.slice(0, 8), [lessons]);
 
@@ -409,49 +372,10 @@ export default function DashboardPage() {
     };
   }, [academicEvents, schemeRows]);
 
-  const schemeUploaded = schemeRows.length > 0;
-  const calendarUploaded = academicEvents.length > 0;
-  const curriculumCount = new Set(
-    lessons.map((lesson) => lesson.curriculum).filter(Boolean)
-  ).size;
-  const configuredClasses = new Set(
-    schemeRows.map((row) => row.class_name).filter(Boolean)
-  ).size;
-  const pendingItems = planningReminders.pendingTopicsCount;
-
   const isOutOfCredits = creditsRemaining <= 0;
   const isLowCredits = creditsRemaining > 0 && creditsRemaining <= 3;
 
-  const referralCode =
-    (profile as any)?.referral_code ||
-    ((profile as any)?.id
-      ? String((profile as any).id).slice(0, 6).toUpperCase()
-      : null);
-
-  const referralLink = referralCode
-    ? `https://lessonforge.app/signup?ref=${encodeURIComponent(referralCode)}`
-    : "";
-
-  async function copyReferralLink() {
-    if (!referralLink) return;
-
-    try {
-      await navigator.clipboard.writeText(referralLink);
-      setCopiedReferral(true);
-      showToast("🔗 Referral link copied!");
-      setTimeout(() => setCopiedReferral(false), 2000);
-    } catch {
-      showToast("Could not copy referral link.");
-    }
-  }
-
-  const whatsappReferralLink = referralLink
-    ? `https://wa.me/?text=${encodeURIComponent(
-        `I’ve been using LessonForge to create lesson packs faster. Sign up with my link: ${referralLink}`
-      )}`
-    : "#";
-
-  async function markWelcomeSeen() {
+  const markWelcomeSeen = useCallback(async () => {
     if (!profile?.id) return;
     setFlowBusy(true);
     try {
@@ -468,7 +392,7 @@ export default function DashboardPage() {
     } finally {
       setFlowBusy(false);
     }
-  }
+  }, [profile?.id, supabase]);
 
   useEffect(() => {
     if (showOnboarding || showWelcome) return;
@@ -485,6 +409,7 @@ export default function DashboardPage() {
           onCompleted={() => {
             setShowOnboarding(false);
             setShowWelcome(true);
+            setWelcomeMarked(false);
           }}
         />
       </div>
@@ -499,6 +424,7 @@ export default function DashboardPage() {
           roleType="teacher"
           onStart={() => {
             setShowWelcome(false);
+            setWelcomeMarked(true);
           }}
         />
       </div>

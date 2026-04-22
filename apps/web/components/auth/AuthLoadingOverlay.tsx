@@ -19,10 +19,7 @@ export function AuthLoadingOverlay({
   const [internalProgress, setInternalProgress] = useState(8);
 
   useEffect(() => {
-    if (typeof progress === "number") {
-      setInternalProgress(Math.max(0, Math.min(progress, 100)));
-      return;
-    }
+    if (typeof progress === "number") return;
 
     const timer = window.setInterval(() => {
       setInternalProgress((current) => {
@@ -43,7 +40,7 @@ export function AuthLoadingOverlay({
 
   const status = useMemo(() => {
     if (title) return title;
-    if (displayProgress >= 100) return "You're in! ✓";
+    if (displayProgress >= 100) return "You are in! ✓";
     if (displayProgress >= 70) return "Almost ready for you...";
     if (displayProgress >= 30) return "Setting up your workspace...";
     return "Verifying your account...";

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import AuthNotificationBanner from "@/components/auth/AuthNotificationBanner";
 import {
   SCHOOL_PRICING_PLANS,
   getCreditUsageNote,
@@ -23,7 +24,7 @@ export default function PrincipalPricingPage() {
     return session?.access_token ?? "";
   }
 
-  async function verifySchoolPayment(reference: string) {
+  const verifySchoolPayment = useCallback(async (reference: string) => {
     setVerifyingPayment(true);
     setVerifyError(null);
     setVerifyReference(reference);
@@ -57,7 +58,7 @@ export default function PrincipalPricingPage() {
     } finally {
       setVerifyingPayment(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -67,7 +68,7 @@ export default function PrincipalPricingPage() {
     if (paymentComplete === "true" && reference && verifyReference !== reference) {
       void verifySchoolPayment(reference);
     }
-  }, [verifyReference]);
+  }, [verifyReference, verifySchoolPayment]);
 
   async function handleSchoolPlanSelect(planId: (typeof SCHOOL_PRICING_PLANS)[number]["id"]) {
     if (planId === "school_enterprise") {
@@ -160,6 +161,13 @@ export default function PrincipalPricingPage() {
         </div>
       )}
 
+      <AuthNotificationBanner
+        type="celebration"
+        icon="🎊"
+        message="You have fully explored LessonForge with your free credits — now let us unlock the full experience."
+        subtext="Give your whole school the tools to plan smarter — together, in one workspace."
+      />
+
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {SCHOOL_PRICING_PLANS.map((plan) => (
           <SchoolPricingPlanCard
@@ -167,6 +175,7 @@ export default function PrincipalPricingPage() {
             plan={plan}
             loading={busyPlanId === plan.id}
             onSelect={handleSchoolPlanSelect}
+            packLabel="resource packs"
           />
         ))}
       </section>
@@ -254,7 +263,7 @@ export default function PrincipalPricingPage() {
           <article className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
             <h3 className="text-sm font-semibold text-slate-900">What happens after I pay?</h3>
             <p className="mt-2 text-sm leading-relaxed text-slate-600">
-              Your school's credit pool is activated and visible in your Principal Billing dashboard. You can immediately add teacher accounts and begin distributing credits.
+              Your school&apos;s credit pool is activated and visible in your Principal Billing dashboard. You can immediately add teacher accounts and begin distributing credits.
             </p>
           </article>
           <article className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
