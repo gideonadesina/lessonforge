@@ -5,10 +5,13 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  getSchoolPlanPricing,
   getSchoolPlanSharedCredits,
   getSchoolPlanTeacherLimit,
+  isValidSchoolPlanId,
   type SchoolPlanId,
 } from "@/lib/billing/server-school-pricing";
+import { generateSchoolCode } from "@/lib/principal/utils";
 
 export interface ProcessSchoolPaymentInput {
   reference: string;
@@ -24,6 +27,28 @@ export interface ProcessSchoolPaymentInput {
   flow?: string | null;
 }
 
+type ProcessSchoolPaymentPayload =
+  | ProcessSchoolPaymentInput
+  | {
+      reference?: unknown;
+      amount?: unknown;
+      currency?: unknown;
+      customer?: {
+        customer_code?: unknown;
+        email?: unknown;
+      } | null;
+      subscription?: {
+        subscription_code?: unknown;
+      } | null;
+      metadata?: {
+        user_id?: unknown;
+        school_id?: unknown;
+        plan_id?: unknown;
+        plan?: unknown;
+      } | null;
+      [key: string]: unknown;
+    };
+
 export interface ProcessSchoolPaymentResult {
   ok: boolean;
   reference: string;
@@ -33,6 +58,73 @@ export interface ProcessSchoolPaymentResult {
   teacherLimitAwarded: number;
   alreadyProcessed: boolean;
   error?: string;
+}
+
+function normalizeSchoolPlanId(rawPlan: unknown): SchoolPlanId | null {
+  if (!isValidSchoolPlanId(rawPlan)) return null;
+  return rawPlan as SchoolPlanId;
+}
+
+function normalizeInput(
+  payload: ProcessSchoolPaymentPayload
+): { ok: true; input: ProcessSchoolPaymentInput } | { ok: false; error: string } {
+  const structured = payload as ProcessSchoolPaymentInput;
+
+  if (structured?.reference && structured?.schoolId && structured?.userId) {
+    const reference = String(structured.reference).trim();
+    const schoolId = String(structured.schoolId).trim();
+    const userId = String(structured.userId).trim();
+    const plan = normalizeSchoolPlanId(structured.plan);
+
+    if (!reference) return { ok: false, error: "Missing payment reference" };
+    if (!schoolId) return { ok: false, error: "Missing school_id" };
+    if (!userId) return { ok: false, error: "Missing user_id" };
+    if (!plan) return { ok: false, error: "Missing or invalid school plan_id" };
+
+    return {
+      ok: true,
+      input: {
+        ...structured,
+        reference,
+        schoolId,
+        userId,
+        plan,
+      },
+    };
+  }
+
+  const paystackData = payload as ProcessSchoolPaymentPayload & {
+    metadata?: Record<string, unknown> | null;
+  };
+  const metadata = paystackData?.metadata ?? {};
+  const reference = String(paystackData?.reference ?? "").trim();
+  const schoolId = String(metadata?.school_id ?? "").trim();
+  const userId = String(metadata?.user_id ?? "").trim();
+  const plan = normalizeSchoolPlanId(metadata?.plan_id ?? metadata?.plan);
+
+  if (!reference) return { ok: false, error: "Missing payment reference" };
+  if (!schoolId) return { ok: false, error: "Missing school_id in metadata" };
+  if (!userId) return { ok: false, error: "Missing user_id in metadata" };
+  if (!plan) return { ok: false, error: "Missing or invalid school plan_id in metadata" };
+
+  return {
+    ok: true,
+    input: {
+      reference,
+      schoolId,
+      userId,
+      plan,
+      amount: typeof paystackData?.amount === "number" ? paystackData.amount : null,
+      currency: paystackData?.currency ? String(paystackData.currency) : null,
+      paystackCustomerCode: String(paystackData?.customer?.customer_code ?? ""),
+      paystackSubscriptionCode: String(
+        paystackData?.subscription?.subscription_code ?? ""
+      ),
+      paystackEmail: String(paystackData?.customer?.email ?? ""),
+      payerPayload: paystackData,
+      flow: "school_webhook",
+    },
+  };
 }
 
 /**
@@ -108,6 +200,17 @@ export async function recordSchoolPaymentTransaction(
   });
 
   if (error) {
+    if ((error as any)?.code === "23505") {
+      const retry = await getSchoolPaymentTransactionByReference(input.reference);
+      if (retry) {
+        return {
+          isNew: false,
+          alreadyProcessed: Boolean(retry.processed),
+          sharedCreditsAwarded: Number(retry.shared_credits_awarded ?? 0),
+          teacherLimitAwarded: Number(retry.teacher_limit_awarded ?? 0),
+        };
+      }
+    }
     throw new Error(`Failed to record school payment: ${error.message}`);
   }
 
@@ -119,13 +222,9 @@ export async function recordSchoolPaymentTransaction(
   };
 }
 
-/**
- * Safe school credit increment: Get current balance, add credits, update atomically.
- * Uses compare-and-swap to prevent race conditions.
- */
-async function incrementSchoolCreditsAtomic(
+async function updateSchoolCreditsAtomic(
   schoolId: string,
-  creditsToAdd: number,
+  creditsToSet: number,
   maxAttempts: number = 3
 ): Promise<{ previousBalance: number; newBalance: number }> {
   const admin = createAdminClient();
@@ -146,7 +245,7 @@ async function incrementSchoolCreditsAtomic(
       throw new Error("Invalid current school credits balance");
     }
 
-    const newBalance = previousBalance + creditsToAdd;
+    const newBalance = creditsToSet;
 
     const { data: updated, error: updateError } = await admin
       .from("schools")
@@ -180,15 +279,70 @@ async function incrementSchoolCreditsAtomic(
 /**
  * Grant shared credits to school from successful payment.
  */
-async function grantSchoolCreditsForPayment(
+async function assignSchoolCreditsForPayment(
   schoolId: string,
-  creditsToGrant: number
+  creditsToAssign: number
 ): Promise<{ previousBalance: number; newBalance: number }> {
-  if (creditsToGrant <= 0) {
-    throw new Error("Credits to grant must be positive");
+  if (creditsToAssign <= 0) {
+    throw new Error("Credits to assign must be positive");
   }
 
-  return incrementSchoolCreditsAtomic(schoolId, creditsToGrant);
+  return updateSchoolCreditsAtomic(schoolId, creditsToAssign);
+}
+
+async function ensureActiveSchoolCode(
+  schoolId: string,
+  userId: string
+): Promise<string> {
+  const admin = createAdminClient();
+  const { data: existingCode, error: existingCodeError } = await admin
+    .from("school_codes")
+    .select("code")
+    .eq("school_id", schoolId)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (existingCodeError) {
+    throw new Error(`Failed to check existing school code: ${existingCodeError.message}`);
+  }
+
+  if (existingCode?.code) {
+    return String(existingCode.code);
+  }
+
+  const { data: school, error: schoolError } = await admin
+    .from("schools")
+    .select("name")
+    .eq("id", schoolId)
+    .maybeSingle();
+
+  if (schoolError) {
+    throw new Error(`Failed to load school name: ${schoolError.message}`);
+  }
+
+  const schoolName = String(school?.name ?? "LessonForge School");
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const code = generateSchoolCode(schoolName);
+    const { error: insertCodeError } = await admin.from("school_codes").insert({
+      code,
+      school_id: schoolId,
+      is_active: true,
+      generated_by: userId,
+    });
+
+    if (!insertCodeError) {
+      return code;
+    }
+
+    if ((insertCodeError as any)?.code === "23505") {
+      continue;
+    }
+
+    throw new Error(`Failed to create school code: ${insertCodeError.message}`);
+  }
+
+  throw new Error("Failed to create a unique school code after retries");
 }
 
 /**
@@ -196,9 +350,11 @@ async function grantSchoolCreditsForPayment(
  */
 async function markSchoolPaymentProcessed(
   reference: string,
-  schoolId: string,
-  sharedCreditsAwarded: number,
-  teacherLimitAwarded: number
+  snapshot: {
+    sharedCreditsAwarded: number;
+    teacherLimitAwarded: number;
+    schoolCode: string;
+  }
 ) {
   const admin = createAdminClient();
   const now = new Date().toISOString();
@@ -208,6 +364,8 @@ async function markSchoolPaymentProcessed(
     .update({
       processed: true,
       processed_at: now,
+      shared_credits_awarded_at: now,
+      result_snapshot: snapshot,
       updated_at: now,
     })
     .eq("reference", reference);
@@ -216,16 +374,6 @@ async function markSchoolPaymentProcessed(
     throw new Error(`Failed to mark school payment processed: ${error.message}`);
   }
 
-  // Also update school's teacher_limit if provided
-  if (teacherLimitAwarded > 0) {
-    await admin
-      .from("schools")
-      .update({
-        teacher_limit: teacherLimitAwarded,
-        updated_at: now,
-      })
-      .eq("id", schoolId);
-  }
 }
 
 /**
@@ -236,8 +384,24 @@ async function markSchoolPaymentProcessed(
  * - Either verify endpoint or webhook can run independently
  */
 export async function processSchoolPayment(
-  input: ProcessSchoolPaymentInput
+  payload: ProcessSchoolPaymentPayload
 ): Promise<ProcessSchoolPaymentResult> {
+  const normalized = normalizeInput(payload);
+  if (!normalized.ok) {
+    return {
+      ok: false,
+      reference: "",
+      schoolId: "",
+      plan: "school_starter",
+      sharedCreditsAwarded: 0,
+      teacherLimitAwarded: 0,
+      alreadyProcessed: false,
+      error: normalized.error,
+    };
+  }
+
+  const input = normalized.input;
+
   try {
     // Check if already recorded
     const transaction = await recordSchoolPaymentTransaction(input);
@@ -255,18 +419,45 @@ export async function processSchoolPayment(
       };
     }
 
-    // Grant credits
-    const creditResult = await grantSchoolCreditsForPayment(
+    const planPricing = getSchoolPlanPricing(input.plan);
+    if (!planPricing) {
+      throw new Error("Unable to resolve school plan pricing");
+    }
+
+    // Assign credits to current purchase entitlement (no expiry)
+    await assignSchoolCreditsForPayment(
       input.schoolId,
-      transaction.sharedCreditsAwarded
+      planPricing.sharedCredits
     );
+
+    const schoolCode = await ensureActiveSchoolCode(input.schoolId, input.userId);
+
+    const admin = createAdminClient();
+    const now = new Date().toISOString();
+    const { error: schoolUpdateError } = await admin
+      .from("schools")
+      .update({
+        plan_type: input.plan,
+        shared_credits: planPricing.sharedCredits,
+        credits_used: 0,
+        subscription_active: true,
+        teacher_limit: planPricing.teacherLimit,
+        updated_at: now,
+      })
+      .eq("id", input.schoolId);
+
+    if (schoolUpdateError) {
+      throw new Error(`Failed to update school entitlement: ${schoolUpdateError.message}`);
+    }
 
     // Mark as processed
     await markSchoolPaymentProcessed(
       input.reference,
-      input.schoolId,
-      transaction.sharedCreditsAwarded,
-      transaction.teacherLimitAwarded
+      {
+        sharedCreditsAwarded: planPricing.sharedCredits,
+        teacherLimitAwarded: planPricing.teacherLimit,
+        schoolCode,
+      }
     );
 
     return {
@@ -274,19 +465,22 @@ export async function processSchoolPayment(
       reference: input.reference,
       schoolId: input.schoolId,
       plan: input.plan,
-      sharedCreditsAwarded: transaction.sharedCreditsAwarded,
-      teacherLimitAwarded: transaction.teacherLimitAwarded,
+      sharedCreditsAwarded: planPricing.sharedCredits,
+      teacherLimitAwarded: planPricing.teacherLimit,
       alreadyProcessed: false,
     };
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "School payment processing failed";
 
+    const fallback = normalizeInput(payload);
+    const fallbackInput = fallback.ok ? fallback.input : null;
+
     return {
       ok: false,
-      reference: input.reference,
-      schoolId: input.schoolId,
-      plan: input.plan,
+      reference: fallbackInput?.reference ?? "",
+      schoolId: fallbackInput?.schoolId ?? "",
+      plan: fallbackInput?.plan ?? "school_starter",
       sharedCreditsAwarded: 0,
       teacherLimitAwarded: 0,
       alreadyProcessed: false,

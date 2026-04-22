@@ -31,8 +31,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { plan } = (await req.json()) as {
+    const {
+      plan,
+      callbackPath,
+      schoolName,
+    } = (await req.json()) as {
       plan: unknown;
+      callbackPath?: unknown;
+      schoolName?: unknown;
     };
 
     if (!isValidSchoolPlanId(plan)) {
@@ -65,10 +71,11 @@ export async function POST(req: NextRequest) {
       schoolId = membership.school_id;
     } else {
       // Create a new school for this principal
+      const normalizedSchoolName = String(schoolName ?? "").trim();
       const { data: newSchool, error: schoolError } = await admin
         .from("schools")
         .insert({
-          name: `School - ${user.email}`,
+          name: normalizedSchoolName || `School - ${user.email}`,
           principal_id: user.id,
           shared_credits: 0,
           teacher_limit: 0,
@@ -102,6 +109,11 @@ export async function POST(req: NextRequest) {
       { onConflict: "id" }
     );
 
+    const normalizedCallbackPath =
+      typeof callbackPath === "string" && callbackPath.startsWith("/")
+        ? callbackPath
+        : "/principal/pricing?paymentComplete=true";
+
     const res = await fetch("https://api.paystack.co/transaction/initialize", {
       method: "POST",
       headers: paystackHeaders(),
@@ -109,12 +121,12 @@ export async function POST(req: NextRequest) {
         email: user.email,
         amount: amountMinor,
         currency: "NGN",
-        callback_url: appUrl("/principal/pricing?paymentComplete=true"),
+        callback_url: appUrl(normalizedCallbackPath),
         metadata: {
-          purpose: "school_plan_purchase",
+          payment_purpose: "school",
           user_id: user.id,
           school_id: schoolId,
-          plan,
+          plan_id: plan,
           currency: "NGN",
           expected_amount_minor: amountMinor,
           shared_credits_allowance: sharedCredits,
