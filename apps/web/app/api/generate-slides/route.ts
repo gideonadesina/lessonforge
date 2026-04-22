@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+const SLIDES_CREDIT_COST = 2;
 
 type Duration = "20min" | "45min" | "60min";
 
@@ -33,6 +35,43 @@ type OpenAIChatResponse = {
     code?: string;
   };
 };
+
+type ConsumeCreditRpcResult = {
+  ok?: boolean;
+  error?: string;
+};
+
+async function consumeSlidesCredits(
+  supabase: ReturnType<typeof createClient>
+): Promise<
+  | { ok: true }
+  | { ok: false; type: "rpc_error"; detail: string }
+  | { ok: false; type: "insufficient"; message: string }
+> {
+  for (let i = 0; i < SLIDES_CREDIT_COST; i += 1) {
+    const { data: creditData, error: creditErr } =
+      await supabase.rpc("consume_generation_credit");
+
+    if (creditErr) {
+      return {
+        ok: false,
+        type: "rpc_error",
+        detail: creditErr.message,
+      };
+    }
+
+    const result = (creditData ?? null) as ConsumeCreditRpcResult | null;
+    if (!result?.ok) {
+      return {
+        ok: false,
+        type: "insufficient",
+        message: result?.error || "No credits",
+      };
+    }
+  }
+
+  return { ok: true };
+}
 
 function buildSystemPrompt({
   grade,
@@ -271,6 +310,46 @@ Return ONLY the JSON object. No markdown. No extra text.
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = req.headers.get("authorization") ?? "";
+    const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+
+    if (!token) {
+      return NextResponse.json(
+        { error: "Unauthorized (no token)" },
+        { status: 401 }
+      );
+    }
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+        },
+        global: {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      }
+    );
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json(
+        {
+          error: "Unauthorized (invalid token)",
+          message: authError?.message,
+        },
+        { status: 401 }
+      );
+    }
+
     let body: GenerateSlidesBody;
 
     try {
@@ -288,6 +367,31 @@ export async function POST(req: NextRequest) {
             "Missing required fields: topic, grade, subject, duration, tone, bloom",
         },
         { status: 400 }
+      );
+    }
+
+    const creditResult = await consumeSlidesCredits(supabase);
+    if (!creditResult.ok) {
+      if (creditResult.type === "rpc_error") {
+        return NextResponse.json(
+          { error: "Credit check failed", detail: creditResult.detail },
+          { status: 500 }
+        );
+      }
+
+      const msg = creditResult.message || "No credits";
+      const status =
+        typeof msg === "string" && msg.toLowerCase().includes("not authenticated")
+          ? 401
+          : 402;
+
+      return NextResponse.json({ error: msg }, { status });
+    }
+
+    if (!user.email_confirmed_at) {
+      return NextResponse.json(
+        { error: "Please confirm your email before generating lessons." },
+        { status: 403 }
       );
     }
 

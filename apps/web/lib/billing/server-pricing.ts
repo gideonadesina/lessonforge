@@ -23,28 +23,28 @@ export const TEACHER_PLAN_PRICING: Record<TeacherPlanId, TeacherPlanPricing> = {
     name: "Basic",
     priceNaira: 3000,
     priceUsdCents: 3000,
-    credits: 20,
+    credits: 30,
   },
   pro: {
     id: "pro",
     name: "Pro",
     priceNaira: 5000,
     priceUsdCents: 5000,
-    credits: 30,
+    credits: 50,
   },
   pro_plus: {
     id: "pro_plus",
     name: "Pro Plus",
-    priceNaira: 7000,
-    priceUsdCents: 7000,
-    credits: 50,
+    priceNaira: 8000,
+    priceUsdCents: 8000,
+    credits: 80,
   },
   ultra_pro: {
     id: "ultra_pro",
     name: "Ultra Pro",
     priceNaira: 15000,
     priceUsdCents: 15000,
-    credits: 100,
+    credits: 150,
   },
 };
 
@@ -117,12 +117,3 @@ export function getPlanCredits(planId: unknown): number {
   return plan?.credits ?? 0;
 }
 
-/**
- * Monthly cycle duration in milliseconds.
- */
-export const MONTHLY_CYCLE_MS = 30 * 24 * 60 * 60 * 1000;
-
-/**
- * Default plan validity period in milliseconds.
- */
-export const PLAN_VALIDITY_MS = MONTHLY_CYCLE_MS;
