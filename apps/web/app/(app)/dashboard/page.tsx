@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { signOutAndRedirect } from "@/lib/auth/logout";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { useProfile } from "@/lib/useProfile";
 import { useToast } from "@/components/ui/ToastProvider";
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import ForgeGuideStrip from "@/components/dashboard/ForgeGuideStrip";
 import QuickActionsGrid from "@/components/dashboard/QuickActionsGrid";
+import PlanningStatusCard from "@/components/dashboard/PlanningStatusCard";
 import RecentActivity from "@/components/dashboard/RecentActivity";
 import WeeklyInsight from "@/components/dashboard/WeeklyInsight";
 import { listSchemeOfWork } from "@/lib/planning/scheme";
@@ -24,9 +26,6 @@ import {
   getWeekNumber,
   todayIsoDate,
 } from "@/lib/planning/utils";
-import LessonForgeOnboardingCard from "@/components/onboarding/LessonForgeOnboardingCard";
-import LessonForgeWelcomeCard from "@/components/onboarding/LessonForgeWelcomeCard";
-import AuthNotificationBanner from "@/components/auth/AuthNotificationBanner";
 
 type LessonRow = {
   id: string;
@@ -62,6 +61,10 @@ function relativeTime(iso: string) {
   return `${days}d ago`;
 }
 
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
   return String(error);
@@ -89,12 +92,13 @@ export default function DashboardPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [schoolMembershipLoading, setSchoolMembershipLoading] = useState(true);
   const [hasSchoolMembership, setHasSchoolMembership] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [showWelcome, setShowWelcome] = useState(false);
-  const [flowBusy, setFlowBusy] = useState(false);
+  const [copiedReferral, setCopiedReferral] = useState(false);
 
-  const teacherName = profile?.full_name || userEmail?.split("@")[0] || "Teacher";
-  const firstName = String(teacherName).trim().split(" ")[0] || "Teacher";
+  const teacherName =
+    (profile as any)?.full_name ||
+    (profile as any)?.name ||
+    userEmail?.split("@")[0] ||
+    "Teacher";
 
   const loadSchoolMembership = useCallback(async () => {
     setSchoolMembershipLoading(true);
@@ -137,40 +141,7 @@ export default function DashboardPage() {
   }, [searchParams, showToast]);
 
   useEffect(() => {
-    if (!profile) return;
-
-    if (!profile.onboarding_completed) {
-      setShowOnboarding(true);
-      setShowWelcome(false);
-      return;
-    }
-
-    if (!profile.welcome_seen) {
-      setShowOnboarding(false);
-      setShowWelcome(true);
-      return;
-    }
-
-    setShowOnboarding(false);
-    setShowWelcome(false);
-  }, [profile]);
-
-  useEffect(() => {
-    if (!showWelcome || !profile?.id) return;
-    void markWelcomeSeen();
-  }, [markWelcomeSeen, profile?.id, showWelcome]);
-
-  useEffect(() => {
-    const forgeWindow = window as Window & {
-      __FORGE_CONTEXT__?: {
-        page: string;
-        teacherName: string;
-        credits: number;
-        plan: string;
-        recentLessons: LessonRow[];
-      };
-    };
-    forgeWindow.__FORGE_CONTEXT__ = {
+    (window as any).__FORGE_CONTEXT__ = {
       page: "dashboard",
       teacherName,
       credits: creditsRemaining,
@@ -269,6 +240,14 @@ export default function DashboardPage() {
     };
   }, [router, supabase]);
 
+  async function logout() {
+    setMsg(null);
+    await signOutAndRedirect({
+      signOut: () => supabase.auth.signOut(),
+      to: "/login",
+    });
+  }
+
   async function deleteLesson(id: string) {
     const ok = window.confirm("Delete this item? This cannot be undone.");
     if (!ok) return;
@@ -307,6 +286,31 @@ export default function DashboardPage() {
       recent7d,
     };
   }, [lessons, worksheetsCount]);
+
+  const activityBars = useMemo(() => {
+    const days = 7;
+    const buckets = Array.from({ length: days }, () => 0);
+    const now = new Date();
+    const start = new Date(now);
+    start.setDate(now.getDate() - (days - 1));
+    start.setHours(0, 0, 0, 0);
+
+    for (const lesson of lessons) {
+      const t = new Date(lesson.created_at);
+      if (Number.isNaN(t.getTime())) continue;
+      const diffDays = Math.floor(
+        (t.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)
+      );
+      if (diffDays >= 0 && diffDays < days) buckets[diffDays] += 1;
+    }
+
+    const max = Math.max(1, ...buckets);
+
+    return buckets.map((value) => ({
+      value,
+      heightPct: clamp(Math.round((value / max) * 100), 6, 100),
+    }));
+  }, [lessons]);
 
   const recent = useMemo(() => lessons.slice(0, 8), [lessons]);
 
@@ -372,67 +376,50 @@ export default function DashboardPage() {
     };
   }, [academicEvents, schemeRows]);
 
+  const schemeUploaded = schemeRows.length > 0;
+  const calendarUploaded = academicEvents.length > 0;
+  const curriculumCount = new Set(
+    lessons.map((lesson) => lesson.curriculum).filter(Boolean)
+  ).size;
+  const configuredClasses = new Set(
+    schemeRows.map((row) => row.class_name).filter(Boolean)
+  ).size;
+  const pendingItems = planningReminders.pendingTopicsCount;
+
   const isOutOfCredits = creditsRemaining <= 0;
-  const isLowCredits = creditsRemaining > 0 && creditsRemaining <= 3;
+  const isLowCredits = creditsRemaining > 0 && creditsRemaining <= 5;
 
-  const markWelcomeSeen = useCallback(async () => {
-    if (!profile?.id) return;
-    setFlowBusy(true);
+  const referralCode =
+    (profile as any)?.referral_code ||
+    ((profile as any)?.id
+      ? String((profile as any).id).slice(0, 6).toUpperCase()
+      : null);
+
+  const referralLink = referralCode
+    ? `https://lessonforge.app/signup?ref=${encodeURIComponent(referralCode)}`
+    : "";
+
+  async function copyReferralLink() {
+    if (!referralLink) return;
+
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          welcome_seen: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", profile.id);
-      if (error) throw error;
-    } catch (error: unknown) {
-      setMsg(`Could not start workspace: ${getErrorMessage(error)}`);
-    } finally {
-      setFlowBusy(false);
+      await navigator.clipboard.writeText(referralLink);
+      setCopiedReferral(true);
+      showToast("🔗 Referral link copied!");
+      setTimeout(() => setCopiedReferral(false), 2000);
+    } catch {
+      showToast("Could not copy referral link.");
     }
-  }, [profile?.id, supabase]);
-
-  useEffect(() => {
-    if (showOnboarding || showWelcome) return;
-    if (creditsRemaining > 0) return;
-    router.replace("/pricing");
-  }, [creditsRemaining, router, showOnboarding, showWelcome]);
-
-  if (showOnboarding && profile) {
-    return (
-      <div className="min-h-screen bg-[#FAF9F6] px-4 py-8">
-        <LessonForgeOnboardingCard
-          profileId={profile.id}
-          initialAnswers={profile.onboarding_answers}
-          onCompleted={() => {
-            setShowOnboarding(false);
-            setShowWelcome(true);
-            setWelcomeMarked(false);
-          }}
-        />
-      </div>
-    );
   }
 
-  if (showWelcome && profile) {
-    return (
-      <div className="min-h-screen bg-[#FAF9F6] px-4 py-8">
-        <LessonForgeWelcomeCard
-          firstName={firstName}
-          roleType="teacher"
-          onStart={() => {
-            setShowWelcome(false);
-            setWelcomeMarked(true);
-          }}
-        />
-      </div>
-    );
-  }
+  const whatsappReferralLink = referralLink
+    ? `https://wa.me/?text=${encodeURIComponent(
+        `I’ve been using LessonForge to create lesson packs faster. Sign up with my link: ${referralLink}`
+      )}`
+    : "#";
 
   return (
-    <div className="min-h-screen bg-[#FAF9F6] text-[#1E1B4B]">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text-primary)]">
       <DashboardHeader />
       <ForgeGuideStrip />
 
@@ -444,54 +431,42 @@ export default function DashboardPage() {
       />
 
       <main className="mx-auto max-w-6xl space-y-6 px-6 py-8">
-        {flowBusy ? (
-          <AuthNotificationBanner
-            type="info"
-            icon="⏳"
-            message="Finalising your LessonForge workspace..."
-          />
-        ) : null}
-
-        {!isOutOfCredits ? (
-          isLowCredits ? (
-            <AuthNotificationBanner
-              type="warning"
-              icon={creditsRemaining === 1 ? "🔥" : "⚠️"}
-              message={
-                creditsRemaining === 1
-                  ? "This is your last credit — use it well! Then explore our plans to keep generating."
-                  : `Only ${creditsRemaining} credit${creditsRemaining > 1 ? "s" : ""} left — make them count.`
-              }
-              actions={[
-                {
-                  label: "View Plans",
-                  href: "/pricing",
-                  variant: "warning",
-                },
-              ]}
-            />
-          ) : (
-            <AuthNotificationBanner
-              type="info"
-              icon="⚡"
-              message={`You have ${creditsRemaining} credits · Start generating lesson packs and worksheets now.`}
-            />
-          )
-        ) : null}
-
         {msg ? (
-          <div className="rounded-[14px] border border-[#E2E8F0] bg-white p-4 text-sm text-[#475569] shadow-[0_4px_24px_rgba(83,74,183,0.08)]">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 text-sm text-[var(--text-secondary)] shadow-sm">
             {msg}
+          </div>
+        ) : null}
+
+        {isOutOfCredits ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900 shadow-sm dark:border-rose-900/50 dark:bg-rose-900/20 dark:text-rose-400">
+            <p className="font-semibold">You are out of credits.</p>
+            <p className="mt-1">
+              New generation actions are blocked, but your dashboard and saved
+              content remain available.
+            </p>
+            <Link
+              href="/settings"
+              className="mt-3 inline-flex rounded-lg border border-rose-300 bg-[var(--card)] px-3 py-2 text-xs font-semibold text-rose-900 dark:border-rose-900 dark:bg-rose-900/20 dark:text-rose-400"
+            >
+              Recharge / Upgrade
+            </Link>
+          </div>
+        ) : null}
+
+        {isLowCredits ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-400">
+            Credits are running low ({creditsRemaining} left). Plan a manual
+            recharge soon to avoid interruptions.
           </div>
         ) : null}
 
         {!schoolMembershipLoading && !hasSchoolMembership ? (
           <section className="rounded-2xl border border-violet-200 bg-violet-50/50 p-4 shadow-sm dark:border-violet-900/50 dark:bg-violet-900/10">
             <div className="mb-3">
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+              <h2 className="text-sm font-bold text-[var(--text-primary)]">
                 Join your school workspace
               </h2>
-              <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+              <p className="mt-1 text-xs text-[var(--text-secondary)]">
                 Enter your school code from your principal to activate your
                 teacher seat.
               </p>
@@ -504,14 +479,14 @@ export default function DashboardPage() {
         ) : null}
 
         <QuickActionsGrid />
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        
+          <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+              <h2 className="text-sm font-bold text-[var(--text-primary)]">
                 Planning reminders
               </h2>
-              <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+              <p className="mt-1 text-xs text-[var(--text-secondary)]">
                 Weekly topics and upcoming school events from your Planning
                 tools.
               </p>
@@ -519,7 +494,7 @@ export default function DashboardPage() {
 
             <Link
               href="/planning"
-              className="inline-flex rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              className="inline-flex rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--card-alt)]"
             >
               Open Planning
             </Link>
@@ -537,10 +512,10 @@ export default function DashboardPage() {
                 <ReminderLoading />
               ) : planningReminders.thisWeekTopic ? (
                 <div>
-                  <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                  <div className="text-sm font-semibold text-[var(--text-primary)]">
                     {planningReminders.thisWeekTopic.topic}
                   </div>
-                  <div className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                  <div className="mt-1 text-xs text-[var(--text-secondary)]">
                     Week {planningReminders.thisWeekTopic.week_number} •{" "}
                     {planningReminders.thisWeekTopic.class_name} •{" "}
                     {planningReminders.thisWeekTopic.subject}
@@ -558,10 +533,10 @@ export default function DashboardPage() {
                 <ReminderLoading />
               ) : planningReminders.nextTopic ? (
                 <div>
-                  <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                  <div className="text-sm font-semibold text-[var(--text-primary)]">
                     {planningReminders.nextTopic.topic}
                   </div>
-                  <div className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                  <div className="mt-1 text-xs text-[var(--text-secondary)]">
                     Week {planningReminders.nextTopic.week_number} •{" "}
                     {planningReminders.nextTopic.term}
                   </div>
@@ -576,10 +551,10 @@ export default function DashboardPage() {
                 <ReminderLoading />
               ) : planningReminders.upcomingEvent ? (
                 <div>
-                  <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                  <div className="text-sm font-semibold text-[var(--text-primary)]">
                     {planningReminders.upcomingEvent.title}
                   </div>
-                  <div className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                  <div className="mt-1 text-xs text-[var(--text-secondary)]">
                     {formatEventDate(
                       planningReminders.upcomingEvent.event_date
                     )}{" "}
@@ -599,10 +574,10 @@ export default function DashboardPage() {
                 <ReminderLoading />
               ) : (
                 <div>
-                  <div className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                  <div className="text-2xl font-extrabold tracking-tight text-[var(--text-primary)]">
                     {planningReminders.pendingTopicsCount}
                   </div>
-                  <div className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                  <div className="mt-1 text-xs text-[var(--text-secondary)]">
                     {planningReminders.pendingTopicsCount > 0
                       ? "Topics are still not completed."
                       : "All topics are completed. Great work."}
@@ -638,8 +613,8 @@ function PlanningReminderCard({
   children: React.ReactNode;
 }) {
   return (
-    <article className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
-      <div className="text-xs font-semibold text-slate-600 dark:text-slate-400">{title}</div>
+    <article className="rounded-xl border border-[var(--border)] bg-[var(--card-alt)] p-4">
+      <div className="text-xs font-semibold text-[var(--text-secondary)]">{title}</div>
       <div className="mt-2">{children}</div>
     </article>
   );
@@ -648,12 +623,12 @@ function PlanningReminderCard({
 function ReminderLoading() {
   return (
     <div className="space-y-2">
-      <div className="h-4 w-24 rounded bg-slate-200 dark:bg-slate-700" />
-      <div className="h-3 w-36 rounded bg-slate-200 dark:bg-slate-700" />
+      <div className="h-4 w-24 rounded bg-[var(--border)]" />
+      <div className="h-3 w-36 rounded bg-[var(--border)]" />
     </div>
   );
 }
 
 function EmptyReminder({ text }: { text: string }) {
-  return <div className="text-sm text-slate-600 dark:text-slate-400">{text}</div>;
+  return <div className="text-sm text-[var(--text-secondary)]">{text}</div>;
 }
