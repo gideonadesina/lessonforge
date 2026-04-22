@@ -2,8 +2,12 @@
 
 import { useState } from "react";
 import SectionCard from "@/components/principal/SectionCard";
-import type { PaymentQuote } from "../../lib/principal/client";
-import { getErrorMessage, toNaira } from "../../lib/principal/client";
+import { getErrorMessage } from "../../lib/principal/client";
+import {
+  SCHOOL_PRICING_PLANS,
+  type SchoolPlanId,
+  formatNaira,
+} from "@/lib/billing/pricing";
 
 type Props = {
   getToken: () => Promise<string>;
@@ -16,24 +20,13 @@ export default function PrincipalOnboardingCard({ getToken, onCompleted, setPare
   const [principalName, setPrincipalName] = useState("");
   const [schoolName, setSchoolName] = useState("");
   const [teacherSlots, setTeacherSlots] = useState(12);
-  const [quote, setQuote] = useState<PaymentQuote | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function getQuote() {
-    const token = await getToken();
-    if (!token) throw new Error("Session expired.");
-
-    const res = await fetch("/api/principal/payment/quote", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ teacherSlots }),
-    });
-    const json = await res.json();
-    if (!res.ok || !json?.ok) throw new Error(json?.error || "Failed to get payment quote.");
-    return json.data as PaymentQuote;
+  function resolvePlanId(slots: number): SchoolPlanId {
+    if (slots <= 15) return "school_starter";
+    if (slots <= 35) return "school_growth";
+    if (slots <= 70) return "school_full";
+    return "school_enterprise";
   }
 
   async function completeOnboarding() {
@@ -43,35 +36,30 @@ export default function PrincipalOnboardingCard({ getToken, onCompleted, setPare
       const token = await getToken();
       if (!token) throw new Error("Session expired.");
 
-      const paymentQuote = quote ?? (await getQuote());
-      const res = await fetch("/api/principal/onboarding", {
+      const planId = resolvePlanId(teacherSlots);
+      const res = await fetch("/api/paystack/school/initialize", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          principalName,
-          schoolName,
-          teacherSlots,
-          payment: {
-            provider: paymentQuote.provider,
-            reference: paymentQuote.reference,
-            status: "success",
-          },
+          plan: planId,
+          callbackPath: "/billing/success?type=school",
+          schoolName: schoolName.trim() || undefined,
         }),
       });
 
       const json = await res.json();
       if (!res.ok || !json?.ok) {
-        throw new Error(json?.error || "Failed to create principal workspace.");
+        throw new Error(json?.error || "Failed to initialize school payment.");
       }
 
-      setStep(1);
-      setPrincipalName("");
-      setSchoolName("");
-      setQuote(null);
-      await onCompleted();
+      if (!json?.authorization_url) {
+        throw new Error("Payment checkout URL missing.");
+      }
+
+      window.location.href = json.authorization_url;
     } catch (err: unknown) {
       setParentError(getErrorMessage(err, "Onboarding failed."));
     } finally {
@@ -118,7 +106,9 @@ export default function PrincipalOnboardingCard({ getToken, onCompleted, setPare
         <div className="space-y-3">
           <div className="rounded-xl border border-slate-200 bg-amber-50/60 p-4">
             <p className="text-sm font-semibold text-slate-900">Choose teacher slots</p>
-            <p className="mt-1 text-sm text-slate-600">You are billed per teacher seat, monthly.</p>
+            <p className="mt-1 text-sm text-slate-600">
+              We map your teacher count to the best school plan for a one-time purchase.
+            </p>
             <div className="mt-4 flex items-center gap-3">
               <input
                 type="range"
@@ -140,6 +130,11 @@ export default function PrincipalOnboardingCard({ getToken, onCompleted, setPare
         <div className="space-y-3">
           <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-4">
             <p className="text-sm font-bold text-slate-900">Payment summary</p>
+            {(() => {
+              const selectedPlan = SCHOOL_PRICING_PLANS.find(
+                (plan) => plan.id === resolvePlanId(teacherSlots)
+              );
+              return (
             <div className="mt-2 grid grid-cols-1 gap-2 text-sm text-slate-700 md:grid-cols-2">
               <div>
                 School: <span className="font-semibold text-slate-900">{schoolName || "—"}</span>
@@ -151,12 +146,24 @@ export default function PrincipalOnboardingCard({ getToken, onCompleted, setPare
                 Teacher slots: <span className="font-semibold text-slate-900">{teacherSlots}</span>
               </div>
               <div>
-                Monthly total:{" "}
-                <span className="font-semibold text-violet-700">{quote ? toNaira(quote.amount) : "Fetching..."}</span>
+                Plan:{" "}
+                <span className="font-semibold text-violet-700">
+                  {selectedPlan?.name ?? "Starter"}
+                </span>
+              </div>
+              <div>
+                Total per purchase:{" "}
+                <span className="font-semibold text-violet-700">
+                  {selectedPlan?.priceNaira
+                    ? formatNaira(selectedPlan.priceNaira)
+                    : "Contact support"}
+                </span>
               </div>
             </div>
+              );
+            })()}
             <p className="mt-3 text-xs text-slate-500">
-              Onboarding uses one-time payment confirmation logic. No auto-recurring renewal is enforced.
+              Onboarding uses one-time payment. Credits are assigned per purchase and do not expire.
             </p>
           </div>
         </div>
@@ -180,14 +187,7 @@ export default function PrincipalOnboardingCard({ getToken, onCompleted, setPare
               }
 
               if (step === 2) {
-                try {
-                  setParentError(null);
-                  const nextQuote = await getQuote();
-                  setQuote(nextQuote);
-                } catch (err: unknown) {
-                  setParentError(getErrorMessage(err, "Failed to get quote."));
-                  return;
-                }
+                setParentError(null);
               }
 
               setStep((s) => (s < 3 ? ((s + 1) as 1 | 2 | 3) : s));

@@ -1,23 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { appUrl, paystackHeaders } from "@/lib/paystack";
 import { getBearerTokenFromHeaders, resolvePrincipalContext } from "@/lib/principal/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
-  DEFAULT_BILLING_CYCLE,
-  DEFAULT_CURRENCY,
-  DEFAULT_SLOT_PRICE,
-  computeSubscriptionAmount,
-  sanitizeSlotCount,
-} from "@/lib/principal/utils";
-import { generatePrincipalPaymentReference, getPrincipalPaystackFlow } from "@/lib/principal/payment";
+  getSchoolPlanPaystackAmount,
+  isValidSchoolPlanId,
+  type SchoolPlanId,
+} from "@/lib/billing/server-school-pricing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type InitPrincipalPaymentPayload = {
-  principalName: string;
-  schoolName: string;
-  teacherSlots: number;
+  plan: SchoolPlanId;
 };
 
 export async function POST(req: NextRequest) {
@@ -32,16 +28,9 @@ export async function POST(req: NextRequest) {
     }
 
     const body = (await req.json().catch(() => null)) as InitPrincipalPaymentPayload | null;
-    const principalName = String(body?.principalName ?? "").trim();
-    const schoolName = String(body?.schoolName ?? "").trim();
-    const teacherSlots = sanitizeSlotCount(body?.teacherSlots ?? 1);
-    const amount = computeSubscriptionAmount(teacherSlots, DEFAULT_SLOT_PRICE);
-
-    if (!principalName || !schoolName) {
-      return NextResponse.json(
-        { ok: false, error: "Principal name and school name are required." },
-        { status: 400 }
-      );
+    const plan = body?.plan;
+    if (!isValidSchoolPlanId(plan)) {
+      return NextResponse.json({ ok: false, error: "Invalid school plan." }, { status: 400 });
     }
 
     if (!context.user.email) {
@@ -61,27 +50,66 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const reference = generatePrincipalPaymentReference(context.user.id);
-    const callbackPath = `/billing/success?flow=${encodeURIComponent(getPrincipalPaystackFlow())}`;
-    const callbackUrl = appUrl(callbackPath);
+    const admin = createAdminClient();
+    let schoolId = context.school?.id ?? null;
+
+    if (!schoolId) {
+      const { data: membership } = await admin
+        .from("school_members")
+        .select("school_id")
+        .eq("user_id", context.user.id)
+        .eq("role", "principal")
+        .maybeSingle();
+
+      schoolId = membership?.school_id ?? null;
+    }
+
+    if (!schoolId) {
+      const { data: newSchool, error: schoolError } = await admin
+        .from("schools")
+        .insert({
+          name: `School - ${context.user.email}`,
+          principal_id: context.user.id,
+          shared_credits: 0,
+          teacher_limit: 0,
+        })
+        .select("id")
+        .maybeSingle();
+
+      if (schoolError || !newSchool?.id) {
+        return NextResponse.json(
+          { ok: false, error: "Failed to create school workspace." },
+          { status: 500 }
+        );
+      }
+
+      schoolId = newSchool.id;
+
+      await admin.from("school_members").insert({
+        school_id: schoolId,
+        user_id: context.user.id,
+        role: "principal",
+      });
+    }
+
+    const amountMinor = getSchoolPlanPaystackAmount(plan, "NGN");
+    if (!Number.isFinite(amountMinor) || amountMinor <= 0) {
+      return NextResponse.json({ ok: false, error: "Invalid pricing for selected plan." }, { status: 500 });
+    }
 
     const initResponse = await fetch("https://api.paystack.co/transaction/initialize", {
       method: "POST",
       headers: paystackHeaders(),
       body: JSON.stringify({
         email: context.user.email,
-        amount: amount * 100,
-        currency: DEFAULT_CURRENCY,
-        reference,
-        callback_url: callbackUrl,
+        amount: amountMinor,
+        currency: "NGN",
+        callback_url: appUrl("/billing/success?type=school"),
         metadata: {
-          flow: getPrincipalPaystackFlow(),
+          payment_purpose: "school",
           user_id: context.user.id,
-          principal_name: principalName,
-          school_name: schoolName,
-          teacher_slots: teacherSlots,
-          slot_price: DEFAULT_SLOT_PRICE,
-          billing_cycle: DEFAULT_BILLING_CYCLE,
+          school_id: schoolId,
+          plan_id: plan,
         },
       }),
       cache: "no-store",
@@ -106,11 +134,9 @@ export async function POST(req: NextRequest) {
           reference: String(initJson.data.reference),
           authorizationUrl: String(initJson.data.authorization_url),
           accessCode: String(initJson.data.access_code ?? ""),
-          teacherSlots,
-          slotPrice: DEFAULT_SLOT_PRICE,
-          amount,
-          currency: DEFAULT_CURRENCY,
-          billingCycle: DEFAULT_BILLING_CYCLE,
+          plan,
+          amountMinor,
+          currency: "NGN",
         },
       },
       { status: 200 }
