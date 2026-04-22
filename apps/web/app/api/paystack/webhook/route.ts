@@ -8,6 +8,7 @@ import {
   processTeacherPayment,
   type ProcessPaymentInput,
 } from "@/lib/billing/server-payment";
+import { processSchoolPayment } from "@/lib/billing/server-school-payment";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -62,10 +63,8 @@ async function updateProfileMetadata(
     .update({
       plan,
       is_pro: plan !== "basic",
-      pro_expires_at:
-        plan !== "basic"
-          ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-          : null,
+      // Manual one-time purchases: credits do not expire.
+      pro_expires_at: null,
       paystack_subscription_code:
         paystackData?.subscription?.subscription_code ?? null,
       paystack_customer_code: paystackData?.customer?.customer_code ?? null,
@@ -97,6 +96,32 @@ export async function POST(req: Request) {
     }
 
     const paystackData = event?.data ?? {};
+    const purpose = paystackData?.metadata?.payment_purpose;
+
+    if (purpose === "school") {
+      const schoolPaymentResult = await processSchoolPayment(paystackData);
+      if (!schoolPaymentResult.ok) {
+        console.error(
+          `Webhook: school payment processing failed for reference ${String(
+            paystackData?.reference ?? ""
+          ).trim()}:`,
+          schoolPaymentResult.error
+        );
+        return NextResponse.json(
+          { received: true, error: schoolPaymentResult.error },
+          { status: 200 }
+        );
+      }
+
+      return NextResponse.json({
+        received: true,
+        reference: schoolPaymentResult.reference,
+        schoolId: schoolPaymentResult.schoolId,
+        sharedCreditsAwarded: schoolPaymentResult.sharedCreditsAwarded,
+        alreadyProcessed: schoolPaymentResult.alreadyProcessed,
+      });
+    }
+
     const reference = String(paystackData?.reference ?? "").trim();
     const userId = String(paystackData?.metadata?.user_id ?? "").trim();
 

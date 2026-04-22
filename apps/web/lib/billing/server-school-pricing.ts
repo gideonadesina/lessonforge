@@ -6,7 +6,11 @@
 
 export const SCHOOL_SHARED_CREDIT_COST = 1;
 
-export type SchoolPlanId = "starter" | "growth" | "full_school" | "enterprise";
+export type SchoolPlanId =
+  | "school_starter"
+  | "school_growth"
+  | "school_full"
+  | "school_enterprise";
 
 export interface SchoolPlanPricing {
   id: SchoolPlanId;
@@ -19,41 +23,41 @@ export interface SchoolPlanPricing {
 }
 
 export const SCHOOL_PLAN_PRICING: Record<SchoolPlanId, SchoolPlanPricing> = {
-  starter: {
-    id: "starter",
+  school_starter: {
+    id: "school_starter",
     name: "Starter",
-    priceNaira: 25000,
-    priceUsdCents: 25000,
+    priceNaira: 35000,
+    priceUsdCents: 35000,
     teacherLimit: 15,
-    sharedCredits: 120,
-    lessonPacks: 30,
+    sharedCredits: 200,
+    lessonPacks: 50,
   },
-  growth: {
-    id: "growth",
+  school_growth: {
+    id: "school_growth",
     name: "Growth",
-    priceNaira: 55000,
-    priceUsdCents: 55000,
+    priceNaira: 75000,
+    priceUsdCents: 75000,
     teacherLimit: 35,
-    sharedCredits: 280,
-    lessonPacks: 70,
+    sharedCredits: 450,
+    lessonPacks: 112,
   },
-  full_school: {
-    id: "full_school",
+  school_full: {
+    id: "school_full",
     name: "Full School",
-    priceNaira: 95000,
-    priceUsdCents: 95000,
+    priceNaira: 130000,
+    priceUsdCents: 130000,
     teacherLimit: 70,
-    sharedCredits: 560,
-    lessonPacks: 140,
+    sharedCredits: 850,
+    lessonPacks: 212,
   },
-  enterprise: {
-    id: "enterprise",
+  school_enterprise: {
+    id: "school_enterprise",
     name: "Enterprise",
-    priceNaira: 0, // Custom pricing - not used for checkout
-    priceUsdCents: 0, // Custom pricing - not used for checkout
-    teacherLimit: 999,
-    sharedCredits: 9999,
-    lessonPacks: 9999,
+    priceNaira: 200000,
+    priceUsdCents: 200000,
+    teacherLimit: 70,
+    sharedCredits: 1200,
+    lessonPacks: 300,
   },
 };
 
@@ -76,7 +80,7 @@ export function isValidSchoolPlanId(planId: unknown): planId is SchoolPlanId {
  * Check if plan has custom pricing (non-standard checkout)
  */
 export function isEnterprisePlan(planId: unknown): boolean {
-  return planId === "enterprise";
+  return planId === "school_enterprise";
 }
 
 /**
@@ -87,7 +91,7 @@ export function isEnterprisePlan(planId: unknown): boolean {
  */
 export function getSchoolPlanPaystackAmount(planId: SchoolPlanId, currency: "NGN" | "USD"): number {
   const plan = getSchoolPlanPricing(planId);
-  if (!plan || planId === "enterprise") return 0; // Enterprise has custom pricing
+  if (!plan) return 0;
 
   return currency === "NGN" ? plan.priceNaira * 100 : plan.priceUsdCents;
 }
@@ -108,7 +112,3 @@ export function getSchoolPlanTeacherLimit(planId: unknown): number {
   return plan?.teacherLimit ?? 0;
 }
 
-/**
- * Monthly cycle duration in milliseconds.
- */
-export const MONTHLY_CYCLE_MS = 30 * 24 * 60 * 60 * 1000;

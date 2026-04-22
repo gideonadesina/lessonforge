@@ -4,7 +4,11 @@ export const EXAM_BUILDER_CREDIT_COST = 1;
 export const NEW_USER_FREE_CREDITS = 8;
 
 export type TeacherPlanId = "basic" | "pro" | "pro_plus" | "ultra_pro";
-export type SchoolPlanId = "starter" | "growth" | "full_school" | "enterprise";
+export type SchoolPlanId =
+  | "school_starter"
+  | "school_growth"
+  | "school_full"
+  | "school_enterprise";
 
 export type TeacherPlanConfig = {
   id: TeacherPlanId;
@@ -35,8 +39,8 @@ export const TEACHER_PRICING_PLANS: TeacherPlanConfig[] = [
     id: "basic",
     name: "Basic",
     priceNaira: 3000,
-    credits: 20,
-    lessonPacks: 5,
+    credits: 30,
+    lessonPacks: 7,
     features: [
       "Lesson plan + notes",
       "Slides + images",
@@ -48,13 +52,12 @@ export const TEACHER_PRICING_PLANS: TeacherPlanConfig[] = [
     id: "pro",
     name: "Pro",
     priceNaira: 5000,
-    credits: 32,
-    lessonPacks: 8,
+    credits: 50,
+    lessonPacks: 12,
     features: [
       "Everything in Basic",
       "Advanced templates",
       "PDF + PPT export",
-      "2-month credit rollover",
     ],
     ctaLabel: "Choose Pro",
     highlighted: true,
@@ -63,13 +66,12 @@ export const TEACHER_PRICING_PLANS: TeacherPlanConfig[] = [
     id: "pro_plus",
     name: "Pro+",
     priceNaira: 8000,
-    credits: 52,
-    lessonPacks: 13,
+    credits: 80,
+    lessonPacks: 20,
     features: [
       "Everything in Pro",
       "Custom branding",
       "Priority support",
-      "3-month credit rollover",
       "Curriculum planner",
     ],
     ctaLabel: "Choose Pro+",
@@ -78,8 +80,8 @@ export const TEACHER_PRICING_PLANS: TeacherPlanConfig[] = [
     id: "ultra_pro",
     name: "Ultra Pro",
     priceNaira: 15000,
-    credits: 100,
-    lessonPacks: 25,
+    credits: 150,
+    lessonPacks: 37,
     features: [
       "Everything in Pro+",
       "Bulk pack generation",
@@ -93,48 +95,45 @@ export const TEACHER_PRICING_PLANS: TeacherPlanConfig[] = [
 
 export const SCHOOL_PRICING_PLANS: SchoolPlanConfig[] = [
   {
-    id: "starter",
+    id: "school_starter",
     name: "Starter",
-    priceNaira: 25000,
+    priceNaira: 35000,
     teachers: 15,
-    credits: 120,
-    lessonPacks: 30,
+    credits: 200,
+    lessonPacks: 50,
     features: [
       "Principal dashboard",
       "Add/remove teacher accounts",
       "Basic usage reports",
       "Credit pool management",
-      "Unused credits expire monthly",
     ],
     ctaLabel: "Start with Starter",
   },
   {
-    id: "growth",
+    id: "school_growth",
     name: "Growth",
-    priceNaira: 55000,
+    priceNaira: 75000,
     teachers: 35,
-    credits: 280,
-    lessonPacks: 70,
+    credits: 450,
+    lessonPacks: 112,
     features: [
       "Everything in Starter",
       "Department grouping",
       "Per-teacher credit limits",
-      "2-month rollover",
       "Analytics dashboard",
     ],
     ctaLabel: "Start with Growth",
     highlighted: true,
   },
   {
-    id: "full_school",
+    id: "school_full",
     name: "Full School",
-    priceNaira: 95000,
+    priceNaira: 130000,
     teachers: 70,
-    credits: 560,
-    lessonPacks: 140,
+    credits: 850,
+    lessonPacks: 212,
     features: [
       "Everything in Growth",
-      "3-month credit rollover",
       "Onboarding support",
       "Priority phone/WhatsApp support",
       "Curriculum-level reports",
@@ -142,21 +141,19 @@ export const SCHOOL_PRICING_PLANS: SchoolPlanConfig[] = [
     ctaLabel: "Start with Full School",
   },
   {
-    id: "enterprise",
+    id: "school_enterprise",
     name: "Enterprise",
-    priceNaira: "Custom",
+    priceNaira: 200000,
     teachers: "70+",
-    credits: "Custom",
-    lessonPacks: "Custom",
+    credits: 1200,
+    lessonPacks: 300,
     features: [
       "Unlimited teachers",
       "White-label option",
-      "Annual billing option",
       "Dedicated account manager",
       "SLA guarantee",
     ],
-    ctaLabel: "Contact sales",
-    customPricing: true,
+    ctaLabel: "Start with Enterprise",
   },
 ];
 

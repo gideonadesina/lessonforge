@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { paystackHeaders } from "@/lib/paystack";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@supabase/supabase-js";
 import {
   isValidSchoolPlanId,
   type SchoolPlanId,
@@ -17,6 +17,33 @@ function normalizeSchoolPlanId(rawPlan: unknown): SchoolPlanId | null {
 
 export async function GET(req: Request) {
   try {
+    const auth = req.headers.get("authorization") ?? "";
+    const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const userClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+        },
+        global: { headers: { Authorization: `Bearer ${token}` } },
+      }
+    );
+
+    const {
+      data: { user },
+      error: authError,
+    } = await userClient.auth.getUser();
+    if (authError || !user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(req.url);
     const reference = String(searchParams.get("reference") ?? "").trim();
 
@@ -51,7 +78,9 @@ export async function GET(req: Request) {
     const paystackData = json.data ?? {};
     const userId = String(paystackData?.metadata?.user_id ?? "").trim();
     const schoolId = String(paystackData?.metadata?.school_id ?? "").trim();
-    const planId = normalizeSchoolPlanId(paystackData?.metadata?.plan);
+    const planId = normalizeSchoolPlanId(
+      paystackData?.metadata?.plan_id ?? paystackData?.metadata?.plan
+    );
 
     if (!userId || !schoolId || !planId) {
       return NextResponse.json(
@@ -61,6 +90,10 @@ export async function GET(req: Request) {
         },
         { status: 400 }
       );
+    }
+
+    if (user.id !== userId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     // Process payment with idempotency

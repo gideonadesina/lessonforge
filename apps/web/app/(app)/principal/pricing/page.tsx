@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import {
   SCHOOL_PRICING_PLANS,
@@ -11,9 +11,66 @@ import SchoolPricingPlanCard from "@/components/billing/SchoolPricingPlanCard";
 export default function PrincipalPricingPage() {
   const [busyPlanId, setBusyPlanId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [verifyReference, setVerifyReference] = useState<string | null>(null);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+  const [verifyingPayment, setVerifyingPayment] = useState(false);
+
+  async function getAccessToken() {
+    const supabase = createBrowserSupabase();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    return session?.access_token ?? "";
+  }
+
+  async function verifySchoolPayment(reference: string) {
+    setVerifyingPayment(true);
+    setVerifyError(null);
+    setVerifyReference(reference);
+
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        throw new Error("Session expired. Please log in again.");
+      }
+
+      const res = await fetch(
+        `/api/paystack/school/verify?reference=${encodeURIComponent(reference)}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      const json = await res.json();
+
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || "Failed to verify school payment");
+      }
+
+      window.location.href = `/billing/success?type=school&reference=${encodeURIComponent(reference)}`;
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "School payment verification failed";
+      setVerifyError(message);
+    } finally {
+      setVerifyingPayment(false);
+    }
+  }
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paymentComplete = params.get("paymentComplete");
+    const reference = String(params.get("reference") ?? "").trim();
+
+    if (paymentComplete === "true" && reference && verifyReference !== reference) {
+      void verifySchoolPayment(reference);
+    }
+  }, [verifyReference]);
 
   async function handleSchoolPlanSelect(planId: (typeof SCHOOL_PRICING_PLANS)[number]["id"]) {
-    if (planId === "enterprise") {
+    if (planId === "school_enterprise") {
       window.location.href = "mailto:support@lessonforge.io?subject=Enterprise%20Pricing%20Inquiry";
       return;
     }
@@ -29,8 +86,7 @@ export default function PrincipalPricingPage() {
         throw new Error("Please log in to continue.");
       }
 
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      const token = await getAccessToken();
       if (!token) {
         throw new Error("Session expired. Please log in again.");
       }
@@ -82,6 +138,25 @@ export default function PrincipalPricingPage() {
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
+        </div>
+      )}
+
+      {verifyingPayment && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Verifying your school payment...
+        </div>
+      )}
+
+      {verifyError && verifyReference && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <p>{verifyError}</p>
+          <button
+            type="button"
+            onClick={() => void verifySchoolPayment(verifyReference)}
+            className="mt-3 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+          >
+            Try again
+          </button>
         </div>
       )}
 
@@ -142,11 +217,11 @@ export default function PrincipalPricingPage() {
                 <td className="py-3 px-4 text-center text-violet-600 font-semibold">✓</td>
               </tr>
               <tr>
-                <td className="py-3 px-4 text-slate-600">Credit rollover</td>
-                <td className="py-3 px-4 text-center text-slate-500 text-xs">Monthly</td>
-                <td className="py-3 px-4 text-center text-slate-500 text-xs">2-month</td>
-                <td className="py-3 px-4 text-center text-slate-500 text-xs">3-month</td>
-                <td className="py-3 px-4 text-center text-slate-500 text-xs">Custom</td>
+                <td className="py-3 px-4 text-slate-600">Credits validity</td>
+                <td className="py-3 px-4 text-center text-slate-500 text-xs">Until fully used</td>
+                <td className="py-3 px-4 text-center text-slate-500 text-xs">Until fully used</td>
+                <td className="py-3 px-4 text-center text-slate-500 text-xs">Until fully used</td>
+                <td className="py-3 px-4 text-center text-slate-500 text-xs">Until fully used</td>
               </tr>
               <tr>
                 <td className="py-3 px-4 text-slate-600">Priority support</td>
@@ -185,7 +260,7 @@ export default function PrincipalPricingPage() {
           <article className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
             <h3 className="text-sm font-semibold text-slate-900">Can I upgrade or change plans?</h3>
             <p className="mt-2 text-sm leading-relaxed text-slate-600">
-              Yes. Visit your Principal Billing page after activation to manage upgrades, teacher slots, and payment history.
+              Yes. When credits run out, return here to choose a new plan and complete another manual purchase.
             </p>
           </article>
         </div>
