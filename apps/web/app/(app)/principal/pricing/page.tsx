@@ -180,7 +180,7 @@ export default function PrincipalPricingPage() {
         subtext="Give your whole school the tools to plan smarter — together, in one workspace."
       />
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 mt-4">
         {SCHOOL_PRICING_PLANS.map((plan) => (
           <SchoolPricingPlanCard
             key={plan.id}

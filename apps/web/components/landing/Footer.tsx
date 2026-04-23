@@ -3,10 +3,10 @@ import { Facebook, Instagram, Linkedin, Twitter } from "lucide-react";
 import { footerColumns } from "@/components/landing/content";
 
 const socials = [
-  { label: "Twitter", href: "#", icon: Twitter },
-  { label: "LinkedIn", href: "#", icon: Linkedin },
-  { label: "Instagram", href: "#", icon: Instagram },
-  { label: "Facebook", href: "#", icon: Facebook },
+  { label: "Twitter", href: "https://twitter.com/lessonforgeapp", icon: Twitter },
+  { label: "LinkedIn", href: "https://linkedin.com/company/lessonforge", icon: Linkedin },
+  { label: "Instagram", href: "https://instagram.com/lessonforgeapp", icon: Instagram },
+  { label: "Facebook", href: "https://facebook.com/lessonforgeapp", icon: Facebook },
 ];
 
 export function Footer() {
@@ -43,8 +43,7 @@ export function Footer() {
                 );
               })}
             </div>
-          </div>
-
+         </div>
           <div className="grid gap-8 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
             {footerColumns.map((column) => (
               <div key={column.title}>
@@ -67,10 +66,13 @@ export function Footer() {
             ))}
           </div>
         </div>
-
-        <div className="flex flex-col gap-2 pt-6 text-xs text-slate-500 md:flex-row md:items-center md:justify-between">
+         
+       <div className="flex flex-col gap-2 pt-6 text-xs text-slate-500 md:flex-row md:items-center md:justify-between">
           <p>© {new Date().getFullYear()} LessonForge. All rights reserved.</p>
-          <p>Calm technology for better teaching outcomes.</p>
+          <div className="flex items-center gap-4">
+            <a href="/privacy" className="hover:text-purple-700 transition-colors">Privacy Policy</a>
+            <a href="/terms" className="hover:text-purple-700 transition-colors">Terms of Service</a>
+          </div>
         </div>
       </div>
     </footer>

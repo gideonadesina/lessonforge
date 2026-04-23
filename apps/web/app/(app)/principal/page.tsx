@@ -63,19 +63,6 @@ export default function PrincipalPage() {
     void loadDashboard();
   }, [loadDashboard]);
 
-  useEffect(() => {
-    if (!profile) return;
-
-    if (!profile.onboarding_completed) {
-      router.replace("/onboarding");
-      return;
-    }
-
-    if (!profile.welcome_seen) {
-      router.replace("/onboarding");
-      return;
-    }
-  }, [profile, router]);
 
   useEffect(() => {
     if (!dashboard) return;
@@ -144,17 +131,32 @@ export default function PrincipalPage() {
     return nextAlerts;
   }, [dashboard]);
  
-  if (loading) return <PrincipalLoadingState />;
-  if (forbidden) return <PrincipalForbiddenState />;
- 
-  return (
+ if (loading) return <div style={{color:"red",fontSize:"24px",padding:"40px"}}>LOADING...</div>;
+if (forbidden) return <div style={{color:"red",fontSize:"24px",padding:"40px"}}>FORBIDDEN</div>;
+if (error) return <div style={{color:"red",fontSize:"24px",padding:"40px"}}>ERROR: {error}</div>;
+if (!dashboard && !onboardingRequired) return <div style={{color:"red",fontSize:"24px",padding:"40px"}}>NO DASHBOARD DATA</div>;
+
+ return (
     <div className="space-y-5 bg-[var(--bg)] p-4 md:p-6">
       <PrincipalPageHeader
         eyebrow="LessonForge Executive Suite"
         title="Principal Command Center"
         description="Track school health, unblock team execution, and navigate directly to the exact area you need."
       />
- 
+
+      <div className="flex items-center gap-3">
+        <Link
+          href="/dashboard"
+          className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-2.5 text-sm font-semibold text-[var(--text-primary)] transition hover:bg-[var(--card-alt)]"
+        >
+          🎓 Switch to Teacher View
+        </Link>
+      </div>
+    <PrincipalPageHeader
+        eyebrow="LessonForge Executive Suite"
+        title="Principal Command Center"
+        description="Track school health, unblock team execution, and navigate directly to the exact area you need."
+      />
       {error ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-400">{error}</div>
       ) : null}
