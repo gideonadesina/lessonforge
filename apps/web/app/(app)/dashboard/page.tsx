@@ -470,13 +470,8 @@ useEffect(() => {
   }
 }
 
-  useEffect(() => {
-    if (showOnboarding || showWelcome) return;
-    if (creditsRemaining > 0) return;
-    router.replace("/pricing");
-  }, [creditsRemaining, router, showOnboarding, showWelcome]);
-
-  if (showOnboarding && profile) {
+  
+if (showOnboarding && profile) {
     return (
       <div className="min-h-screen bg-[#FAF9F6] px-4 py-8">
        <LessonForgeOnboardingCard

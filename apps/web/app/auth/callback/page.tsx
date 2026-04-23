@@ -46,10 +46,13 @@ export default function OAuthCallbackPage() {
         }
 
         // Call server-side setup endpoint
+       // Read the stored intent so signup vs login is handled correctly
+        const storedIntent = window.localStorage.getItem("lessonforge:oauth-intent") ?? "login";
+
         const response = await fetch("/api/auth/callback", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ intent: storedIntent }),
         });
 
         const result = await response.json();
