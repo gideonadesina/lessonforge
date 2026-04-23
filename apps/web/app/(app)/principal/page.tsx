@@ -176,7 +176,7 @@ export default function PrincipalPage() {
   }
  
   return (
-    <div className="space-y-5 bg-amber-50/70 p-4 md:p-6">
+    <div className="space-y-5 bg-[var(--bg)] p-4 md:p-6">
       <PrincipalPageHeader
         eyebrow="LessonForge Executive Suite"
         title="Principal Command Center"
@@ -184,7 +184,7 @@ export default function PrincipalPage() {
       />
  
       {error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-400">{error}</div>
       ) : null}
  
       {onboardingRequired ? (
@@ -216,39 +216,39 @@ export default function PrincipalPage() {
                 action={
                   <Link
                     href="/principal/billing"
-                    className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100"
+                    className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-400 dark:hover:bg-violet-900/40"
                   >
                     Manage billing
                   </Link>
                 }
               >
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <div className="rounded-xl border border-slate-200 bg-amber-50/60 p-3">
-                    <div className="text-xs uppercase tracking-wide text-slate-500">Planning progress</div>
-                    <div className="mt-1 text-2xl font-black text-slate-900">
+                  <div className="rounded-xl border border-[var(--border)] bg-amber-50/60 p-3 dark:bg-amber-900/20">
+                    <div className="text-xs uppercase tracking-wide text-[var(--text-tertiary)]">Planning progress</div>
+                    <div className="mt-1 text-2xl font-black text-[var(--text-primary)]">
                       {dashboard.planning.schemeProgressPercent}%
                     </div>
-                    <p className="mt-1 text-xs text-slate-600">
+                    <p className="mt-1 text-xs text-[var(--text-secondary)]">
                       {dashboard.planning.completedSchemeMilestones} / {dashboard.planning.totalSchemeMilestones} milestones.
                     </p>
                   </div>
  
-                  <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <div className="text-xs uppercase tracking-wide text-slate-500">Next billing date</div>
-                    <div className="mt-1 text-base font-bold text-slate-900">
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
+                    <div className="text-xs uppercase tracking-wide text-[var(--text-tertiary)]">Next billing date</div>
+                    <div className="mt-1 text-base font-bold text-[var(--text-primary)]">
                       {formatDateOnly(dashboard.subscription.nextBillingDate)}
                     </div>
-                    <p className="mt-1 text-xs text-slate-600">
+                    <p className="mt-1 text-xs text-[var(--text-secondary)]">
                       Current monthly amount: {toNaira(dashboard.subscription.amountPerCycle)}
                     </p>
                   </div>
  
-                  <div className="rounded-xl border border-slate-200 bg-white p-3 md:col-span-2">
-                    <div className="text-xs uppercase tracking-wide text-slate-500">Upcoming highlight</div>
-                    <div className="mt-1 text-sm font-semibold text-slate-900">
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 md:col-span-2">
+                    <div className="text-xs uppercase tracking-wide text-[var(--text-tertiary)]">Upcoming highlight</div>
+                    <div className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
                       {dashboard.planning.upcomingAcademicEvents[0]?.title ?? "No upcoming event yet"}
                     </div>
-                    <p className="mt-1 text-xs text-slate-600">
+                    <p className="mt-1 text-xs text-[var(--text-secondary)]">
                       {dashboard.planning.upcomingAcademicEvents[0]?.startsAt
                         ? `Scheduled ${dashboard.planning.upcomingAcademicEvents[0].startsAt}`
                         : "Add school events to keep everyone aligned."}
@@ -262,7 +262,7 @@ export default function PrincipalPage() {
               <SectionCard title="Alerts & watchlist" subtitle="Signals that deserve immediate visibility.">
                 <div className="space-y-2">
                   {alerts.map((alert) => (
-                    <div key={alert} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                    <div key={alert} className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--text-secondary)]">
                       {alert}
                     </div>
                   ))}
@@ -272,15 +272,15 @@ export default function PrincipalPage() {
               <SectionCard title="Recent school activity" subtitle="Most recent teacher engagement in your workspace.">
                 <div className="space-y-2">
                   {dashboard.teachers.slice(0, 3).map((teacher) => (
-                    <div key={teacher.userId} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
-                      <div className="font-semibold text-slate-900">{teacher.name}</div>
-                      <div className="text-xs text-slate-600">
+                    <div key={teacher.userId} className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm">
+                      <div className="font-semibold text-[var(--text-primary)]">{teacher.name}</div>
+                      <div className="text-xs text-[var(--text-secondary)]">
                         {teacher.lessonsGenerated} lessons • {teacher.worksheetsCreated} worksheets • {timeAgo(teacher.lastActiveAt)}
                       </div>
                     </div>
                   ))}
                   {!dashboard.teachers.length ? (
-                    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--text-secondary)]">
                       No teacher activity yet. Invite your team using your school code.
                     </div>
                   ) : null}
@@ -295,10 +295,10 @@ export default function PrincipalPage() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-3 transition hover:border-violet-200 hover:bg-violet-50/40"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 transition hover:border-violet-200 hover:bg-violet-50/40 dark:hover:bg-violet-900/20"
                 >
-                  <div className="text-sm font-bold text-slate-900">{link.title}</div>
-                  <div className="mt-1 text-xs text-slate-600">{link.description}</div>
+                  <div className="text-sm font-bold text-[var(--text-primary)]">{link.title}</div>
+                  <div className="mt-1 text-xs text-[var(--text-secondary)]">{link.description}</div>
                 </Link>
               ))}
             </div>

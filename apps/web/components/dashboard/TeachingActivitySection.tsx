@@ -26,12 +26,12 @@ export default function TeachingActivitySection({
   ];
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-[#1A2847] bg-white dark:bg-[#0B1530]">
+    <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
       <div className="mb-6">
-        <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
+        <h2 className="text-lg font-bold tracking-tight text-[var(--text-primary)]">
           Teaching Activity
         </h2>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+        <p className="mt-1 text-sm text-[var(--text-secondary)]">
           Your lesson generation rhythm over the last 7 days.
         </p>
       </div>
@@ -42,7 +42,7 @@ export default function TeachingActivitySection({
           <div className="flex items-end justify-between gap-1">
             {activityBars.map((bar, i) => (
               <div key={i} className="flex flex-1 flex-col items-center gap-2">
-                <div className="w-full rounded-full bg-slate-200 transition-all duration-300 dark:bg-[#1A2847]" style={{ height: "120px", minWidth: "8px" }}>
+                <div className="w-full rounded-full bg-[var(--border)] transition-all duration-300" style={{ height: "120px", minWidth: "8px" }}>
                   <div
                     className="w-full rounded-full bg-violet-600 transition-all duration-300"
                     style={{
@@ -51,7 +51,7 @@ export default function TeachingActivitySection({
                     }}
                   />
                 </div>
-                <span className="text-[10px] text-slate-500 font-medium dark:text-slate-400">
+                <span className="text-[10px] font-medium text-[var(--text-tertiary)]">
                   {last7Days[i]}
                 </span>
               </div>
@@ -89,12 +89,12 @@ function StatBox({
   sublabel: string;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-[#1A2847] dark:bg-[#101827]">
-      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--card-alt)] p-3">
+      <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
         {label}
       </div>
-      <div className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-white">{value}</div>
-      {sublabel && <div className="text-xs text-slate-500 dark:text-slate-400">{sublabel}</div>}
+      <div className="mt-1 text-2xl font-extrabold text-[var(--text-primary)]">{value}</div>
+      {sublabel ? <div className="text-xs text-[var(--text-tertiary)]">{sublabel}</div> : null}
     </div>
   );
 }

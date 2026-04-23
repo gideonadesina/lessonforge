@@ -85,7 +85,7 @@ export default function PrincipalTeachersPage() {
   if (onboardingRequired) return <PrincipalOnboardingRequiredState />;
 
   return (
-    <div className="space-y-5 rounded-3xl bg-amber-50/70 p-4 md:p-6">
+    <div className="space-y-5 rounded-3xl bg-[var(--bg)] p-4 md:p-6">
       <PrincipalPageHeader
         eyebrow="Principal Operations"
         title="Teacher Management"
@@ -93,7 +93,7 @@ export default function PrincipalTeachersPage() {
       />
 
       {error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-400">{error}</div>
       ) : null}
 
       {dashboard ? (
@@ -115,7 +115,7 @@ export default function PrincipalTeachersPage() {
                   min={1}
                   value={addSlots}
                   onChange={(e) => setAddSlots(Math.max(1, Number(e.target.value || 1)))}
-                  className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm outline-none focus:border-violet-500"
+                  className="w-20 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-violet-500"
                 />
                 <button
                   onClick={upgradeSlots}
@@ -130,7 +130,7 @@ export default function PrincipalTeachersPage() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[760px] text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wide text-[var(--text-tertiary)]">
                     <th className="py-2">Teacher</th>
                     <th className="py-2">Status</th>
                     <th className="py-2">Lessons</th>
@@ -144,17 +144,17 @@ export default function PrincipalTeachersPage() {
                     dashboard.teachers.map((teacher) => {
                       const isBusy = busyTeacherId === teacher.userId;
                       return (
-                        <tr key={teacher.userId} className="border-b border-slate-100">
+                        <tr key={teacher.userId} className="border-b border-[var(--border)]">
                           <td className="py-3">
-                            <div className="font-semibold text-slate-900">{teacher.name}</div>
-                            <div className="text-xs text-slate-500">{teacher.email || teacher.userId}</div>
+                            <div className="font-semibold text-[var(--text-primary)]">{teacher.name}</div>
+                            <div className="text-xs text-[var(--text-tertiary)]">{teacher.email || teacher.userId}</div>
                           </td>
                           <td className="py-3">
                             <StatusPill status={teacher.status} />
                           </td>
-                          <td className="py-3 text-slate-700">{teacher.lessonsGenerated}</td>
-                          <td className="py-3 text-slate-700">{teacher.worksheetsCreated}</td>
-                          <td className="py-3 text-slate-600">{timeAgo(teacher.lastActiveAt)}</td>
+                          <td className="py-3 text-[var(--text-secondary)]">{teacher.lessonsGenerated}</td>
+                          <td className="py-3 text-[var(--text-secondary)]">{teacher.worksheetsCreated}</td>
+                          <td className="py-3 text-[var(--text-secondary)]">{timeAgo(teacher.lastActiveAt)}</td>
                           <td className="py-3">
                             <div className="flex items-center justify-end gap-2">
                               {teacher.status === "disabled" ? (
@@ -169,7 +169,7 @@ export default function PrincipalTeachersPage() {
                                 <button
                                   onClick={() => handleTeacherAction(teacher, "disable")}
                                   disabled={isBusy}
-                                  className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                                  className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--card-alt)] disabled:opacity-60"
                                 >
                                   {isBusy && busyTeacherAction === "disable" ? "..." : "Disable"}
                                 </button>
@@ -188,7 +188,7 @@ export default function PrincipalTeachersPage() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={6} className="py-6 text-center text-sm text-slate-500">
+                      <td colSpan={6} className="py-6 text-center text-sm text-[var(--text-tertiary)]">
                         No teachers yet. Share your school code so teachers can join.
                       </td>
                     </tr>
@@ -201,32 +201,32 @@ export default function PrincipalTeachersPage() {
           <SectionCard title="Activity monitoring" subtitle="Quick activity snapshots for the most recent teacher accounts.">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {dashboard.teachers.slice(0, 6).map((teacher) => (
-                <div key={teacher.userId} className="rounded-xl border border-slate-200 bg-amber-50/60 p-3">
+                <div key={teacher.userId} className="rounded-xl border border-[var(--border)] bg-amber-50/60 p-3 dark:bg-amber-900/20">
                   <div className="flex items-start justify-between">
                     <div>
-                      <div className="font-semibold text-slate-900">{teacher.name}</div>
-                      <div className="text-xs text-slate-500">{teacher.email || "No email"}</div>
+                      <div className="font-semibold text-[var(--text-primary)]">{teacher.name}</div>
+                      <div className="text-xs text-[var(--text-tertiary)]">{teacher.email || "No email"}</div>
                     </div>
                     <StatusPill status={teacher.status} />
                   </div>
                   <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                    <div className="rounded-lg bg-white p-2">
-                      <div className="text-[11px] text-slate-500">Lessons</div>
-                      <div className="text-lg font-bold text-slate-900">{teacher.lessonsGenerated}</div>
+                    <div className="rounded-lg bg-[var(--card)] p-2">
+                      <div className="text-[11px] text-[var(--text-tertiary)]">Lessons</div>
+                      <div className="text-lg font-bold text-[var(--text-primary)]">{teacher.lessonsGenerated}</div>
                     </div>
-                    <div className="rounded-lg bg-white p-2">
-                      <div className="text-[11px] text-slate-500">Worksheets</div>
-                      <div className="text-lg font-bold text-slate-900">{teacher.worksheetsCreated}</div>
+                    <div className="rounded-lg bg-[var(--card)] p-2">
+                      <div className="text-[11px] text-[var(--text-tertiary)]">Worksheets</div>
+                      <div className="text-lg font-bold text-[var(--text-primary)]">{teacher.worksheetsCreated}</div>
                     </div>
-                    <div className="rounded-lg bg-white p-2">
-                      <div className="text-[11px] text-slate-500">Last active</div>
-                      <div className="text-xs font-semibold text-slate-900">{timeAgo(teacher.lastActiveAt)}</div>
+                    <div className="rounded-lg bg-[var(--card)] p-2">
+                      <div className="text-[11px] text-[var(--text-tertiary)]">Last active</div>
+                      <div className="text-xs font-semibold text-[var(--text-primary)]">{timeAgo(teacher.lastActiveAt)}</div>
                     </div>
                   </div>
                 </div>
               ))}
               {!dashboard.teachers.length ? (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--card-alt)] p-4 text-sm text-[var(--text-secondary)]">
                   Activity cards will appear once teachers join your school code.
                 </div>
               ) : null}

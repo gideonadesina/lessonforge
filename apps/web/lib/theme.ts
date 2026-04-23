@@ -12,7 +12,7 @@ export function getSystemTheme(): "light" | "dark" {
 export function getSavedTheme(): Theme {
   if (typeof window === "undefined") return "system";
   const saved = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
-  return saved && ["light", "dark", "system"].includes(saved) ? saved : "system";
+  return saved && ["light", "dark", "system"].includes(saved) ? saved : "light";
 }
 
 export function getEffectiveTheme(): "light" | "dark" {

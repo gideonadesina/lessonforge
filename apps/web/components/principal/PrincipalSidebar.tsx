@@ -80,23 +80,23 @@ function SidebarCard({
   return (
     <aside
       className={[
-        "h-full overflow-y-auto rounded-3xl border border-slate-200 bg-white p-3 shadow-sm",
+        "h-full overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-3 text-[var(--text-primary)] shadow-sm",
         "transition-all duration-300",
         collapsed ? "w-24" : "w-72",
       ].join(" ")}
     >
-      <div className="mb-4 flex items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+      <div className="mb-4 flex items-center justify-between gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card-alt)] px-3 py-3">
         <div className={collapsed ? "w-full text-center" : "min-w-0"}>
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-700">LessonForge</p>
           {!collapsed ? (
-            <p className="truncate text-sm font-semibold text-slate-900">Principal Command Center</p>
+            <p className="truncate text-sm font-semibold text-[var(--text-primary)]">Principal Command Center</p>
           ) : null}
         </div>
         {onCollapseToggle ? (
           <button
             type="button"
             onClick={onCollapseToggle}
-            className="hidden h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:text-slate-900 lg:inline-flex"
+            className="hidden h-8 w-8 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] text-[var(--text-secondary)] transition hover:bg-[var(--card-alt)] hover:text-[var(--text-primary)] lg:inline-flex"
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -108,7 +108,7 @@ function SidebarCard({
         {NAV_SECTIONS.map((section) => (
           <div key={section.title}>
             {!collapsed ? (
-              <p className="px-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+              <p className="px-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-tertiary)]">
                 {section.title}
               </p>
             ) : null}
@@ -126,7 +126,7 @@ function SidebarCard({
                         collapsed ? "justify-center" : "gap-3",
                         activeItem
                           ? "border-violet-200 bg-violet-50 text-violet-700"
-                          : "border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900",
+                          : "border-transparent text-[var(--text-secondary)] hover:border-[var(--border)] hover:bg-[var(--card-alt)] hover:text-[var(--text-primary)]",
                       ].join(" ")}
                     >
                       <Icon className="h-4 w-4 shrink-0" />
@@ -134,7 +134,7 @@ function SidebarCard({
                     </Link>
  
                     {collapsed ? (
-                      <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 opacity-0 shadow-sm transition group-hover:opacity-100">
+                      <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs font-semibold text-[var(--text-secondary)] opacity-0 shadow-sm transition group-hover:opacity-100">
                         {item.label}
                       </span>
                     ) : null}

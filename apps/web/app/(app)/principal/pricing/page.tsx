@@ -166,7 +166,7 @@ export default function PrincipalPricingPage() {
           <button
             type="button"
             onClick={() => void verifySchoolPayment(verifyReference)}
-            className="mt-3 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+            className="mt-3 rounded-lg border border-red-300 bg-[var(--card)] px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
           >
             Try again
           </button>
@@ -192,83 +192,83 @@ export default function PrincipalPricingPage() {
         ))}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-sm">
+      <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 text-sm text-[var(--text-secondary)] shadow-sm">
         <div className="space-y-2">
-          <p className="font-semibold text-slate-900">{getCreditUsageNote()}</p>
-          <p className="font-semibold text-slate-900 pt-2">Credits are shared across all teachers in your school</p>
-          <p className="text-xs text-slate-600">
+          <p className="font-semibold text-[var(--text-primary)]">{getCreditUsageNote()}</p>
+          <p className="pt-2 font-semibold text-[var(--text-primary)]">Credits are shared across all teachers in your school</p>
+          <p className="text-xs text-[var(--text-secondary)]">
             The principal sets overall spending limits, creates department groups, and manages teacher credit allocations.
           </p>
         </div>
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-bold text-slate-900 mb-4">Plan Comparison</h2>
+      <section className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
+        <h2 className="mb-4 text-xl font-bold text-[var(--text-primary)]">Plan Comparison</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="border-b border-slate-200">
+            <thead className="border-b border-[var(--border)]">
               <tr>
-                <th className="text-left py-3 px-4 font-semibold text-slate-900">Feature</th>
-                <th className="text-left py-3 px-4 font-semibold text-slate-900">Starter</th>
-                <th className="text-left py-3 px-4 font-semibold text-slate-900">Growth</th>
-                <th className="text-left py-3 px-4 font-semibold text-slate-900">Full School</th>
-                <th className="text-left py-3 px-4 font-semibold text-slate-900">Enterprise</th>
+                <th className="px-4 py-3 text-left font-semibold text-[var(--text-primary)]">Feature</th>
+                <th className="px-4 py-3 text-left font-semibold text-[var(--text-primary)]">Starter</th>
+                <th className="px-4 py-3 text-left font-semibold text-[var(--text-primary)]">Growth</th>
+                <th className="px-4 py-3 text-left font-semibold text-[var(--text-primary)]">Full School</th>
+                <th className="px-4 py-3 text-left font-semibold text-[var(--text-primary)]">Enterprise</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-[var(--border)]">
               <tr>
-                <td className="py-3 px-4 text-slate-600">Principal dashboard</td>
-                <td className="py-3 px-4 text-center text-violet-600 font-semibold">✓</td>
-                <td className="py-3 px-4 text-center text-violet-600 font-semibold">✓</td>
-                <td className="py-3 px-4 text-center text-violet-600 font-semibold">✓</td>
-                <td className="py-3 px-4 text-center text-violet-600 font-semibold">✓</td>
+                <td className="px-4 py-3 text-[var(--text-secondary)]">Principal dashboard</td>
+                <td className="px-4 py-3 text-center font-semibold text-violet-600">✓</td>
+                <td className="px-4 py-3 text-center font-semibold text-violet-600">✓</td>
+                <td className="px-4 py-3 text-center font-semibold text-violet-600">✓</td>
+                <td className="px-4 py-3 text-center font-semibold text-violet-600">✓</td>
               </tr>
               <tr>
-                <td className="py-3 px-4 text-slate-600">Department grouping</td>
-                <td className="py-3 px-4 text-center text-slate-300">—</td>
-                <td className="py-3 px-4 text-center text-violet-600 font-semibold">✓</td>
-                <td className="py-3 px-4 text-center text-violet-600 font-semibold">✓</td>
-                <td className="py-3 px-4 text-center text-violet-600 font-semibold">✓</td>
+                <td className="px-4 py-3 text-[var(--text-secondary)]">Department grouping</td>
+                <td className="px-4 py-3 text-center text-[var(--text-tertiary)]">—</td>
+                <td className="px-4 py-3 text-center font-semibold text-violet-600">✓</td>
+                <td className="px-4 py-3 text-center font-semibold text-violet-600">✓</td>
+                <td className="px-4 py-3 text-center font-semibold text-violet-600">✓</td>
               </tr>
               <tr>
-                <td className="py-3 px-4 text-slate-600">Per-teacher credit limits</td>
-                <td className="py-3 px-4 text-center text-slate-300">—</td>
-                <td className="py-3 px-4 text-center text-violet-600 font-semibold">✓</td>
-                <td className="py-3 px-4 text-center text-violet-600 font-semibold">✓</td>
-                <td className="py-3 px-4 text-center text-violet-600 font-semibold">✓</td>
+                <td className="px-4 py-3 text-[var(--text-secondary)]">Per-teacher credit limits</td>
+                <td className="px-4 py-3 text-center text-[var(--text-tertiary)]">—</td>
+                <td className="px-4 py-3 text-center font-semibold text-violet-600">✓</td>
+                <td className="px-4 py-3 text-center font-semibold text-violet-600">✓</td>
+                <td className="px-4 py-3 text-center font-semibold text-violet-600">✓</td>
               </tr>
               <tr>
-                <td className="py-3 px-4 text-slate-600">Credits validity</td>
-                <td className="py-3 px-4 text-center text-slate-500 text-xs">Until fully used</td>
-                <td className="py-3 px-4 text-center text-slate-500 text-xs">Until fully used</td>
-                <td className="py-3 px-4 text-center text-slate-500 text-xs">Until fully used</td>
-                <td className="py-3 px-4 text-center text-slate-500 text-xs">Until fully used</td>
+                <td className="px-4 py-3 text-[var(--text-secondary)]">Credits validity</td>
+                <td className="px-4 py-3 text-center text-xs text-[var(--text-tertiary)]">Until fully used</td>
+                <td className="px-4 py-3 text-center text-xs text-[var(--text-tertiary)]">Until fully used</td>
+                <td className="px-4 py-3 text-center text-xs text-[var(--text-tertiary)]">Until fully used</td>
+                <td className="px-4 py-3 text-center text-xs text-[var(--text-tertiary)]">Until fully used</td>
               </tr>
               <tr>
-                <td className="py-3 px-4 text-slate-600">Priority support</td>
-                <td className="py-3 px-4 text-center text-slate-300">—</td>
-                <td className="py-3 px-4 text-center text-slate-300">—</td>
-                <td className="py-3 px-4 text-center text-violet-600 font-semibold">✓</td>
-                <td className="py-3 px-4 text-center text-violet-600 font-semibold">✓</td>
+                <td className="px-4 py-3 text-[var(--text-secondary)]">Priority support</td>
+                <td className="px-4 py-3 text-center text-[var(--text-tertiary)]">—</td>
+                <td className="px-4 py-3 text-center text-[var(--text-tertiary)]">—</td>
+                <td className="px-4 py-3 text-center font-semibold text-violet-600">✓</td>
+                <td className="px-4 py-3 text-center font-semibold text-violet-600">✓</td>
               </tr>
               <tr>
-                <td className="py-3 px-4 text-slate-600">White-label option</td>
-                <td className="py-3 px-4 text-center text-slate-300">—</td>
-                <td className="py-3 px-4 text-center text-slate-300">—</td>
-                <td className="py-3 px-4 text-center text-slate-300">—</td>
-                <td className="py-3 px-4 text-center text-violet-600 font-semibold">✓</td>
+                <td className="px-4 py-3 text-[var(--text-secondary)]">White-label option</td>
+                <td className="px-4 py-3 text-center text-[var(--text-tertiary)]">—</td>
+                <td className="px-4 py-3 text-center text-[var(--text-tertiary)]">—</td>
+                <td className="px-4 py-3 text-center text-[var(--text-tertiary)]">—</td>
+                <td className="px-4 py-3 text-center font-semibold text-violet-600">✓</td>
               </tr>
             </tbody>
           </table>
         </div>
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-bold text-slate-900">Billing & Next Steps</h2>
+      <section className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
+        <h2 className="text-xl font-bold text-[var(--text-primary)]">Billing & Next Steps</h2>
         <div className="mt-4 space-y-4">
-          <article className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-            <h3 className="text-sm font-semibold text-slate-900">How does charging work?</h3>
-            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+          <article className="rounded-2xl border border-[var(--border)] bg-[var(--card-alt)] p-4">
+            <h3 className="text-sm font-semibold text-[var(--text-primary)]">How does charging work?</h3>
+            <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
               Choose your plan above. You will be guided to a secure Paystack checkout to enter payment details and complete the transaction. Your school workspace activation is instant upon successful payment.
             </p>
           </article>
@@ -278,9 +278,9 @@ export default function PrincipalPricingPage() {
               Your school&apos;s credit pool is activated and visible in your Principal Billing dashboard. You can immediately add teacher accounts and begin distributing credits.
             </p>
           </article>
-          <article className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-            <h3 className="text-sm font-semibold text-slate-900">Can I upgrade or change plans?</h3>
-            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+          <article className="rounded-2xl border border-[var(--border)] bg-[var(--card-alt)] p-4">
+            <h3 className="text-sm font-semibold text-[var(--text-primary)]">Can I upgrade or change plans?</h3>
+            <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
               Yes. When credits run out, return here to choose a new plan and complete another manual purchase.
             </p>
           </article>

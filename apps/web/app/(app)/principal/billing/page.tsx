@@ -81,7 +81,7 @@ export default function PrincipalBillingPage() {
   if (onboardingRequired) return <PrincipalOnboardingRequiredState />;
 
   return (
-    <div className="space-y-5 rounded-3xl bg-amber-50/70 p-4 md:p-6">
+    <div className="space-y-5 rounded-3xl bg-[var(--bg)] p-4 md:p-6">
       <PrincipalPageHeader
         eyebrow="Billing & Payments"
         title="Principal Billing"
@@ -89,33 +89,33 @@ export default function PrincipalBillingPage() {
       />
 
       {error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-400">{error}</div>
       ) : null}
 
       {dashboard ? (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
           <div className="space-y-4 xl:col-span-5">
             <SectionCard title="Current plan" subtitle="Live billing snapshot for your school workspace.">
-              <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 text-sm">
+              <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 text-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Plan</span>
-                  <span className="font-semibold text-slate-900">{dashboard.subscription.planName}</span>
+                  <span className="text-[var(--text-secondary)]">Plan</span>
+                  <span className="font-semibold text-[var(--text-primary)]">{dashboard.subscription.planName}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Teacher slots</span>
-                  <span className="font-semibold text-slate-900">{dashboard.subscription.slotLimit}</span>
+                  <span className="text-[var(--text-secondary)]">Teacher slots</span>
+                  <span className="font-semibold text-[var(--text-primary)]">{dashboard.subscription.slotLimit}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Amount</span>
+                  <span className="text-[var(--text-secondary)]">Amount</span>
                   <span className="font-semibold text-violet-700">{toNaira(dashboard.subscription.amountPerCycle)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Cycle</span>
-                  <span className="font-semibold capitalize text-slate-900">{dashboard.subscription.billingCycle}</span>
+                  <span className="text-[var(--text-secondary)]">Cycle</span>
+                  <span className="font-semibold capitalize text-[var(--text-primary)]">{dashboard.subscription.billingCycle}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Status</span>
-                  <span className="font-semibold capitalize text-slate-900">{dashboard.subscription.status}</span>
+                  <span className="text-[var(--text-secondary)]">Status</span>
+                  <span className="font-semibold capitalize text-[var(--text-primary)]">{dashboard.subscription.status}</span>
                 </div>
               </div>
             </SectionCard>
@@ -128,7 +128,7 @@ export default function PrincipalBillingPage() {
                     min={1}
                     value={addSlots}
                     onChange={(e) => setAddSlots(Math.max(1, Number(e.target.value || 1)))}
-                    className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm outline-none focus:border-violet-500"
+                    className="w-24 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-violet-500"
                   />
                   <button
                     onClick={upgradeSlots}
@@ -147,7 +147,7 @@ export default function PrincipalBillingPage() {
                   {paystackBusy ? "Redirecting..." : "Pay with Paystack"}
                 </button>
 
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-[var(--text-secondary)]">
                   Existing backend checkout and verify flow is preserved. Billing remains one-time/manual without forced auto-renew logic.
                 </p>
               </div>
@@ -159,7 +159,7 @@ export default function PrincipalBillingPage() {
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[640px] text-sm">
                   <thead>
-                    <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wide text-[var(--text-tertiary)]">
                       <th className="py-2">Amount</th>
                       <th className="py-2">Status</th>
                       <th className="py-2">Provider</th>
@@ -169,16 +169,16 @@ export default function PrincipalBillingPage() {
                   </thead>
                   <tbody>
                     {dashboard.billingHistory.map((item) => (
-                      <tr key={item.id} className="border-b border-slate-100">
-                        <td className="py-3 font-semibold text-slate-900">{toNaira(item.amount)}</td>
+                      <tr key={item.id} className="border-b border-[var(--border)]">
+                        <td className="py-3 font-semibold text-[var(--text-primary)]">{toNaira(item.amount)}</td>
                         <td className="py-3">
-                          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold capitalize text-slate-700">
+                          <span className="rounded-full bg-[var(--card-alt)] px-2 py-1 text-xs font-semibold capitalize text-[var(--text-secondary)]">
                             {item.status}
                           </span>
                         </td>
-                        <td className="py-3 capitalize text-slate-700">{item.provider}</td>
-                        <td className="py-3 font-mono text-xs text-slate-600">{item.reference || "—"}</td>
-                        <td className="py-3 text-slate-700">{formatDateOnly(item.paidAt)}</td>
+                        <td className="py-3 capitalize text-[var(--text-secondary)]">{item.provider}</td>
+                        <td className="py-3 font-mono text-xs text-[var(--text-secondary)]">{item.reference || "—"}</td>
+                        <td className="py-3 text-[var(--text-secondary)]">{formatDateOnly(item.paidAt)}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -1725,32 +1725,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data: creditData, error: creditErr } =
-      await supabase.rpc("consume_generation_credit");
+   const { data: creditData, error: creditErr } =
+  await supabase.rpc("consume_generation_credit");
 
-    if (creditErr) {
-      return NextResponse.json(
-        { error: "Credit check failed", detail: creditErr.message },
-        { status: 500 }
-      );
-    }
-
-    if (!user.email_confirmed_at) {
-      return NextResponse.json(
-        { error: "Please confirm your email before generating lessons." },
-        { status: 403 }
-      );
-    }
-
-    if (!creditData?.ok) {
-      const msg = creditData?.error || "No credits";
-      const status =
-        typeof msg === "string" && msg.toLowerCase().includes("not authenticated")
-          ? 401
-          : 402;
-
-      return NextResponse.json({ error: msg }, { status });
-    }
+if (creditErr) {
+  console.error("[generate] Credit deduction failed after successful generation:", creditErr.message);
+} else if (!creditData?.ok) {
+  const msg = creditData?.error || "No credits";
+  const status =
+    typeof msg === "string" && msg.toLowerCase().includes("not authenticated")
+      ? 401
+      : 402;
+  return NextResponse.json({ error: msg }, { status });
+}
 
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
@@ -1805,30 +1792,44 @@ export async function POST(req: NextRequest) {
 
     const data = normalizeGeneratedData(parsed, body);
 
-    if (Array.isArray(data.slides) && data.slides.length > 0) {
-      for (let i = 0; i < data.slides.length; i++) {
-        const slide = data.slides[i];
+   if (Array.isArray(data.slides) && data.slides.length > 0) {
+  const imageResults = await Promise.allSettled(
+    data.slides.map((slide) =>
+      generateSlideImage(client, {
+        subject: body.subject,
+        topic: body.topic,
+        schoolLevel: body.schoolLevel,
+        curriculum: body.curriculum,
+        examAlignment: body.examAlignment,
+        slideTitle: slide.title,
+        imageQuery: slide.imageQuery || slide.title || body.topic,
+      })
+    )
+  );
 
-        const imageFocus =
-          slide.imageQuery ||
-          slide.title ||
-          body.topic;
+  data.slides.forEach((slide, i) => {
+    const result = imageResults[i];
+    slide.image =
+      result.status === "fulfilled" && result.value
+        ? result.value
+        : FALLBACK_IMG;
+  });
+}
 
-        const generatedImage = await generateSlideImage(client, {
-          subject: body.subject,
-          topic: body.topic,
-          schoolLevel: body.schoolLevel,
-          curriculum: body.curriculum,
-          examAlignment: body.examAlignment,
-          slideTitle: slide.title,
-          imageQuery: String(imageFocus),
-        });
+    const { error: saveErr } = await supabase.from("lessons").insert({
+  subject: body.subject,
+  topic: body.topic,
+  grade: body.grade,
+  curriculum: body.curriculum ?? null,
+  result_json: data,
+  type: "lesson",
+});
 
-        slide.image = generatedImage || FALLBACK_IMG;
-      }
-    }
+if (saveErr) {
+  console.error("[generate] Failed to save to library:", saveErr.message);
+}
 
-    return NextResponse.json({ data }, { status: 200 });
+return NextResponse.json({ data, saved: !saveErr }, { status: 200 });
   } catch (err: unknown) {
     const message =
       err instanceof Error ? err.message : typeof err === "string" ? err : "Unknown error";

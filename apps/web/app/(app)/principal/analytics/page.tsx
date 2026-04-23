@@ -31,7 +31,7 @@ export default function PrincipalAnalyticsPage() {
   if (onboardingRequired) return <PrincipalOnboardingRequiredState />;
 
   return (
-    <div className="space-y-5 rounded-3xl bg-amber-50/70 p-4 md:p-6">
+    <div className="space-y-5 rounded-3xl bg-[var(--bg)] p-4 md:p-6">
       <PrincipalPageHeader
         eyebrow="School Analytics"
         title="Performance & Engagement Analytics"
@@ -39,7 +39,7 @@ export default function PrincipalAnalyticsPage() {
       />
 
       {error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-400">{error}</div>
       ) : null}
 
       {dashboard ? (
@@ -57,7 +57,7 @@ export default function PrincipalAnalyticsPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[700px] text-sm">
                     <thead>
-                      <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                      <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wide text-[var(--text-tertiary)]">
                         <th className="py-2">Teacher</th>
                         <th className="py-2">Status</th>
                         <th className="py-2">Lessons</th>
@@ -68,10 +68,10 @@ export default function PrincipalAnalyticsPage() {
                     </thead>
                     <tbody>
                       {topTeachers.map((teacher) => (
-                        <tr key={teacher.userId} className="border-b border-slate-100">
+                        <tr key={teacher.userId} className="border-b border-[var(--border)]">
                           <td className="py-3">
-                            <div className="font-semibold text-slate-900">{teacher.name}</div>
-                            <div className="text-xs text-slate-500">{teacher.email || teacher.userId}</div>
+                            <div className="font-semibold text-[var(--text-primary)]">{teacher.name}</div>
+                            <div className="text-xs text-[var(--text-tertiary)]">{teacher.email || teacher.userId}</div>
                           </td>
                           <td className="py-3">
                             <StatusPill status={teacher.status} />
@@ -86,7 +86,7 @@ export default function PrincipalAnalyticsPage() {
                       ))}
                       {!topTeachers.length ? (
                         <tr>
-                          <td colSpan={6} className="py-6 text-center text-sm text-slate-500">
+                          <td colSpan={6} className="py-6 text-center text-sm text-[var(--text-secondary)]">
                             Analytics will appear after teacher activity starts.
                           </td>
                         </tr>
@@ -99,16 +99,16 @@ export default function PrincipalAnalyticsPage() {
 
             <aside className="space-y-4 xl:col-span-4">
               <SectionCard title="Operational insights" subtitle="Simple alerts for principal decision making.">
-                <div className="space-y-2 text-sm text-slate-700">
-                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                <div className="space-y-2 text-sm text-[var(--text-secondary)]">
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2">
                     Activity velocity:{" "}
-                    <span className="font-semibold text-slate-900">
+                    <span className="font-semibold text-[var(--text-primary)]">
                       {dashboard.overview.weeklyActivityCount >= 10 ? "Healthy" : "Needs attention"}
                     </span>
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2">
                     Capacity utilization:{" "}
-                    <span className="font-semibold text-slate-900">
+                    <span className="font-semibold text-[var(--text-primary)]">
                       {Math.min(
                         100,
                         Math.round((dashboard.overview.totalTeachers / Math.max(dashboard.subscription.slotLimit, 1)) * 100)
@@ -116,9 +116,9 @@ export default function PrincipalAnalyticsPage() {
                       %
                     </span>
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2">
                     Planning completion:{" "}
-                    <span className="font-semibold text-slate-900">{dashboard.planning.schemeProgressPercent}%</span>
+                    <span className="font-semibold text-[var(--text-primary)]">{dashboard.planning.schemeProgressPercent}%</span>
                   </div>
                 </div>
               </SectionCard>

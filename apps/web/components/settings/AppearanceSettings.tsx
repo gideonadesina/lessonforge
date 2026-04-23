@@ -28,8 +28,8 @@ export default function AppearanceSettings() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="font-semibold text-slate-900 mb-1 dark:text-white">Theme</h3>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
+        <h3 className="mb-1 font-semibold text-[var(--text-primary)]">Theme</h3>
+        <p className="text-xs text-[var(--text-secondary)]">
           Choose how LessonForge looks on your screen.
         </p>
       </div>
@@ -42,14 +42,14 @@ export default function AppearanceSettings() {
             className={`flex flex-col items-center gap-2 rounded-xl border-2 p-3 transition ${
               theme === value
                 ? "border-violet-400 bg-violet-50 dark:border-violet-500 dark:bg-violet-900/30"
-                : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1530] dark:hover:border-slate-600"
+                : "border-[var(--border)] bg-[var(--card)] hover:bg-[var(--card-alt)]"
             }`}
           >
             <div
               className={`${
                 theme === value
                   ? "text-violet-700 dark:text-violet-400"
-                  : "text-slate-600 dark:text-slate-400"
+                  : "text-[var(--text-secondary)]"
               }`}
             >
               {icon}
@@ -58,7 +58,7 @@ export default function AppearanceSettings() {
               className={`text-xs font-medium ${
                 theme === value
                   ? "text-violet-700 dark:text-violet-400"
-                  : "text-slate-600 dark:text-slate-400"
+                  : "text-[var(--text-secondary)]"
               }`}
             >
               {label}

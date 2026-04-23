@@ -47,33 +47,33 @@ export default function DashboardHeader() {
   const isLowCredits = creditsRemaining <= 10;
 
   return (
-    <section className="rounded-[24px] border border-slate-200 bg-white px-6 py-6 shadow-sm bg-white dark:bg-[#0B1530] border-slate-200 dark:border-[#1A2847]">
+    <section className="rounded-[24px] border border-[var(--border)] bg-[var(--card)] px-6 py-6 shadow-sm">
       <div className="flex flex-col gap-6 xl:flex-row xl:gap-8">
         {/* LEFT SIDE: User info + Plan card */}
         <div className="flex-1 min-w-0">
           {/* Greeting + Name */}
-          <div className="text-sm font-medium text-slate-500 dark:text-slate-400">
+          <div className="text-sm font-medium text-[var(--text-secondary)]">
             {getGreeting()}
           </div>
 
-          <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl dark:text-white">
+          <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-[var(--text-primary)] sm:text-3xl">
             {name}
           </h1>
 
-          <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+          <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
             Welcome to your teaching workspace. Plan faster, generate stronger
             lessons, and stay organized.
           </p>
 
           {/* Compact Plan + Usage Card */}
-          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:bg-[#101827] border-slate-200 dark:border-[#1A2847]">
+          <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--card-alt)] p-4">
             <div className="flex items-start justify-between gap-4">
               {/* Left: Plan info */}
               <div>
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
                   Plan
                 </div>
-                <div className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">
+                <div className="mt-1 text-lg font-extrabold text-[var(--text-primary)]">
                   {planLabel}
                 </div>
                 <Link
@@ -87,16 +87,16 @@ export default function DashboardHeader() {
               {/* Right: Credits info */}
               <div className="text-right">
                 <div className="flex items-baseline justify-end gap-1">
-                  <div className="text-lg font-extrabold text-slate-900 dark:text-white">
+                  <div className="text-lg font-extrabold text-[var(--text-primary)]">
                     {creditsRemaining}
                   </div>
-                  <div className="text-xs text-slate-600 dark:text-slate-400">
+                  <div className="text-xs text-[var(--text-secondary)]">
                     credits
                   </div>
                 </div>
 
                 {/* Thin progress bar */}
-                <div className="mt-2 h-1.5 w-32 overflow-hidden rounded-full bg-slate-200 dark:bg-[#1A2847]">
+                <div className="mt-2 h-1.5 w-32 overflow-hidden rounded-full bg-[var(--border)]">
                   <div
                     className={`h-full transition-all ${
                       isLowCredits ? "bg-amber-500" : "bg-violet-600"
@@ -107,7 +107,7 @@ export default function DashboardHeader() {
                   />
                 </div>
 
-                <div className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+                <div className="mt-2 text-xs text-[var(--text-secondary)]">
                   ~{lessonsRemaining} lesson packs
                 </div>
 
@@ -122,7 +122,7 @@ export default function DashboardHeader() {
             {/* CTA Link */}
             <Link
               href="/settings?tab=billing"
-              className="mt-3 inline-flex text-xs font-semibold text-slate-600 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
+              className="mt-3 inline-flex text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             >
               Upgrade for unlimited credits →
             </Link>
@@ -139,7 +139,7 @@ export default function DashboardHeader() {
 
             <Link
               href="/library"
-              className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 border-slate-200 dark:border-[#1A2847] dark:bg-[#101827] dark:text-slate-300 bg-white dark:bg-[#0B1530]"
+              className="inline-flex items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--card)] px-5 py-3 text-sm font-semibold text-[var(--text-primary)] transition hover:bg-[var(--card-alt)]"
             >
               Open Library
             </Link>

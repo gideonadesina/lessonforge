@@ -553,14 +553,123 @@ if (showOnboarding && profile) {
                 teacher seat.
               </p>
             </div>
-            <SchoolCodeInput
-              redirectTo="/dashboard"
-              onJoined={loadSchoolMembership}
-            />
+          <SchoolCodeInput
+  onJoined={(_data) => {
+    void loadSchoolMembership();
+  }}
+/>
           </section>
         ) : null}
 
         <QuickActionsGrid />
+
+          <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-[var(--text-primary)]">
+                Planning reminders
+              </h2>
+              <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                Weekly topics and upcoming school events from your Planning
+                tools.
+              </p>
+            </div>
+
+            <Link
+              href="/planning"
+              className="inline-flex rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--card-alt)]"
+            >
+              Open Planning
+            </Link>
+          </div>
+
+          {planningMsg ? (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-400">
+              {planningMsg}
+            </div>
+          ) : null}
+
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+            <PlanningReminderCard title="This Week's Topic">
+              {loading ? (
+                <ReminderLoading />
+              ) : planningReminders.thisWeekTopic ? (
+                <div>
+                  <div className="text-sm font-semibold text-[var(--text-primary)]">
+                    {planningReminders.thisWeekTopic.topic}
+                  </div>
+                  <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                    Week {planningReminders.thisWeekTopic.week_number} •{" "}
+                    {planningReminders.thisWeekTopic.class_name} •{" "}
+                    {planningReminders.thisWeekTopic.subject}
+                  </div>
+                </div>
+              ) : (
+                <EmptyReminder
+                  text={`No topic assigned for week ${planningReminders.currentWeek}.`}
+                />
+              )}
+            </PlanningReminderCard>
+
+            <PlanningReminderCard title="Next Topic">
+              {loading ? (
+                <ReminderLoading />
+              ) : planningReminders.nextTopic ? (
+                <div>
+                  <div className="text-sm font-semibold text-[var(--text-primary)]">
+                    {planningReminders.nextTopic.topic}
+                  </div>
+                  <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                    Week {planningReminders.nextTopic.week_number} •{" "}
+                    {planningReminders.nextTopic.term}
+                  </div>
+                </div>
+              ) : (
+                <EmptyReminder text="No upcoming topic yet." />
+              )}
+            </PlanningReminderCard>
+
+            <PlanningReminderCard title="Upcoming Academic Event">
+              {loading ? (
+                <ReminderLoading />
+              ) : planningReminders.upcomingEvent ? (
+                <div>
+                  <div className="text-sm font-semibold text-[var(--text-primary)]">
+                    {planningReminders.upcomingEvent.title}
+                  </div>
+                  <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                    {formatEventDate(
+                      planningReminders.upcomingEvent.event_date
+                    )}{" "}
+                    •{" "}
+                    {formatEventType(
+                      planningReminders.upcomingEvent.event_type
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <EmptyReminder text="No upcoming event in your calendar." />
+              )}
+            </PlanningReminderCard>
+
+            <PlanningReminderCard title="Pending Topics Count">
+              {loading ? (
+                <ReminderLoading />
+              ) : (
+                <div>
+                  <div className="text-2xl font-extrabold tracking-tight text-[var(--text-primary)]">
+                    {planningReminders.pendingTopicsCount}
+                  </div>
+                  <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                    {planningReminders.pendingTopicsCount > 0
+                      ? "Topics are still not completed."
+                      : "All topics are completed. Great work."}
+                  </div>
+                </div>
+              )}
+            </PlanningReminderCard>
+          </div>
+        </section>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <section className="space-y-4 lg:col-span-10">

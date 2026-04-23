@@ -114,13 +114,13 @@ export default function PricingPage() {
         </p>
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-bold text-slate-900">Frequently asked questions</h2>
+      <section className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
+        <h2 className="text-xl font-bold text-[var(--text-primary)]">Frequently asked questions</h2>
         <div className="mt-4 space-y-4">
           {FAQ_ITEMS.map((item) => (
-            <article key={item.question} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-              <h3 className="text-sm font-semibold text-slate-900">{item.question}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-600">{item.answer}</p>
+            <article key={item.question} className="rounded-2xl border border-[var(--border)] bg-[var(--card-alt)] p-4">
+              <h3 className="text-sm font-semibold text-[var(--text-primary)]">{item.question}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">{item.answer}</p>
             </article>
           ))}
         </div>

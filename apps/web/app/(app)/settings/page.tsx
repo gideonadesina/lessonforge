@@ -29,11 +29,11 @@ function normalizePlan(plan: string | null): Plan {
 }
 
 function getPlanDisplay(plan: Plan) {
-  if (plan === "basic") return { label: "Basic", colorClass: "text-slate-900" };
+  if (plan === "basic") return { label: "Basic", colorClass: "text-[var(--text-primary)]" };
   if (plan === "pro") return { label: "Pro", colorClass: "text-green-600" };
   if (plan === "pro_plus") return { label: "Pro Plus", colorClass: "text-violet-700" };
   if (plan === "ultra_pro") return { label: "Ultra Pro", colorClass: "text-violet-700" };
-  return { label: "Free Trial", colorClass: "text-slate-900" };
+  return { label: "Free Trial", colorClass: "text-[var(--text-primary)]" };
 }
 
 export default function SettingsPage() {
@@ -97,7 +97,7 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div className="p-6">
-        <div className="text-slate-600 dark:text-slate-400">Loading settings...</div>
+        <div className="text-[var(--text-secondary)]">Loading settings...</div>
       </div>
     );
   }
@@ -109,30 +109,30 @@ export default function SettingsPage() {
      <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Settings</h1>
-        <p className="text-slate-600 mt-1 dark:text-slate-400">Manage your account and plan.</p>
+        <h1 className="text-3xl font-bold text-[var(--text-primary)]">Settings</h1>
+        <p className="mt-1 text-[var(--text-secondary)]">Manage your account and plan.</p>
       </div>
 
       {/* Account Info */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm dark:bg-slate-800 dark:border-slate-700">
-        <h2 className="font-semibold text-slate-900 mb-4 dark:text-white">Account</h2>
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
+        <h2 className="mb-4 font-semibold text-[var(--text-primary)]">Account</h2>
 
         <div className="space-y-3 text-sm">
            <div className="flex justify-between">
-            <span className="text-slate-500 dark:text-slate-400">Email</span>
-            <span className="font-medium text-slate-900 dark:text-white">{profile?.email}</span>
+            <span className="text-[var(--text-secondary)]">Email</span>
+            <span className="font-medium text-[var(--text-primary)]">{profile?.email}</span>
           </div>
 
           <div className="flex justify-between">
-            <span className="text-slate-500 dark:text-slate-400">Plan</span>
-            <span className={`font-medium ${planInfo.colorClass} dark:text-slate-300`}>
+            <span className="text-[var(--text-secondary)]">Plan</span>
+            <span className={`font-medium ${planInfo.colorClass}`}>
               {planInfo.label}
             </span>
           </div>
 
           <div className="flex justify-between">
-            <span className="text-slate-500 dark:text-slate-400">Remaining Credits</span>
-            <span className="font-medium text-slate-900 dark:text-white">
+            <span className="text-[var(--text-secondary)]">Remaining Credits</span>
+            <span className="font-medium text-[var(--text-primary)]">
               {profile?.credits_balance ?? 0}
             </span>
           </div>
@@ -140,27 +140,27 @@ export default function SettingsPage() {
       </div>
 
       {/* Appearance */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm dark:bg-slate-800 dark:border-slate-700">
-        <h2 className="font-semibold text-slate-900 mb-4 dark:text-white">Appearance</h2>
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
+        <h2 className="mb-4 font-semibold text-[var(--text-primary)]">Appearance</h2>
         <AppearanceSettings />
       </div>
 
       {/* Billing */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm dark:bg-slate-800 dark:border-slate-700">
-        <h2 className="font-semibold text-slate-900 mb-4 dark:text-white">Billing</h2>
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
+        <h2 className="mb-4 font-semibold text-[var(--text-primary)]">Billing</h2>
 
         {isPaidPlan ? (
           <div className="space-y-3">
             <div className="text-green-600 text-sm font-medium dark:text-green-400">
               Your {planInfo.label} plan is active.
             </div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">
+            <div className="text-xs text-[var(--text-secondary)]">
               1 lesson pack uses {LESSON_PACK_CREDIT_COST} credits.
             </div>
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="text-sm text-slate-600 dark:text-slate-400">
+            <div className="text-sm text-[var(--text-secondary)]">
               Upgrade to get more credits for lesson generation.
             </div>
             <Link
@@ -174,8 +174,8 @@ export default function SettingsPage() {
       </div>
 
       {/* Logout */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm dark:bg-slate-800 dark:border-slate-700">
-        <h2 className="font-semibold text-slate-900 mb-4 dark:text-white">Danger Zone</h2>
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
+        <h2 className="mb-4 font-semibold text-[var(--text-primary)]">Danger Zone</h2>
 
         <button
           onClick={logout}

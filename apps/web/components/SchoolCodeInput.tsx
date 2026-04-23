@@ -1,37 +1,43 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 
-type SchoolCodeInputProps = {
-  redirectTo?: string;
-  onJoined?: () => void | Promise<void>;
+type JoinedData = {
+  school: {
+    id: string;
+    name: string | null;
+    code: string | null;
+  };
+  membership: {
+    role: string;
+    joined_at: string | null;
+  };
 };
 
-export default function SchoolCodeInput({ redirectTo = "/dashboard", onJoined }: SchoolCodeInputProps) {
-  const router = useRouter();
-  const supabase = useMemo(() => createBrowserSupabase(), []);
+type SchoolCodeInputProps = {
+  onJoined?: (data: JoinedData) => void | Promise<void>;
+};
 
+export default function SchoolCodeInput({ onJoined }: SchoolCodeInputProps) {
+  const supabase = useMemo(() => createBrowserSupabase(), []);
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function joinSchool() {
     const cleaned = code.trim().toUpperCase();
     if (!cleaned) return;
-
     setLoading(true);
-    setMessage(null);
+    setError(null);
 
     try {
       const {
         data: { session },
       } = await supabase.auth.getSession();
-
       const token = session?.access_token;
       if (!token) {
-        setMessage("Session expired. Please login again.");
+        setError("Session expired. Please log in again.");
         return;
       }
 
@@ -47,52 +53,62 @@ export default function SchoolCodeInput({ redirectTo = "/dashboard", onJoined }:
       const json = await res.json();
 
       if (!res.ok || json?.ok === false) {
-        setMessage(json?.error || "Invalid school code");
+        const msg = json?.error ?? "Invalid school code";
+        if (msg.toLowerCase().includes("invalid")) {
+          setError("Invalid school code — check with your principal");
+        } else if (msg.toLowerCase().includes("full")) {
+          setError("This school is full. Ask your principal to add more teacher slots.");
+        } else if (msg.toLowerCase().includes("principal")) {
+          setError("Principal accounts cannot join a school as a teacher.");
+        } else if (msg.toLowerCase().includes("inactive") || msg.toLowerCase().includes("active")) {
+          setError("This school's plan is no longer active. Ask your principal to renew.");
+        } else {
+          setError(msg);
+        }
         return;
       }
 
-      setMessage("Joined school successfully. Redirecting...");
-      await onJoined?.();
-      router.replace(redirectTo);
-      router.refresh();
+      await onJoined?.(json.data);
     } catch (e: unknown) {
-      setMessage(e instanceof Error ? e.message : "Something went wrong");
+      setError(e instanceof Error ? e.message : "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h3 className="text-base font-bold text-slate-900">Join School License</h3>
-      <p className="mt-1 text-sm text-slate-600">
-        Enter the code from your headteacher/admin.
-      </p>
-
-      <div className="mt-4 flex gap-2">
+    <div className="space-y-3">
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-medium text-slate-700">
+          School code
+        </label>
         <input
           value={code}
-          onChange={(e) => setCode(e.target.value)}
-          placeholder="e.g. GHA-KAD-2026"
-          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          onKeyDown={(e) => { if (e.key === "Enter") void joinSchool(); }}
+          placeholder="e.g. FRG-7X2M"
+          maxLength={20}
+          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder-slate-400 focus:border-[#534AB7] focus:outline-none"
         />
-
-        <button
-          onClick={joinSchool}
-          disabled={loading || !code.trim()}
-          className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
-        >
-          {loading ? "Joining..." : "Join"}
-        </button>
+        <span className="text-[11px] text-slate-500">
+          Ask your principal for your school code
+        </span>
       </div>
 
-      {message ? (
-        <div className="mt-3 text-sm text-slate-700">{message}</div>
-      ) : (
-        <div className="mt-3 text-xs text-slate-500">
-          Tip: confirm spelling/case from your admin.
+      {error ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {error}
         </div>
-      )}
+      ) : null}
+
+      <button
+        type="button"
+        onClick={() => void joinSchool()}
+        disabled={loading || !code.trim()}
+        className="w-full rounded-xl bg-[#534AB7] py-3 text-sm font-medium text-white hover:bg-[#3C3489] disabled:opacity-60"
+      >
+        {loading ? "Joining..." : "Join school"}
+      </button>
     </div>
   );
 }

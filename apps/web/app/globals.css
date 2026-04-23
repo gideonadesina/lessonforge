@@ -3,23 +3,25 @@
 :root {
   color-scheme: light;
   --bg: #faf9f6;
-  --surface: #ffffff;
-  --surface-alt: #f8fafc;
+  --card: #ffffff;
+  --card-alt: #f8fafc;
   --border: #e2e8f0;
   --text-primary: #0f172a;
-  --text-secondary: #334155;
+  --text-secondary: #475569;
   --text-tertiary: #64748b;
+  --brand: #534ab7;
 }
 
 html.dark {
   color-scheme: dark;
   --bg: #070b14;
-  --surface: #0b1530;
-  --surface-alt: #101827;
+  --card: #0b1530;
+  --card-alt: #101827;
   --border: #1a2847;
-  --text-primary: #ffffff;
+  --text-primary: #f8fafc;
   --text-secondary: #cbd5e1;
   --text-tertiary: #94a3b8;
+  --brand: #534ab7;
 }
 
 html {

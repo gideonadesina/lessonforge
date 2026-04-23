@@ -34,7 +34,7 @@ export default function PrincipalLibraryPage() {
   if (onboardingRequired) return <PrincipalOnboardingRequiredState />;
 
   return (
-    <div className="space-y-5 rounded-3xl bg-amber-50/70 p-4 md:p-6">
+    <div className="space-y-5 rounded-3xl bg-[var(--bg)] p-4 md:p-6">
       <PrincipalPageHeader
         eyebrow="Content Library"
         title="Principal Library"
@@ -42,7 +42,7 @@ export default function PrincipalLibraryPage() {
       />
 
       {error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-400">{error}</div>
       ) : null}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
@@ -62,7 +62,7 @@ export default function PrincipalLibraryPage() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[680px] text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wide text-[var(--text-tertiary)]">
                     <th className="py-2">Teacher</th>
                     <th className="py-2">Lessons</th>
                     <th className="py-2">Worksheets</th>
@@ -71,19 +71,19 @@ export default function PrincipalLibraryPage() {
                 </thead>
                 <tbody>
                   {teacherContributions.map((teacher) => (
-                    <tr key={teacher.userId} className="border-b border-slate-100">
+                    <tr key={teacher.userId} className="border-b border-[var(--border)]">
                       <td className="py-3">
-                        <div className="font-semibold text-slate-900">{teacher.name}</div>
-                        <div className="text-xs text-slate-500">{teacher.email || teacher.userId}</div>
+                        <div className="font-semibold text-[var(--text-primary)]">{teacher.name}</div>
+                        <div className="text-xs text-[var(--text-secondary)]">{teacher.email || teacher.userId}</div>
                       </td>
-                      <td className="py-3 text-slate-700">{teacher.lessonsGenerated}</td>
-                      <td className="py-3 text-slate-700">{teacher.worksheetsCreated}</td>
+                      <td className="py-3 text-[var(--text-secondary)]">{teacher.lessonsGenerated}</td>
+                      <td className="py-3 text-[var(--text-secondary)]">{teacher.worksheetsCreated}</td>
                       <td className="py-3 text-right font-bold text-violet-700">{teacher.totalAssets}</td>
                     </tr>
                   ))}
                   {!teacherContributions.length ? (
                     <tr>
-                      <td colSpan={4} className="py-6 text-center text-sm text-slate-500">
+                      <td colSpan={4} className="py-6 text-center text-sm text-[var(--text-secondary)]">
                         Contributions appear after teachers generate content.
                       </td>
                     </tr>
@@ -97,13 +97,13 @@ export default function PrincipalLibraryPage() {
         <aside className="space-y-4 xl:col-span-4">
           <SectionCard title="Library actions" subtitle="Navigate between production and review.">
             <div className="grid grid-cols-1 gap-2">
-              <Link href="/principal/generate" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50">
+              <Link href="/principal/generate" className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--card-alt)]">
                 Go to principal generate
               </Link>
-              <Link href="/principal/analytics" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50">
+              <Link href="/principal/analytics" className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--card-alt)]">
                 Review analytics
               </Link>
-              <Link href="/principal/planning" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50">
+              <Link href="/principal/planning" className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--card-alt)]">
                 Open planning
               </Link>
             </div>

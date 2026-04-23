@@ -62,13 +62,13 @@ export default function SchoolAdminPage() {
         School Admin Dashboard
       </h1>
 
-      <div className="bg-white p-4 rounded-xl border">
+      <div className="bg-[var(--card)] p-4 rounded-xl border">
         <div>Name: {school.name}</div>
         <div>Seats used: {school.used_seats} / {school.max_seats}</div>
         <div>Plan: {school.plan}</div>
       </div>
 
-      <div className="bg-white p-4 rounded-xl border">
+      <div className="bg-[var(--card)] p-4 rounded-xl border">
 
         <button
           onClick={generateInvite}
@@ -85,7 +85,7 @@ export default function SchoolAdminPage() {
 
       </div>
 
-      <div className="bg-white p-4 rounded-xl border">
+      <div className="bg-[var(--card)] p-4 rounded-xl border">
 
         <div className="font-semibold mb-2">
           Teachers
