@@ -14,6 +14,10 @@ export default function PrincipalWorkspacePage() {
   const { loading, forbidden, error, setError, dashboard, onboardingRequired, getToken, loadDashboard } =
     usePrincipalDashboard();
   const [codeBusy, setCodeBusy] = useState(false);
+  const [codeRegenState, setCodeRegenState] = useState<"default" | "confirm" | "success">(
+    "default"
+  );
+  const [latestRegeneratedCode, setLatestRegeneratedCode] = useState<string | null>(null);
 
   useEffect(() => {
     void loadDashboard();
@@ -32,6 +36,11 @@ export default function PrincipalWorkspacePage() {
       });
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || "Failed to regenerate school code.");
+      const nextCode =
+        (json?.data && typeof json.data.code === "string" ? json.data.code : null) ??
+        (json?.code && typeof json.code === "string" ? json.code : null);
+      setLatestRegeneratedCode(nextCode);
+      setCodeRegenState("success");
       await loadDashboard();
     } catch (err: unknown) {
       setError(getErrorMessage(err, "Failed to regenerate code."));
@@ -113,14 +122,84 @@ export default function PrincipalWorkspacePage() {
                   >
                     Copy code
                   </button>
-                  <button
-                    onClick={regenerateCode}
-                    disabled={codeBusy}
-                    className="flex-1 rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
-                  >
-                    {codeBusy ? "Regenerating..." : "Regenerate code"}
-                  </button>
+                  {codeRegenState === "default" ? (
+                    <button
+                      onClick={() => {
+                        setCodeRegenState("confirm");
+                        setLatestRegeneratedCode(null);
+                        setError(null);
+                      }}
+                      className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-semibold text-[var(--text-secondary)] hover:bg-[var(--card-alt)]"
+                    >
+                      Regenerate school code
+                    </button>
+                  ) : null}
                 </div>
+                {codeRegenState === "confirm" ? (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
+                    <p className="text-sm font-semibold text-rose-800">
+                      Regenerate your school code?
+                    </p>
+                    <p className="mt-1 text-xs text-rose-700">
+                      Teachers who already joined keep their access. New teachers will need the
+                      new code. The old code stops working immediately.
+                    </p>
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCodeRegenState("default");
+                          setError(null);
+                        }}
+                        className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-semibold text-[var(--text-secondary)] hover:bg-[var(--card-alt)]"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={regenerateCode}
+                        disabled={codeBusy}
+                        className="flex-1 rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                      >
+                        {codeBusy ? "Regenerating..." : "Yes, regenerate"}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                {codeRegenState === "success" ? (
+                  <div className="rounded-xl border border-violet-200 bg-violet-50 p-3">
+                    <p className="text-xs uppercase tracking-wide text-violet-700">New code</p>
+                    <div className="mt-1 break-all font-mono text-2xl font-black tracking-wider text-[var(--text-primary)]">
+                      {latestRegeneratedCode ?? dashboard.school.code}
+                    </div>
+                    <p className="mt-2 text-xs text-violet-800">
+                      New code is active. Share it with teachers who still need to join your
+                      school.
+                    </p>
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          copySchoolCode(latestRegeneratedCode ?? dashboard.school.code)
+                        }
+                        className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-semibold text-[var(--text-secondary)] hover:bg-[var(--card-alt)]"
+                      >
+                        Copy code
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCodeRegenState("default");
+                          setLatestRegeneratedCode(null);
+                          setError(null);
+                        }}
+                        className="flex-1 rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </SectionCard>
           </aside>
