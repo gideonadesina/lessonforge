@@ -16,7 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isAppRole, type AppRole, ROLE_COOKIE_KEY, getRoleHomePath } from "@/lib/auth/roles";
+import { isAppRole, normalizeRole, type AppRole, ROLE_COOKIE_KEY } from "@/lib/auth/roles";
 import { resolveAuthRoleContext } from "@/lib/auth/role-context";
 
 export const runtime = "nodejs";
@@ -41,6 +41,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<CallbackRespo
     const body = (await req.json().catch(() => null)) as
       | {
           intent?: "login" | "signup";
+          selectedRole?: string;
         }
       | null;
     const intent = body?.intent === "signup" ? "signup" : "login";
@@ -49,6 +50,11 @@ export async function POST(req: NextRequest): Promise<NextResponse<CallbackRespo
     stages.push("getting_session");
 
     const cookieStore = await cookies();
+    const selectedRoleFromCookie = isAppRole(cookieStore.get(ROLE_COOKIE_KEY)?.value)
+      ? cookieStore.get(ROLE_COOKIE_KEY)!.value
+      : null;
+    const selectedRoleFromBody = isAppRole(body?.selectedRole) ? body.selectedRole : null;
+    const selectedRole = selectedRoleFromBody ?? selectedRoleFromCookie;
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -113,20 +119,9 @@ export async function POST(req: NextRequest): Promise<NextResponse<CallbackRespo
       userId: user.id,
       availableRoles: roleContext.availableRoles,
       isRegistered: roleContext.isRegistered,
+      selectedRole,
+      intent,
     });
-
-    if (intent === "login" && !roleContext.isRegistered) {
-      await supabase.auth.signOut();
-      return NextResponse.json(
-        {
-          ok: false,
-          code: "account_not_registered",
-          stage: "resolving_roles",
-          error: "No registered LessonForge account was found for this sign-in.",
-        },
-        { status: 404 }
-      );
-    }
 
     // ==================== Stage 3: Ensure Profile ====================
     stages.push("ensuring_profile");
@@ -149,6 +144,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<CallbackRespo
     const targetRole = determineTargetRole({
       availableRoles: roleContext.availableRoles,
       activeRole: roleContext.activeRole as AppRole | null,
+      preferredRole: selectedRole,
     });
 
     if (!targetRole) {
@@ -188,6 +184,10 @@ export async function POST(req: NextRequest): Promise<NextResponse<CallbackRespo
         userId: user.id,
         targetRole,
       });
+
+      if (targetRole === "principal") {
+        await ensurePrincipalMembership(user.id);
+      }
     } else {
       console.log("[API /auth/callback] Role already available", {
         userId: user.id,
@@ -195,13 +195,22 @@ export async function POST(req: NextRequest): Promise<NextResponse<CallbackRespo
       });
     }
 
-    // ==================== Stage 6: Set Cookie ====================
+    // ==================== Stage 6: Resolve Redirect ====================
+    stages.push("resolving_redirect");
+    const profileState = await readProfileState(user.id);
+    const effectiveRole = profileState.appRole ?? targetRole;
+    const redirectUrl = getPostAuthRedirect({
+      role: effectiveRole,
+      onboardingCompleted: profileState.onboardingCompleted,
+    });
+
+    // ==================== Stage 7: Set Cookie ====================
     stages.push("setting_cookie");
 
     const response = NextResponse.json(
       {
         ok: true,
-        redirectUrl: getRoleHomePath(targetRole),
+        redirectUrl,
       },
       { status: 200 }
     );
@@ -240,6 +249,13 @@ export async function POST(req: NextRequest): Promise<NextResponse<CallbackRespo
       { status: 500 }
     );
   }
+}
+
+function getPostAuthRedirect(input: { role: AppRole; onboardingCompleted: boolean }) {
+  if (!input.onboardingCompleted) {
+    return "/onboarding";
+  }
+  return input.role === "principal" ? "/principal" : "/dashboard";
 }
 
 /**
@@ -335,20 +351,83 @@ async function claimInitialRole(
   }
 }
 
+async function ensurePrincipalMembership(userId: string) {
+  const admin = createAdminClient();
+  const { data: existingMembership, error: existingMembershipError } = await admin
+    .from("school_members")
+    .select("user_id")
+    .eq("user_id", userId)
+    .eq("role", "principal")
+    .limit(1)
+    .maybeSingle();
+
+  if (existingMembershipError) {
+    throw existingMembershipError;
+  }
+
+  if (existingMembership?.user_id) {
+    return;
+  }
+
+  const { error: insertError } = await admin.from("school_members").insert({
+    user_id: userId,
+    role: "principal",
+    status: "active",
+  });
+
+  if (insertError && (insertError as { code?: string }).code !== "23505") {
+    throw insertError;
+  }
+}
+
+async function readProfileState(userId: string): Promise<{
+  appRole: AppRole | null;
+  onboardingCompleted: boolean;
+}> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("profiles")
+    .select("app_role, onboarding_completed")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  const row = (data ?? null) as { app_role?: string | null; onboarding_completed?: boolean | null } | null;
+  return {
+    appRole: normalizeRole(row?.app_role ?? null),
+    onboardingCompleted: Boolean(row?.onboarding_completed),
+  };
+}
+
 /**
  * Determine the target role for post-auth redirect.
  * Priority:
- * 1. If no roles exist, default to "teacher" (first-time user)
- * 2. If one role exists, use it
- * 3. If multiple roles exist, use the stored active role or first
+ * 1. If no roles exist, prefer selected role, otherwise default to teacher
+ * 2. If selected role is available, use it
+ * 3. If one role exists, use it
+ * 4. If multiple roles exist, use active role or first
  */
 function determineTargetRole(roleContext: {
   availableRoles: AppRole[];
   activeRole: AppRole | null;
+  preferredRole: AppRole | null;
 }): AppRole | null {
   if (roleContext.availableRoles.length === 0) {
-    // First-time user - claim teacher role by default
-    return "teacher";
+    return roleContext.preferredRole ?? "teacher";
+  }
+
+  if (
+    roleContext.preferredRole &&
+    roleContext.availableRoles.includes(roleContext.preferredRole)
+  ) {
+    return roleContext.preferredRole;
+  }
+
+  if (roleContext.availableRoles.length === 0) {
+    return null;
   }
 
   if (roleContext.availableRoles.length === 1) {
