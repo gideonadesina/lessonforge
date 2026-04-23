@@ -25,15 +25,34 @@ export default function OAuthCallbackPage() {
       try {
         console.log("[OAuth Callback] Processing callback");
 
-        // Give Supabase browser client a moment to handle the OAuth exchange
-        // The code in URL triggers Supabase's built-in exchange
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        // Wait for Supabase to actually finish exchanging the OAuth code
+        // before calling the server — poll until session exists (max 15s)
+        const { createBrowserSupabase } = await import("@/lib/supabase/browser");
+        const supabase = createBrowserSupabase();
+
+        let session = null;
+        let attempts = 0;
+        const maxAttempts = 30; // 30 × 500ms = 15 seconds max
+
+        while (!session && attempts < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          const { data } = await supabase.auth.getSession();
+          session = data?.session ?? null;
+          attempts++;
+        }
+
+        if (!session) {
+          throw new Error("Sign-in timed out. Please try again.");
+        }
 
         // Call server-side setup endpoint
+       // Read the stored intent so signup vs login is handled correctly
+        const storedIntent = window.localStorage.getItem("lessonforge:oauth-intent") ?? "login";
+
         const response = await fetch("/api/auth/callback", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ intent: storedIntent }),
         });
 
         const result = await response.json();

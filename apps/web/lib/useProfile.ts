@@ -17,6 +17,9 @@ export type Profile = {
   credits_balance: number;
   referral_code: string | null;
   referred_by: string | null;
+  onboarding_completed: boolean;
+  welcome_seen: boolean;
+  onboarding_answers: Record<string, unknown> | null;
 };
 
 export function getPlanInfo(plan: Plan) {
@@ -81,6 +84,22 @@ export function useProfile() {
 
         if (profErr) throw profErr;
 
+        const {
+          data: onboardingMeta,
+          error: onboardingMetaErr,
+        } = await supabase
+          .from("profiles")
+          .select("onboarding_completed, welcome_seen, onboarding_answers")
+          .eq("id", user.id)
+          .single();
+
+        const onboardingColumnsMissing =
+          onboardingMetaErr &&
+          onboardingMetaErr.message.toLowerCase().includes("column");
+        if (onboardingMetaErr && !onboardingColumnsMissing) {
+          throw onboardingMetaErr;
+        }
+
         const normalizedPlan = normalizePlan(prof?.plan ?? null);
 
         const normalized: Profile = {
@@ -93,6 +112,13 @@ export function useProfile() {
           credits_balance: Number(prof?.credits_balance ?? 0),
           referral_code: prof?.referral_code ?? null,
           referred_by: prof?.referred_by ?? null,
+          onboarding_completed: Boolean(onboardingMeta?.onboarding_completed ?? false),
+          welcome_seen: Boolean(onboardingMeta?.welcome_seen ?? false),
+          onboarding_answers:
+            onboardingMeta?.onboarding_answers &&
+            typeof onboardingMeta.onboarding_answers === "object"
+              ? (onboardingMeta.onboarding_answers as Record<string, unknown>)
+              : null,
         };
 
         if (alive.current) setProfile(normalized);

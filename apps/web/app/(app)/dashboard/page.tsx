@@ -16,6 +16,9 @@ import WeeklyInsight from "@/components/dashboard/WeeklyInsight";
 import { listSchemeOfWork } from "@/lib/planning/scheme";
 import { listAcademicEvents } from "@/lib/planning/academicCalendar";
 import SchoolCodeInput from "@/components/SchoolCodeInput";
+import LessonForgeOnboardingCard from "@/components/onboarding/LessonForgeOnboardingCard";
+import LessonForgeWelcomeCard from "@/components/onboarding/LessonForgeWelcomeCard";
+import AuthNotificationBanner from "@/components/auth/AuthNotificationBanner";
 import type {
   AcademicCalendarRow,
   SchemeOfWorkRow,
@@ -93,12 +96,15 @@ export default function DashboardPage() {
   const [schoolMembershipLoading, setSchoolMembershipLoading] = useState(true);
   const [hasSchoolMembership, setHasSchoolMembership] = useState(false);
   const [copiedReferral, setCopiedReferral] = useState(false);
-
+  const [showOnboarding, setShowOnboarding] = useState(false);
+const [showWelcome, setShowWelcome] = useState(false);
+const [flowBusy, setFlowBusy] = useState(false);
   const teacherName =
     (profile as any)?.full_name ||
     (profile as any)?.name ||
     userEmail?.split("@")[0] ||
     "Teacher";
+    const firstName = String(teacherName).trim().split(" ")[0] || "Teacher";
 
   const loadSchoolMembership = useCallback(async () => {
     setSchoolMembershipLoading(true);
@@ -141,7 +147,59 @@ export default function DashboardPage() {
   }, [searchParams, showToast]);
 
   useEffect(() => {
-    (window as any).__FORGE_CONTEXT__ = {
+    if (!profile) return;
+
+    if (!profile.onboarding_completed) {
+      setShowOnboarding(true);
+      setShowWelcome(false);
+      return;
+    }
+
+    if (!profile.welcome_seen) {
+      setShowOnboarding(false);
+      setShowWelcome(true);
+      return;
+    }
+
+    setShowOnboarding(false);
+    setShowWelcome(false);
+  }, [profile]);
+
+const markWelcomeSeen = useCallback(async () => {
+  if (!profile?.id) return;
+  setFlowBusy(true);
+  try {
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        welcome_seen: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", profile.id);
+    if (error) throw error;
+  } catch (error: unknown) {
+    setMsg(`Could not start workspace: ${getErrorMessage(error)}`);
+  } finally {
+    setFlowBusy(false);
+  }
+}, [profile?.id, supabase]);
+
+useEffect(() => {
+  if (!showWelcome || !profile?.id) return;
+  void markWelcomeSeen();
+}, [markWelcomeSeen, profile?.id, showWelcome]);
+  
+  useEffect(() => {
+    const forgeWindow = window as Window & {
+      __FORGE_CONTEXT__?: {
+        page: string;
+        teacherName: string;
+        credits: number;
+        plan: string;
+        recentLessons: LessonRow[];
+      };
+    };
+    forgeWindow.__FORGE_CONTEXT__ = {
       page: "dashboard",
       teacherName,
       credits: creditsRemaining,
@@ -399,24 +457,48 @@ export default function DashboardPage() {
     ? `https://lessonforge.app/signup?ref=${encodeURIComponent(referralCode)}`
     : "";
 
-  async function copyReferralLink() {
-    if (!referralLink) return;
+ async function copyReferralLink() {
+  if (!referralLink) return;
 
-    try {
-      await navigator.clipboard.writeText(referralLink);
-      setCopiedReferral(true);
-      showToast("🔗 Referral link copied!");
-      setTimeout(() => setCopiedReferral(false), 2000);
-    } catch {
-      showToast("Could not copy referral link.");
-    }
+  try {
+    await navigator.clipboard.writeText(referralLink);
+    setCopiedReferral(true);
+    showToast("🔗 Referral link copied!");
+    setTimeout(() => setCopiedReferral(false), 2000);
+  } catch {
+    showToast("Could not copy referral link.");
+  }
+}
+
+  
+if (showOnboarding && profile) {
+    return (
+      <div className="min-h-screen bg-[#FAF9F6] px-4 py-8">
+       <LessonForgeOnboardingCard
+  profileId={profile.id}
+  initialAnswers={profile.onboarding_answers}
+  onCompleted={() => {
+    setShowOnboarding(false);
+    setShowWelcome(true);
+  }}
+/>
+      </div>
+    );
   }
 
-  const whatsappReferralLink = referralLink
-    ? `https://wa.me/?text=${encodeURIComponent(
-        `I’ve been using LessonForge to create lesson packs faster. Sign up with my link: ${referralLink}`
-      )}`
-    : "#";
+  if (showWelcome && profile) {
+    return (
+      <div className="min-h-screen bg-[#FAF9F6] px-4 py-8">
+        <LessonForgeWelcomeCard
+          firstName={firstName}
+          roleType="teacher"
+         onStart={() => {
+  setShowWelcome(false);
+}}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text-primary)]">

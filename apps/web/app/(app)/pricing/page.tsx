@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import {
-  LESSON_PACK_CREDIT_COST,
   NEW_USER_FREE_CREDITS,
   TEACHER_PRICING_PLANS,
   estimateLessonPacks,
@@ -10,6 +9,8 @@ import {
 } from "@/lib/billing/pricing";
 import { initializeTeacherCheckout } from "@/lib/billing/checkout";
 import TeacherPricingPlanCard from "@/components/billing/TeacherPricingPlanCard";
+import LessonForgeWordmark from "@/components/auth/LessonForgeWordmark";
+import AuthNotificationBanner from "@/components/auth/AuthNotificationBanner";
 
 const FAQ_ITEMS = [
   {
@@ -51,17 +52,29 @@ export default function PricingPage() {
 
   return (
     <div className="space-y-8 pb-8">
-      <section className="rounded-3xl border border-violet-100 bg-gradient-to-br from-[var(--bg)] via-violet-50 to-violet-100/40 px-6 py-8 shadow-sm dark:via-violet-900/30 dark:to-violet-900/10 sm:px-8">
+      <AuthNotificationBanner
+        type="celebration"
+        icon="🎊"
+        message="You've fully explored LessonForge with your free credits — now let's unlock the full experience."
+        subtext="Join thousands of teachers who plan faster, teach better, and save hours every week."
+      />
+
+      <section className="rounded-[20px] border border-[#E2E8F0] bg-white px-6 py-8 shadow-[0_4px_24px_rgba(83,74,183,0.08)] sm:px-8">
+        <div className="mb-6 flex justify-center">
+          <LessonForgeWordmark href={null} />
+        </div>
         <div className="max-w-3xl space-y-3">
-          <p className="inline-flex rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-violet-700">
-            Teacher pricing
-          </p>
-          <h1 className="text-3xl font-extrabold tracking-tight text-[var(--text-primary)] sm:text-4xl">
-            Spend less time planning. Create stronger lesson packs faster.
+          <h1
+            className="text-3xl font-bold tracking-tight text-[#1E1B4B] sm:text-4xl"
+            style={{ fontFamily: '"Playfair Display", Georgia, serif' }}
+          >
+            Keep creating without limits.
           </h1>
-          <p className="text-sm leading-relaxed text-[var(--text-secondary)] sm:text-base">
-            Choose a LessonForge credit plan built for teachers. Generate lesson plans, slides,
-            classroom activities, and assessments with a polished, repeatable workflow.
+          <p
+            className="text-sm leading-relaxed text-[#475569] sm:text-base"
+            style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+          >
+            Generate as you go — plans, worksheets, slides, and more. Pick what fits your classroom.
           </p>
         </div>
       </section>
@@ -77,12 +90,27 @@ export default function PricingPage() {
         ))}
       </section>
 
-      <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 text-sm text-[var(--text-secondary)] shadow-sm">
-        <p className="font-semibold text-[var(--text-primary)]">{getCreditUsageNote()}</p>
-        <p className="mt-2">
-          <span className="font-semibold text-[var(--text-primary)]">New users get </span>
-          <span className="font-bold text-violet-700">{NEW_USER_FREE_CREDITS} free credits</span>
+      <section className="rounded-[20px] border border-[#E2E8F0] bg-white p-5 text-sm text-[#475569] shadow-[0_4px_24px_rgba(83,74,183,0.08)]">
+        <p className="font-semibold text-[#1E1B4B]" style={{ fontFamily: '"Trebuchet MS", sans-serif' }}>
+          {getCreditUsageNote()}
+        </p>
+        <p className="mt-2" style={{ fontFamily: '"Trebuchet MS", sans-serif' }}>
+          <span className="font-semibold text-[#1E1B4B]">New users get </span>
+          <span className="font-bold text-[#534AB7]">{NEW_USER_FREE_CREDITS} free credits</span>
           <span> ({freeLessonPacks} free lesson packs)</span>
+        </p>
+        <button
+          type="button"
+          className="mt-5 w-full rounded-[12px] bg-gradient-to-br from-[#534AB7] to-[#3D35A0] px-5 py-[13px] text-sm font-bold text-white shadow-[0_4px_16px_rgba(83,74,183,0.35)] transition-all duration-200 hover:-translate-y-[1px] hover:shadow-[0_6px_18px_rgba(83,74,183,0.4)]"
+          style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+        >
+          Choose My Plan →
+        </button>
+        <p
+          className="mt-2 text-center text-xs text-[#94A3B8]"
+          style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+        >
+          Cancel anytime · Instant access · No hidden fees
         </p>
       </section>
 

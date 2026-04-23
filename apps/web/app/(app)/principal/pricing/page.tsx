@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import LessonForgeWordmark from "@/components/auth/LessonForgeWordmark";
+import AuthNotificationBanner from "@/components/auth/AuthNotificationBanner";
 import {
   SCHOOL_PRICING_PLANS,
   getCreditUsageNote,
@@ -23,7 +25,7 @@ export default function PrincipalPricingPage() {
     return session?.access_token ?? "";
   }
 
-  async function verifySchoolPayment(reference: string) {
+  const verifySchoolPayment = useCallback(async (reference: string) => {
     setVerifyingPayment(true);
     setVerifyError(null);
     setVerifyReference(reference);
@@ -57,7 +59,7 @@ export default function PrincipalPricingPage() {
     } finally {
       setVerifyingPayment(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -67,7 +69,7 @@ export default function PrincipalPricingPage() {
     if (paymentComplete === "true" && reference && verifyReference !== reference) {
       void verifySchoolPayment(reference);
     }
-  }, [verifyReference]);
+  }, [verifyReference, verifySchoolPayment]);
 
   async function handleSchoolPlanSelect(planId: (typeof SCHOOL_PRICING_PLANS)[number]["id"]) {
     if (planId === "school_enterprise") {
@@ -120,17 +122,28 @@ export default function PrincipalPricingPage() {
 
   return (
     <div className="space-y-8 pb-8">
-      <section className="rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 via-amber-50/70 to-amber-50 px-6 py-8 shadow-sm sm:px-8">
+      <section className="rounded-[20px] border border-[#E2E8F0] bg-white px-6 py-8 shadow-[0_4px_24px_rgba(83,74,183,0.08)] sm:px-8">
+        <div className="mb-6 flex justify-center">
+          <LessonForgeWordmark href={null} />
+        </div>
         <div className="max-w-3xl space-y-3">
-          <p className="inline-flex rounded-full bg-amber-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-900">
+          <p
+            className="inline-flex rounded-full bg-[#EEEDFE] px-3 py-1 text-xs uppercase text-[#534AB7]"
+            style={{ fontFamily: '"Trebuchet MS", sans-serif', letterSpacing: "2.5px" }}
+          >
             School & Principal Pricing
           </p>
-          <h1 className="text-3xl font-extrabold tracking-tight text-[var(--text-primary)] sm:text-4xl">
-            Deploy LessonForge school-wide. Manage teachers, share credits, scale safely.
+          <h1
+            className="text-3xl font-bold tracking-tight text-[#1E1B4B] sm:text-4xl"
+            style={{ fontFamily: '"Playfair Display", Georgia, serif' }}
+          >
+            Power your entire school.
           </h1>
-          <p className="text-sm leading-relaxed text-[var(--text-secondary)] sm:text-base">
-            Credits are shared across all teachers in your school. Principals manage the credit pool,
-            set department limits, track usage, and unlock advanced reporting.
+          <p
+            className="text-sm leading-relaxed text-[#475569] sm:text-base"
+            style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+          >
+            Generate as you go — plans, worksheets, slides, and more. Pick what fits your classroom.
           </p>
         </div>
       </section>
@@ -160,6 +173,13 @@ export default function PrincipalPricingPage() {
         </div>
       )}
 
+      <AuthNotificationBanner
+        type="celebration"
+        icon="🎊"
+        message="You have fully explored LessonForge with your free credits — now let us unlock the full experience."
+        subtext="Give your whole school the tools to plan smarter — together, in one workspace."
+      />
+
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {SCHOOL_PRICING_PLANS.map((plan) => (
           <SchoolPricingPlanCard
@@ -167,6 +187,7 @@ export default function PrincipalPricingPage() {
             plan={plan}
             loading={busyPlanId === plan.id}
             onSelect={handleSchoolPlanSelect}
+            packLabel="resource packs"
           />
         ))}
       </section>
@@ -251,10 +272,10 @@ export default function PrincipalPricingPage() {
               Choose your plan above. You will be guided to a secure Paystack checkout to enter payment details and complete the transaction. Your school workspace activation is instant upon successful payment.
             </p>
           </article>
-          <article className="rounded-2xl border border-[var(--border)] bg-[var(--card-alt)] p-4">
-            <h3 className="text-sm font-semibold text-[var(--text-primary)]">What happens after I pay?</h3>
-            <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
-              Your school's credit pool is activated and visible in your Principal Billing dashboard. You can immediately add teacher accounts and begin distributing credits.
+          <article className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+            <h3 className="text-sm font-semibold text-slate-900">What happens after I pay?</h3>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              Your school&apos;s credit pool is activated and visible in your Principal Billing dashboard. You can immediately add teacher accounts and begin distributing credits.
             </p>
           </article>
           <article className="rounded-2xl border border-[var(--border)] bg-[var(--card-alt)] p-4">

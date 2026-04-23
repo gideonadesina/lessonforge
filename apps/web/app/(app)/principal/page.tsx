@@ -1,16 +1,20 @@
 "use client";
  
 import Link from "next/link";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import MetricCard from "@/components/principal/MetricCard";
 import PrincipalOnboardingCard from "@/components/principal/PrincipalOnboardingCard";
 import PrincipalPageHeader from "@/components/principal/PrincipalPageHeader";
 import SectionCard from "@/components/principal/SectionCard";
+import LessonForgeOnboardingCard from "@/components/onboarding/LessonForgeOnboardingCard";
+import LessonForgeWelcomeCard from "@/components/onboarding/LessonForgeWelcomeCard";
 import {
   PrincipalForbiddenState,
   PrincipalLoadingState,
 } from "@/components/principal/PrincipalStates";
 import { formatDateOnly, timeAgo, toNaira, usePrincipalDashboard } from "@/lib/principal/client";
+import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { useProfile } from "@/lib/useProfile";
  
 const QUICK_LINKS = [
   {
@@ -46,12 +50,58 @@ const QUICK_LINKS = [
 ];
  
 export default function PrincipalPage() {
+  const supabase = useMemo(() => createBrowserSupabase(), []);
+  const { profile } = useProfile();
   const { loading, forbidden, error, setError, dashboard, onboardingRequired, getToken, loadDashboard } =
     usePrincipalDashboard();
+  const [showPersonalOnboarding, setShowPersonalOnboarding] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [profileFlowBusy, setProfileFlowBusy] = useState(false);
  
   useEffect(() => {
     void loadDashboard();
   }, [loadDashboard]);
+
+  useEffect(() => {
+    if (!profile) return;
+
+    if (!profile.onboarding_completed) {
+      setShowPersonalOnboarding(true);
+      setShowWelcome(false);
+      return;
+    }
+
+    if (!profile.welcome_seen) {
+      setShowPersonalOnboarding(false);
+      setShowWelcome(true);
+      return;
+    }
+
+    setShowPersonalOnboarding(false);
+    setShowWelcome(false);
+  }, [profile]);
+
+  async function handleWelcomeSeen() {
+    if (!profile?.id) return;
+    setProfileFlowBusy(true);
+    try {
+      const { error: updateErr } = await supabase
+        .from("profiles")
+        .update({
+          welcome_seen: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", profile.id);
+      if (updateErr) throw updateErr;
+      setShowWelcome(false);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Unable to complete welcome setup.";
+      setError(message);
+    } finally {
+      setProfileFlowBusy(false);
+    }
+  }
  
   const alerts = useMemo(() => {
     if (!dashboard) return [] as string[];
@@ -84,6 +134,46 @@ export default function PrincipalPage() {
  
   if (loading) return <PrincipalLoadingState />;
   if (forbidden) return <PrincipalForbiddenState />;
+
+  if (showPersonalOnboarding && profile) {
+    return (
+      <div className="min-h-screen bg-[#FAF9F6] px-4 py-8">
+        <LessonForgeOnboardingCard
+          profileId={profile.id}
+          initialAnswers={profile.onboarding_answers}
+          initialRoleOverride={profile.app_role === "principal" ? "School Principal" : undefined}
+          onCompleted={async () => {
+            await loadDashboard();
+            setShowPersonalOnboarding(false);
+            setShowWelcome(true);
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (showWelcome && profile) {
+    const firstName = (profile.full_name ?? "Principal").trim().split(" ")[0] || "Principal";
+    return (
+      <div className="min-h-screen bg-[#FAF9F6] px-4 py-8">
+        <LessonForgeWelcomeCard
+          firstName={firstName}
+          roleType="principal"
+          onStart={() => {
+            void handleWelcomeSeen();
+          }}
+        />
+        {profileFlowBusy ? (
+          <p
+            className="mt-4 text-center text-sm text-[#475569]"
+            style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+          >
+            Finalising your principal workspace...
+          </p>
+        ) : null}
+      </div>
+    );
+  }
  
   return (
     <div className="space-y-5 bg-[var(--bg)] p-4 md:p-6">

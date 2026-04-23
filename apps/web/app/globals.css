@@ -36,6 +36,29 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+.font-brand-display {
+  font-family: "Playfair Display", Georgia, serif;
+}
+
+.font-brand-ui {
+  font-family: "Trebuchet MS", sans-serif;
+}
+
+@keyframes fadeSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-slide-down {
+  animation: fadeSlideDown 0.35s ease;
+}
+
 /* Selection */
 ::selection {
   background: rgba(126, 34, 206, 0.22);

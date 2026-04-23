@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import LessonForgeWordmark from "@/components/auth/LessonForgeWordmark";
 
 export default function ForgotPasswordPage() {
   const supabase = useMemo(() => createBrowserSupabase(), []);
@@ -35,8 +36,8 @@ export default function ForgotPasswordPage() {
       }
 
       setMsg("Reset link sent ✅ Check your email inbox (and spam folder).");
-    } catch (err: any) {
-      setMsg(String(err?.message ?? err));
+    } catch (err: unknown) {
+      setMsg(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -46,13 +47,7 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen bg-slate-50">
       <header className="border-b bg-white/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 shadow-md" />
-            <div className="leading-tight">
-              <div className="font-semibold text-slate-900">LessonForge</div>
-              <div className="text-[11px] text-slate-500">AI Lesson Planning</div>
-            </div>
-          </Link>
+          <LessonForgeWordmark href="/" />
 
           <Link href="/login" className="text-sm text-slate-600 hover:text-slate-900 transition">
             Back to Login
