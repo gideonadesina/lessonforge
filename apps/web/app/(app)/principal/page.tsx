@@ -1,19 +1,18 @@
 "use client";
  
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import MetricCard from "@/components/principal/MetricCard";
 import PrincipalOnboardingCard from "@/components/principal/PrincipalOnboardingCard";
 import PrincipalPageHeader from "@/components/principal/PrincipalPageHeader";
 import SectionCard from "@/components/principal/SectionCard";
-import LessonForgeOnboardingCard from "@/components/onboarding/LessonForgeOnboardingCard";
-import LessonForgeWelcomeCard from "@/components/onboarding/LessonForgeWelcomeCard";
+import { useRouter } from "next/navigation";
+import { useToast } from "@/components/ui/ToastProvider";
 import {
   PrincipalForbiddenState,
   PrincipalLoadingState,
 } from "@/components/principal/PrincipalStates";
 import { formatDateOnly, timeAgo, toNaira, usePrincipalDashboard } from "@/lib/principal/client";
-import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { useProfile } from "@/lib/useProfile";
  
 const QUICK_LINKS = [
@@ -50,13 +49,15 @@ const QUICK_LINKS = [
 ];
  
 export default function PrincipalPage() {
-  const supabase = useMemo(() => createBrowserSupabase(), []);
+  const router = useRouter();
+  const { showToast } = useToast();
   const { profile } = useProfile();
   const { loading, forbidden, error, setError, dashboard, onboardingRequired, getToken, loadDashboard } =
     usePrincipalDashboard();
-  const [showPersonalOnboarding, setShowPersonalOnboarding] = useState(false);
-  const [showWelcome, setShowWelcome] = useState(false);
-  const [profileFlowBusy, setProfileFlowBusy] = useState(false);
+  const creditToastFlagsRef = useRef({
+    emptyShown: false,
+    lowShown: false,
+  });
  
   useEffect(() => {
     void loadDashboard();
@@ -66,43 +67,54 @@ export default function PrincipalPage() {
     if (!profile) return;
 
     if (!profile.onboarding_completed) {
-      setShowPersonalOnboarding(true);
-      setShowWelcome(false);
+      router.replace("/onboarding");
       return;
     }
 
     if (!profile.welcome_seen) {
-      setShowPersonalOnboarding(false);
-      setShowWelcome(true);
+      router.replace("/onboarding");
+      return;
+    }
+  }, [profile, router]);
+
+  useEffect(() => {
+    if (!dashboard) return;
+
+    if (dashboard.schoolCredits.isEmpty) {
+      if (!creditToastFlagsRef.current.emptyShown) {
+        showToast({
+          message:
+            "Your school has run out of credits. Teachers cannot generate until you top up.",
+          action: { label: "Top up now", href: "/principal/billing" },
+          duration: "persistent",
+          color: "rose",
+        });
+        creditToastFlagsRef.current.emptyShown = true;
+      }
       return;
     }
 
-    setShowPersonalOnboarding(false);
-    setShowWelcome(false);
-  }, [profile]);
+    creditToastFlagsRef.current.emptyShown = false;
 
-  async function handleWelcomeSeen() {
-    if (!profile?.id) return;
-    setProfileFlowBusy(true);
-    try {
-      const { error: updateErr } = await supabase
-        .from("profiles")
-        .update({
-          welcome_seen: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", profile.id);
-      if (updateErr) throw updateErr;
-      setShowWelcome(false);
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Unable to complete welcome setup.";
-      setError(message);
-    } finally {
-      setProfileFlowBusy(false);
+    if (dashboard.schoolCredits.isLow) {
+      if (creditToastFlagsRef.current.lowShown) return;
+      const timeout = window.setTimeout(() => {
+        showToast({
+          message: `School credits running low - ${dashboard.schoolCredits.remaining} credits left (${dashboard.schoolCredits.percentUsed}% used). Top up soon to avoid interruption.`,
+          action: { label: "Top up", href: "/principal/billing" },
+          duration: 10000,
+          color: "amber",
+        });
+      }, 2000);
+      creditToastFlagsRef.current.lowShown = true;
+      return () => {
+        window.clearTimeout(timeout);
+      };
     }
-  }
- 
+
+    creditToastFlagsRef.current.lowShown = false;
+  }, [dashboard, showToast]);
+
   const alerts = useMemo(() => {
     if (!dashboard) return [] as string[];
  
@@ -134,46 +146,6 @@ export default function PrincipalPage() {
  
   if (loading) return <PrincipalLoadingState />;
   if (forbidden) return <PrincipalForbiddenState />;
-
-  if (showPersonalOnboarding && profile) {
-    return (
-      <div className="min-h-screen bg-[#FAF9F6] px-4 py-8">
-        <LessonForgeOnboardingCard
-          profileId={profile.id}
-          initialAnswers={profile.onboarding_answers}
-          initialRoleOverride={profile.app_role === "principal" ? "School Principal" : undefined}
-          onCompleted={async () => {
-            await loadDashboard();
-            setShowPersonalOnboarding(false);
-            setShowWelcome(true);
-          }}
-        />
-      </div>
-    );
-  }
-
-  if (showWelcome && profile) {
-    const firstName = (profile.full_name ?? "Principal").trim().split(" ")[0] || "Principal";
-    return (
-      <div className="min-h-screen bg-[#FAF9F6] px-4 py-8">
-        <LessonForgeWelcomeCard
-          firstName={firstName}
-          roleType="principal"
-          onStart={() => {
-            void handleWelcomeSeen();
-          }}
-        />
-        {profileFlowBusy ? (
-          <p
-            className="mt-4 text-center text-sm text-[#475569]"
-            style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
-          >
-            Finalising your principal workspace...
-          </p>
-        ) : null}
-      </div>
-    );
-  }
  
   return (
     <div className="space-y-5 bg-[var(--bg)] p-4 md:p-6">
@@ -199,6 +171,21 @@ export default function PrincipalPage() {
               value={dashboard.overview.totalTeachers}
               subtitle={`Slots available: ${dashboard.subscription.slotLimit}`}
             />
+            <MetricCard
+              title="School credits"
+              value={dashboard.schoolCredits.remaining}
+              subtitle={`of ${dashboard.schoolCredits.total} total - ${dashboard.schoolCredits.percentUsed}% used`}
+            >
+              {dashboard.schoolCredits.isEmpty ? (
+                <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700">
+                  Credits exhausted
+                </span>
+              ) : dashboard.schoolCredits.isLow ? (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                  Running low
+                </span>
+              ) : null}
+            </MetricCard>
             <MetricCard title="Active Teachers" value={dashboard.overview.activeTeachers} subtitle="Currently active this cycle" />
             <MetricCard
               title="Lessons Generated"

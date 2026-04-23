@@ -54,6 +54,11 @@ type ActivityRow = {
   user_id: string;
   created_at: string | null;
 };
+
+type SchoolCreditsRow = {
+  shared_credits?: number | null;
+  credits_used?: number | null;
+} | null;
  
 function buildFallbackEvents() {
   const now = new Date();
@@ -401,7 +406,38 @@ export async function GET(req: NextRequest) {
       context.school.code ?? null
     );
  
-    const payload: PrincipalDashboardPayload = {
+    const { data: schoolCreditsRaw, error: schoolCreditsError } = await admin
+      .from("schools")
+      .select("shared_credits, credits_used")
+      .eq("id", schoolId)
+      .maybeSingle();
+
+    if (schoolCreditsError && !isMissingTableOrColumnError(schoolCreditsError)) {
+      return NextResponse.json(
+        { ok: false, error: schoolCreditsError.message },
+        { status: 500 }
+      );
+    }
+
+    const schoolCreditsRow = (schoolCreditsRaw ?? null) as SchoolCreditsRow;
+    const totalSchoolCredits = Math.max(
+      0,
+      Number(schoolCreditsRow?.shared_credits ?? 0)
+    );
+    const usedSchoolCredits = Math.max(
+      0,
+      Number(schoolCreditsRow?.credits_used ?? 0)
+    );
+    const remainingSchoolCredits = Math.max(
+      0,
+      totalSchoolCredits - usedSchoolCredits
+    );
+    const percentUsed =
+      totalSchoolCredits > 0
+        ? Math.round((usedSchoolCredits / totalSchoolCredits) * 100)
+        : 0;
+
+    const payload = {
       school: {
         id: schoolId,
         name: context.school.name ?? "Unnamed School",
@@ -444,6 +480,15 @@ export async function GET(req: NextRequest) {
         reminderMessage: billingState.reminderMessage,
       },
       billingHistory,
+      schoolCredits: {
+        total: totalSchoolCredits,
+        used: usedSchoolCredits,
+        remaining: remainingSchoolCredits,
+        percentUsed,
+        isLow:
+          remainingSchoolCredits <= Math.round(totalSchoolCredits * 0.1),
+        isEmpty: remainingSchoolCredits <= 0,
+      },
     };
  
     return NextResponse.json(
