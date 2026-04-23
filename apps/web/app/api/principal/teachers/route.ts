@@ -53,6 +53,19 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ ok: false, error: delRes.error.message }, { status: 500 });
       }
 
+      const clearSchoolRes = await admin
+        .from("profiles")
+        .update({
+          school_id: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", teacherUserId)
+        .eq("school_id", context.school.id);
+
+      if (clearSchoolRes.error) {
+        return NextResponse.json({ ok: false, error: clearSchoolRes.error.message }, { status: 500 });
+      }
+
       return NextResponse.json(
         { ok: true, data: { teacherUserId, action, status: "removed" } },
         { status: 200 }
