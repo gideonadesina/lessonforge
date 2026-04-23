@@ -251,9 +251,16 @@ export default function SchoolPage() {
             ) : null}
           </div>
 
-          <p className="mt-4 text-center text-[11px] text-slate-400">
-            To leave this school or report an issue, contact your principal
-          </p>
+         {membership?.role?.toLowerCase() !== "principal" ? (
+  <p className="mt-4 text-center text-[11px] text-slate-400">
+    To leave this school or report an issue, contact your principal
+  </p>
+) : (
+  <p className="mt-4 text-center text-[11px] text-slate-400">
+    You are the principal of this school. Manage your school from the
+    principal dashboard.
+  </p>
+)}
         </div>
       </div>
     );

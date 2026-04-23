@@ -144,7 +144,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<CallbackRespo
     const targetRole = determineTargetRole({
       availableRoles: roleContext.availableRoles,
       activeRole: roleContext.activeRole as AppRole | null,
-      preferredRole: selectedRole,
+      preferredRole: selectedRole as AppRole | null,
     });
 
     if (!targetRole) {

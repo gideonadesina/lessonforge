@@ -118,7 +118,7 @@ export async function consumeGenerationCredits(
         };
       }
 
-      const currentSchoolCredits = Math.max(0, Number((school as SchoolCreditsRow).shared_credits ?? 0));
+      const currentSchoolCredits = Math.max(0, Number((school as SchoolCreditsRow | null)?.shared_credits ?? 0));
       if (currentSchoolCredits < cost) {
         return {
           ok: false,

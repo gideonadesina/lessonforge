@@ -167,32 +167,41 @@ export default function PrincipalPage() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard
-              title="Total Teachers"
-              value={dashboard.overview.totalTeachers}
-              subtitle={`Slots available: ${dashboard.subscription.slotLimit}`}
-            />
-            <MetricCard
-              title="School credits"
-              value={dashboard.schoolCredits.remaining}
-              subtitle={`of ${dashboard.schoolCredits.total} total - ${dashboard.schoolCredits.percentUsed}% used`}
-            >
-              {dashboard.schoolCredits.isEmpty ? (
-                <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700">
-                  Credits exhausted
-                </span>
-              ) : dashboard.schoolCredits.isLow ? (
-                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
-                  Running low
-                </span>
-              ) : null}
-            </MetricCard>
-            <MetricCard title="Active Teachers" value={dashboard.overview.activeTeachers} subtitle="Currently active this cycle" />
-            <MetricCard
-              title="Lessons Generated"
-              value={dashboard.overview.totalLessonsGenerated}
-              subtitle="Total output from staff"
-            />
-            <MetricCard title="Weekly Activity" value={dashboard.overview.weeklyActivityCount} subtitle="Last 7 days events" />
+  title="Total Teachers"
+  value={dashboard.overview.totalTeachers}
+  subtitle={`Slots available: ${dashboard.subscription.slotLimit}`}
+/>
+<div className="flex flex-col gap-1">
+  <MetricCard
+    title="School credits"
+    value={dashboard.schoolCredits.remaining}
+    subtitle={`of ${dashboard.schoolCredits.total} total · ${dashboard.schoolCredits.percentUsed}% used`}
+  />
+  {dashboard.schoolCredits.isEmpty ? (
+    <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700 self-start">
+      Credits exhausted
+    </span>
+  ) : dashboard.schoolCredits.isLow ? (
+    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 self-start">
+      Running low
+    </span>
+  ) : null}
+</div>
+<MetricCard
+  title="Active Teachers"
+  value={dashboard.overview.activeTeachers}
+  subtitle="Currently active this cycle"
+/>
+<MetricCard
+  title="Lessons Generated"
+  value={dashboard.overview.totalLessonsGenerated}
+  subtitle="Total output from staff"
+/>
+<MetricCard
+  title="Weekly Activity"
+  value={dashboard.overview.weeklyActivityCount}
+  subtitle="Last 7 days events"
+/>
           </div>
  
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
