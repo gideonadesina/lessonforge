@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@supabase/supabase-js";
+import { consumeGenerationCredits, getGenerationCreditAvailability } from "@/lib/credits/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,11 +41,6 @@ type OpenAIChatResponse = {
     message?: { role?: string; content?: string | null };
   }>;
   error?: { message?: string; type?: string; code?: string };
-};
-
-type ConsumeCreditRpcResult = {
-  ok?: boolean;
-  error?: string;
 };
 
 type PexelsPhoto = {
@@ -138,39 +133,6 @@ async function enrichSlidesWithImages(
   return results.map((result, i) =>
     result.status === "fulfilled" ? result.value : slides[i]
   );
-}
-
-// ─────────────────────────────────────────────────────────────
-// CREDIT SYSTEM
-// ─────────────────────────────────────────────────────────────
-
-async function consumeSlidesCredits(
-  supabase: SupabaseClient
-): Promise<
-  | { ok: true }
-  | { ok: false; type: "rpc_error"; detail: string }
-  | { ok: false; type: "insufficient"; message: string }
-> {
-  for (let i = 0; i < SLIDES_CREDIT_COST; i += 1) {
-    const { data: creditData, error: creditErr } =
-      await supabase.rpc("consume_generation_credit");
-
-    if (creditErr) {
-      return { ok: false, type: "rpc_error", detail: creditErr.message };
-    }
-
-    const result = (creditData ?? null) as ConsumeCreditRpcResult | null;
-
-    if (!result?.ok) {
-      return {
-        ok: false,
-        type: "insufficient",
-        message: result?.error || "No credits",
-      };
-    }
-  }
-
-  return { ok: true };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -611,6 +573,43 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const creditAvailability = await getGenerationCreditAvailability(supabase, user.id);
+    if (!creditAvailability.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "credit_check_failed",
+          message: creditAvailability.error,
+          upgrade_url: null,
+        },
+        { status: 500 }
+      );
+    }
+    if (creditAvailability.creditsRemaining <= 0) {
+      if (creditAvailability.source === "school") {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "school_out_of_credits",
+            message:
+              "Your school has used all its credits. Your principal has been notified and will add more credits soon.",
+            upgrade_url: null,
+          },
+          { status: 402 }
+        );
+      }
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "out_of_credits",
+          message:
+            "You have used all your credits. Purchase more to continue generating lessons.",
+          upgrade_url: "/pricing",
+        },
+        { status: 402 }
+      );
+    }
+
     // ── Check API keys ────────────────────────────────────
     const openaiKey = process.env.OPENAI_API_KEY;
     if (!openaiKey) {
@@ -761,27 +760,13 @@ Make this immediately usable by a real teacher. Every slide must have teacher_no
 
     // ── Deduct credits ONLY after successful generation ───
     // This is the correct order. Teacher never loses credits on failure.
-    const creditResult = await consumeSlidesCredits(supabase);
-
-    if (!creditResult.ok) {
-      if (creditResult.type === "rpc_error") {
-        // Deck was generated but credit deduction failed — still return the deck
-        // Log this server-side but don't punish the teacher
-        console.error(
-          "[generate-slides] Credit deduction failed after successful generation:",
-          creditResult.detail
-        );
-        return NextResponse.json({ deck: finalDeck, credit_warning: true });
-      }
-
-      const msg = creditResult.message || "No credits";
-      const status =
-        typeof msg === "string" &&
-        msg.toLowerCase().includes("not authenticated")
-          ? 401
-          : 402;
-
-      return NextResponse.json({ error: msg }, { status });
+    const deductionResult = await consumeGenerationCredits(supabase, user.id, SLIDES_CREDIT_COST);
+    if (!deductionResult.ok) {
+      console.error("[generate-slides] Credit deduction failed after successful generation:", {
+        userId: user.id,
+        errorCode: deductionResult.errorCode,
+        error: deductionResult.error,
+      });
     }
 
     // ── Save deck to library ──────────────────────────────────

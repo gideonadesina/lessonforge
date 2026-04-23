@@ -11,6 +11,7 @@ import {
 } from "@/lib/exams/normalize";
 import { EXAM_MODEL } from "@/lib/exams/constants";
 import type { ExamRecord } from "@/lib/exams/types";
+import { consumeGenerationCredits, getGenerationCreditAvailability } from "@/lib/credits/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -259,6 +260,43 @@ export async function POST(req: NextRequest) {
     if (!parsedInput.ok) return jsonErr(parsedInput.error, 400);
     const input = parsedInput.input;
 
+    const creditAvailability = await getGenerationCreditAvailability(supabase, user.id);
+    if (!creditAvailability.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "credit_check_failed",
+          message: creditAvailability.error,
+          upgrade_url: null,
+        },
+        { status: 500 }
+      );
+    }
+    if (creditAvailability.creditsRemaining <= 0) {
+      if (creditAvailability.source === "school") {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "school_out_of_credits",
+            message:
+              "Your school has used all its credits. Your principal has been notified and will add more credits soon.",
+            upgrade_url: null,
+          },
+          { status: 402 }
+        );
+      }
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "out_of_credits",
+          message:
+            "You have used all your credits. Purchase more to continue generating lessons.",
+          upgrade_url: "/pricing",
+        },
+        { status: 402 }
+      );
+    }
+
     if (!process.env.OPENAI_API_KEY) {
       return jsonErr("OPENAI_API_KEY missing", 500);
     }
@@ -299,16 +337,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Charge generation credit only after we have a valid exam payload.
-    const { data: creditData, error: creditErr } = await supabase.rpc("consume_generation_credit");
-    if (creditErr) {
-      return jsonErr(`Credit check failed: ${creditErr.message}`, 500);
-    }
-    if (!creditData?.ok) {
-      const msg = String(creditData?.error ?? "No credits");
-      return jsonErr(msg, msg.toLowerCase().includes("not authenticated") ? 401 : 402);
-    }
-
     const dbFields = mapInputToDbFields(input);
 
     const { data: saved, error: saveErr } = await supabase
@@ -325,9 +353,16 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (saveErr) {
-      // Optional RPC in some environments; ignore failures.
-      await supabase.rpc("refund_generation_credit").match(() => null);
       return jsonErr(saveErr.message, 500);
+    }
+
+    const deductionResult = await consumeGenerationCredits(supabase, user.id, 1);
+    if (!deductionResult.ok) {
+      console.error("[exams] Credit deduction failed after successful generation:", {
+        userId: user.id,
+        errorCode: deductionResult.errorCode,
+        error: deductionResult.error,
+      });
     }
     return jsonOk(saved, 201);
   } catch (e: unknown) {

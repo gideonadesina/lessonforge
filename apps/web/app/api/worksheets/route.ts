@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { consumeGenerationCredits, getGenerationCreditAvailability } from "@/lib/credits/server";
  
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -613,6 +614,45 @@ export async function POST(req: NextRequest) {
     const contentMode = normalizeContentMode(body.contentMode);
     const count = clampInt(body.numQuestions, 3, 50, contentMode === "coloring" ? 5 : 10);
     const duration = clampInt(body.durationMins, 10, 180, contentMode === "coloring" ? 20 : 30);
+
+    if (source !== "uploaded") {
+      const creditAvailability = await getGenerationCreditAvailability(supabase, user.id);
+      if (!creditAvailability.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "credit_check_failed",
+            message: creditAvailability.error,
+            upgrade_url: null,
+          },
+          { status: 500 }
+        );
+      }
+      if (creditAvailability.creditsRemaining <= 0) {
+        if (creditAvailability.source === "school") {
+          return NextResponse.json(
+            {
+              ok: false,
+              error: "school_out_of_credits",
+              message:
+                "Your school has used all its credits. Your principal has been notified and will add more credits soon.",
+              upgrade_url: null,
+            },
+            { status: 402 }
+          );
+        }
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "out_of_credits",
+            message:
+              "You have used all your credits. Purchase more to continue generating lessons.",
+            upgrade_url: "/pricing",
+          },
+          { status: 402 }
+        );
+      }
+    }
  
     // Uploaded worksheet metadata save path
     if (source === "uploaded") {
@@ -747,17 +787,7 @@ export async function POST(req: NextRequest) {
       );
     }
  
-    // 2) Charge credit only after generation is valid
-    const { data: creditData, error: creditErr } = await supabase.rpc("consume_generation_credit");
-    if (creditErr) {
-      return jsonErr(`Credit check failed: ${creditErr.message}`, 500);
-    }
-    if (!creditData?.ok) {
-      const msg = String(creditData?.error ?? "No credits");
-      return jsonErr(msg, msg.toLowerCase().includes("not authenticated") ? 401 : 402);
-    }
- 
-    // 3) Generate visuals (coloring/diagram/practical only)
+    // 2) Generate visuals (coloring/diagram/practical only)
     const visualMode = getVisualMode(contentMode, worksheet);
     let visuals: WorksheetVisual[] = [];
  
@@ -820,7 +850,7 @@ if (primaryVisual?.imageDataUrl) {
   }
 }
 
-    // 4) Save row
+    // 3) Save row
     const { data: saved, error: saveErr } = await supabase
       .from("worksheets")
       .insert({
@@ -873,9 +903,16 @@ if (primaryVisual?.imageDataUrl) {
       .single();
  
     if (saveErr) {
-      // Optional: if you have this RPC
-      await supabase.rpc("refund_generation_credit").match(() => null);
       return jsonErr(saveErr.message, 500);
+    }
+
+    const deductionResult = await consumeGenerationCredits(supabase, user.id, 1);
+    if (!deductionResult.ok) {
+      console.error("[worksheets] Credit deduction failed after successful generation:", {
+        userId: user.id,
+        errorCode: deductionResult.errorCode,
+        error: deductionResult.error,
+      });
     }
  
     return jsonOk(
