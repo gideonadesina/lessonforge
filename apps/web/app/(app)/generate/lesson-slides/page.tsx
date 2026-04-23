@@ -18,6 +18,7 @@ const CURRICULUM_OPTIONS = [
 ];
 
 const SCHOOL_LEVEL_OPTIONS = [
+  { value: "Eyfs", label: "Early Years Foundation Stage" },
   { value: "Primary", label: "Primary School" },
   { value: "JSS", label: "Junior Secondary (JSS)" },
   { value: "SSS", label: "Senior Secondary (SSS)" },
@@ -25,6 +26,7 @@ const SCHOOL_LEVEL_OPTIONS = [
 ];
 
 const GRADE_BY_LEVEL: Record<string, string[]> = {
+  Eyfs: [ "Playclass", "Nursery 1", "Nursery 2", "Nursery 3"],
   Primary: ["Primary 1", "Primary 2", "Primary 3", "Primary 4", "Primary 5", "Primary 6"],
   JSS: ["JSS 1", "JSS 2", "JSS 3"],
   SSS: ["SSS 1", "SSS 2", "SSS 3"],
@@ -34,15 +36,19 @@ const GRADE_BY_LEVEL: Record<string, string[]> = {
 const SUBJECT_OPTIONS = [
   "Mathematics", "English Language", "Biology", "Chemistry", "Physics",
   "Agricultural Science", "Economics", "Government", "Literature in English",
-  "History", "Geography", "Civic Education", "CRS / IRS", "Further Mathematics",
+  "History", "Geography", "Civic Education", "CRS", "IRS", "Further Mathematics",
   "Computer Science", "Technical Drawing", "Commerce", "Accounting",
   "French", "Yoruba", "Igbo", "Hausa", "Fine Arts", "Music", "Other",
+  "Basic science", "Basic Technology", "Business Studies", "Health Education",
+  "Physical and Health Education", "Social Studies", "Home Economics",
+  "Financial Literacy", "Entrepreneurship", "Literature in Nigerian Languages",
+  "Trade subject"
 ];
 
 const DURATION_OPTIONS = [
   { value: "20min", label: "20 mins", desc: "~7 slides", credits: 2 },
-  { value: "45min", label: "45 mins", desc: "~11 slides", credits: 2 },
-  { value: "60min", label: "60 mins", desc: "~15 slides", credits: 2 },
+  { value: "45min", label: "45 mins", desc: "~10 slides", credits: 2 },
+  { value: "60min", label: "60 mins", desc: "~12 slides", credits: 2 },
 ];
 
 const TONE_OPTIONS = [

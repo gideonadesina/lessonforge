@@ -128,6 +128,7 @@ export default function WorksheetsPage() {
   const [listLoading, setListLoading] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [openLoading, setOpenLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
  
   const [items, setItems] = useState<WorksheetRow[]>([]);
@@ -363,20 +364,22 @@ export default function WorksheetsPage() {
     }
   }
  
-  async function openFromRow(row: WorksheetRow) {
+ async function openFromRow(row: WorksheetRow) {
     setError(null);
     setActive({ meta: row, generated: undefined });
     setPrintMode("student");
     setOpen(true);
     setEditing(false);
     setDraft(null);
+    setOpenLoading(true);
  
     try {
       const token = await getAccessToken();
       if (!token) throw new Error("Not logged in");
  
       // IMPORTANT: visuals=1 tells backend to include generated visuals
-      const res = await fetch(`/api/worksheets?id=${encodeURIComponent(row.id)}&visuals=1`, {
+      const needsVisuals = !row.file_url && (row.content_mode === "coloring" || row.content_mode === "diagram" || row.content_mode === "practical");
+      const res = await fetch(`/api/worksheets?id=${encodeURIComponent(row.id)}${needsVisuals ? "&visuals=1" : ""}`, {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -391,6 +394,8 @@ export default function WorksheetsPage() {
       });
     } catch (e: unknown) {
       setError(getErrorMessage(e, "Failed to open worksheet"));
+    } finally {
+      setOpenLoading(false);
     }
   }
  
@@ -794,9 +799,9 @@ export default function WorksheetsPage() {
               onChange={(e) => setPrintLayout(e.target.value as PrintLayout)}
               className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
             >
-              <option value="standard">standard</option>
-              <option value="exam">exam</option>
-              <option value="worksheet">worksheet</option>
+             <option value="standard">Standard</option>
+              <option value="exam">Exam</option>
+              <option value="worksheet">Worksheet</option>
             </select>
           </Field>
  
@@ -806,11 +811,11 @@ export default function WorksheetsPage() {
               onChange={(e) => setContentMode(e.target.value as ContentMode)}
               className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-violet-400"
             >
-              <option value="normal">normal</option>
-              <option value="diagram">diagram</option>
-              <option value="coloring">coloring</option>
-              <option value="practical">practical</option>
-              <option value="answer_key">answer_key</option>
+              <option value="normal">Normal</option>
+              <option value="diagram">Diagram</option>
+              <option value="coloring">Colouring</option>
+              <option value="practical">Practical</option>
+              <option value="answer_key">Answer Key</option>
             </select>
           </Field>
  
@@ -870,13 +875,13 @@ export default function WorksheetsPage() {
             </button>
           </div>
         </div>
- 
-        {error ? (
-          <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            {error}
-          </div>
-        ) : null}
       </div>
+
+       {error ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </div>
+      ) : null}
  
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
         <div className="flex items-center justify-between">
@@ -906,12 +911,19 @@ export default function WorksheetsPage() {
               </div>
  
               <div className="mt-3 flex flex-wrap gap-2">
-                <Pill>{w.source ?? "generated"}</Pill>
+                <Pill>{w.source === "uploaded" ? "Uploaded" : "Generated"}</Pill>
                 <Pill>{w.worksheet_type ?? "Mixed"}</Pill>
                 <Pill>{w.difficulty ?? "Medium"}</Pill>
                 <Pill>{w.num_questions ?? 10} Q</Pill>
+                {w.content_mode && w.content_mode !== "normal" ? (
+                  <Pill>{w.content_mode.replace("_", " ").replace(/^\w/, c => c.toUpperCase())}</Pill>
+                ) : null}
               </div>
- 
+              {w.file_url && (w.content_mode === "coloring" || w.content_mode === "diagram" || w.content_mode === "practical") ? (
+                <div className="mt-2 overflow-hidden rounded-lg border border-[var(--border)]">
+                  <img src={w.file_url} alt={w.title ?? w.topic} className="w-full h-28 object-cover" />
+                </div>
+              ) : null}
               <div className="mt-4 flex gap-2">
                 <button
                   onClick={() => openFromRow(w)}
@@ -1200,6 +1212,10 @@ export default function WorksheetsPage() {
                     </div>
                   ) : null}
                 </>
+             ) : openLoading ? (
+                <div className="rounded-xl bg-[var(--card-alt)] p-6 text-sm text-center text-[var(--text-secondary)]">
+                  Loading worksheet...
+                </div>
               ) : (
                 <div className="rounded-xl bg-[var(--card-alt)] p-4 text-sm text-[var(--text-secondary)]">
                   This item currently has no generated worksheet text.

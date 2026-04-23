@@ -780,18 +780,45 @@ export async function POST(req: NextRequest) {
       });
     }
     
-   const primaryVisual = visuals.find(
+  const primaryVisual = visuals.find(
   (visual) =>
     typeof visual.imageDataUrl === "string" && visual.imageDataUrl.trim().length > 0
 );
 
-const savedFileUrl = primaryVisual?.imageDataUrl ?? null;
+let savedFileUrl: string | null = null;
+let savedFileType: string | null = null;
+let savedFileName: string | null = null;
 
-const savedFileType = savedFileUrl ? "image/png" : null;
+if (primaryVisual?.imageDataUrl) {
+  try {
+    // Strip the data URL prefix and convert to a Buffer
+    const base64Data = primaryVisual.imageDataUrl.replace(/^data:image\/png;base64,/, "");
+    const imageBuffer = Buffer.from(base64Data, "base64");
 
-const savedFileName = savedFileUrl
-  ? `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`
-  : null;
+    const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 60);
+    const fileName = `${user.id}/${slug}-${Date.now()}.png`;
+
+    // Upload to Supabase Storage bucket "worksheet-visuals"
+    const { error: uploadErr } = await supabase.storage
+      .from("worksheet-visuals")
+      .upload(fileName, imageBuffer, {
+        contentType: "image/png",
+        upsert: false,
+      });
+
+    if (!uploadErr) {
+      const { data: publicUrlData } = supabase.storage
+        .from("worksheet-visuals")
+        .getPublicUrl(fileName);
+
+      savedFileUrl = publicUrlData?.publicUrl ?? null;
+      savedFileType = "image/png";
+      savedFileName = `${slug}.png`;
+    }
+  } catch {
+    // Image upload failed — worksheet still saves, just without image
+  }
+}
 
     // 4) Save row
     const { data: saved, error: saveErr } = await supabase

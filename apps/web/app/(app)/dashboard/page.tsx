@@ -471,10 +471,11 @@ export default function DashboardPage() {
                 teacher seat.
               </p>
             </div>
-            <SchoolCodeInput
-              redirectTo="/dashboard"
-              onJoined={loadSchoolMembership}
-            />
+          <SchoolCodeInput
+  onJoined={(_data) => {
+    void loadSchoolMembership();
+  }}
+/>
           </section>
         ) : null}
 
