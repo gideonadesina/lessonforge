@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@supabase/ssr";
 
@@ -10,7 +10,6 @@ import {
   ROLE_COOKIE_KEY,
   normalizeRole,
   resolvePreferredRole,
-  getRoleHomePath,
 } from "@/lib/auth/roles";
 import "../globals.css";
 
@@ -43,17 +42,22 @@ export default async function AppLayout({
 }: {
   children: ReactNode;
 }) {
-  const headerStore = await Promise.resolve(headers());
-  const pathname = headerStore.get("x-pathname") ?? "";
   const cookieStore = await Promise.resolve(cookies());
   const supabase = await createServerSupabase();
-  // getSession first so fresh OAuth cookies are read before getUser validates them
-const { data: sessionData } = await supabase.auth.getSession();
-const { data, error } = sessionData?.session
-  ? await supabase.auth.getUser()
-  : { data: { user: null }, error: new Error("No session") };
-  const userMeta = (data?.user?.user_metadata as { app_role?: string; full_name?: string; name?: string } | null) ?? null;
+
+  // Read session first so fresh OAuth cookies are picked up before getUser
+  const { data: sessionData } = await supabase.auth.getSession();
+  const { data, error } = sessionData?.session
+    ? await supabase.auth.getUser()
+    : { data: { user: null }, error: new Error("No session") };
+
   const user = data?.user;
+  const userMeta =
+    (user?.user_metadata as {
+      app_role?: string;
+      full_name?: string;
+      name?: string;
+    } | null) ?? null;
 
   if (error || !user) {
     redirect("/login");
@@ -70,10 +74,14 @@ const { data, error } = sessionData?.session
     redirect("/select-role");
   }
 
-  const cookieRole = normalizeRole(cookieStore.get(ROLE_COOKIE_KEY)?.value ?? null);
-  const activeRole = resolvePreferredRole(roleContext.availableRoles, cookieRole, {
-    allowNullWhenMultiple: true,
-  });
+  const cookieRole = normalizeRole(
+    cookieStore.get(ROLE_COOKIE_KEY)?.value ?? null
+  );
+  const activeRole = resolvePreferredRole(
+    roleContext.availableRoles,
+    cookieRole,
+    { allowNullWhenMultiple: true }
+  );
 
   if (roleContext.availableRoles.length > 1 && !activeRole) {
     redirect("/select-role");
@@ -89,13 +97,13 @@ const { data, error } = sessionData?.session
     redirect("/select-role");
   }
 
-  if (resolvedRole === "principal" && !pathname.startsWith("/principal")) {
-    redirect(getRoleHomePath("principal"));
-  }
+  // Navigation between /dashboard and /principal is handled by
+  // role switcher buttons in DashboardHeader and PrincipalPage.
+  // No server-side redirect needed — cookie handles routing on login.
 
   const userEmail = user.email ?? "";
   const userName =
-   userMeta?.full_name ||
+    userMeta?.full_name ||
     userMeta?.name ||
     userEmail.split("@")[0] ||
     "User";

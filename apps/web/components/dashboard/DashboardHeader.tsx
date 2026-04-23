@@ -16,6 +16,7 @@ export default function DashboardHeader() {
 
   const [name, setName] = useState("Teacher");
   const [email, setEmail] = useState<string | null>(null);
+  const [hasPrincipalRole, setHasPrincipalRole] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -33,6 +34,22 @@ export default function DashboardHeader() {
 
       setName(displayName);
       setEmail(user.email ?? null);
+
+      // Check if this teacher also has a principal role
+      const appRole = user.user_metadata?.app_role;
+      if (appRole === "principal") {
+        setHasPrincipalRole(true);
+      } else {
+        // Check profiles table for role
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("app_role")
+          .eq("id", user.id)
+          .single();
+        if (profile?.app_role === "principal") {
+          setHasPrincipalRole(true);
+        }
+      }
     })();
   }, [supabase]);
 
@@ -128,7 +145,7 @@ export default function DashboardHeader() {
             </Link>
           </div>
 
-          {/* Action buttons below card */}
+        {/* Action buttons below card */}
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Link
               href="/generate"
@@ -143,6 +160,15 @@ export default function DashboardHeader() {
             >
               Open Library
             </Link>
+
+            {hasPrincipalRole && (
+              <Link
+                href="/principal"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-violet-200 bg-violet-50 px-5 py-3 text-sm font-semibold text-violet-700 transition hover:bg-violet-100 dark:border-violet-900/50 dark:bg-violet-900/20 dark:text-violet-400"
+              >
+                🏫 Switch to Principal View
+              </Link>
+            )}
           </div>
         </div>
       </div>

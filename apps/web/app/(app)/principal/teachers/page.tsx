@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import MetricCard from "@/components/principal/MetricCard";
 import PrincipalPageHeader from "@/components/principal/PrincipalPageHeader";
 import SectionCard from "@/components/principal/SectionCard";
 import StatusPill from "@/components/principal/StatusPill";
+import { useToast } from "@/components/ui/ToastProvider";
 import {
   PrincipalForbiddenState,
   PrincipalLoadingState,
@@ -14,12 +15,22 @@ import { getErrorMessage, timeAgo, usePrincipalDashboard } from "@/lib/principal
 import type { TeacherAction, TeacherListItem } from "@/lib/principal/types";
 
 export default function PrincipalTeachersPage() {
+  const { showToast } = useToast();
   const { loading, forbidden, error, setError, dashboard, onboardingRequired, getToken, loadDashboard } =
     usePrincipalDashboard();
   const [busyTeacherId, setBusyTeacherId] = useState<string | null>(null);
   const [busyTeacherAction, setBusyTeacherAction] = useState<TeacherAction | null>(null);
   const [slotUpgradeBusy, setSlotUpgradeBusy] = useState(false);
   const [addSlots, setAddSlots] = useState(1);
+  const [confirmRemoveTeacherId, setConfirmRemoveTeacherId] = useState<string | null>(null);
+  const [optimisticRemovedTeacherIds, setOptimisticRemovedTeacherIds] = useState<string[]>([]);
+
+  const visibleTeachers = useMemo(() => {
+    if (!dashboard) return [];
+    if (!optimisticRemovedTeacherIds.length) return dashboard.teachers;
+    const removed = new Set(optimisticRemovedTeacherIds);
+    return dashboard.teachers.filter((teacher) => !removed.has(teacher.userId));
+  }, [dashboard, optimisticRemovedTeacherIds]);
 
   useEffect(() => {
     void loadDashboard();
@@ -29,6 +40,11 @@ export default function PrincipalTeachersPage() {
     setBusyTeacherId(teacher.userId);
     setBusyTeacherAction(action);
     setError(null);
+    if (action === "remove") {
+      setOptimisticRemovedTeacherIds((prev) =>
+        prev.includes(teacher.userId) ? prev : [...prev, teacher.userId]
+      );
+    }
     try {
       const token = await getToken();
       if (!token) throw new Error("Session expired.");
@@ -46,8 +62,17 @@ export default function PrincipalTeachersPage() {
       });
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error || "Failed to update teacher.");
+      if (action === "remove") {
+        setConfirmRemoveTeacherId(null);
+        showToast(`${teacher.name} removed from your school`);
+      }
       await loadDashboard();
     } catch (err: unknown) {
+      if (action === "remove") {
+        setOptimisticRemovedTeacherIds((prev) =>
+          prev.filter((teacherUserId) => teacherUserId !== teacher.userId)
+        );
+      }
       setError(getErrorMessage(err, "Failed to update teacher."));
     } finally {
       setBusyTeacherId(null);
@@ -99,7 +124,7 @@ export default function PrincipalTeachersPage() {
       {dashboard ? (
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricCard title="Teachers" value={dashboard.overview.totalTeachers} subtitle="Current members in school workspace" />
+            <MetricCard title="Teachers" value={visibleTeachers.length} subtitle="Current members in school workspace" />
             <MetricCard title="Active" value={dashboard.overview.activeTeachers} subtitle="Enabled teacher accounts" />
             <MetricCard title="Slots" value={dashboard.subscription.slotLimit} subtitle="Provisioned teacher capacity" />
             <MetricCard title="Weekly activity" value={dashboard.overview.weeklyActivityCount} subtitle="Lessons + worksheets events" />
@@ -140,50 +165,82 @@ export default function PrincipalTeachersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {dashboard.teachers.length ? (
-                    dashboard.teachers.map((teacher) => {
+                  {visibleTeachers.length ? (
+                    visibleTeachers.map((teacher) => {
                       const isBusy = busyTeacherId === teacher.userId;
+                      const isConfirmingRemoval = confirmRemoveTeacherId === teacher.userId;
                       return (
-                        <tr key={teacher.userId} className="border-b border-[var(--border)]">
-                          <td className="py-3">
-                            <div className="font-semibold text-[var(--text-primary)]">{teacher.name}</div>
-                            <div className="text-xs text-[var(--text-tertiary)]">{teacher.email || teacher.userId}</div>
-                          </td>
-                          <td className="py-3">
-                            <StatusPill status={teacher.status} />
-                          </td>
-                          <td className="py-3 text-[var(--text-secondary)]">{teacher.lessonsGenerated}</td>
-                          <td className="py-3 text-[var(--text-secondary)]">{teacher.worksheetsCreated}</td>
-                          <td className="py-3 text-[var(--text-secondary)]">{timeAgo(teacher.lastActiveAt)}</td>
-                          <td className="py-3">
-                            <div className="flex items-center justify-end gap-2">
-                              {teacher.status === "disabled" ? (
+                        <>
+                          <tr key={teacher.userId} className="border-b border-[var(--border)]">
+                            <td className="py-3">
+                              <div className="font-semibold text-[var(--text-primary)]">{teacher.name}</div>
+                              <div className="text-xs text-[var(--text-tertiary)]">{teacher.email || teacher.userId}</div>
+                            </td>
+                            <td className="py-3">
+                              <StatusPill status={teacher.status} />
+                            </td>
+                            <td className="py-3 text-[var(--text-secondary)]">{teacher.lessonsGenerated}</td>
+                            <td className="py-3 text-[var(--text-secondary)]">{teacher.worksheetsCreated}</td>
+                            <td className="py-3 text-[var(--text-secondary)]">{timeAgo(teacher.lastActiveAt)}</td>
+                            <td className="py-3">
+                              <div className="flex items-center justify-end gap-2">
+                                {teacher.status === "disabled" ? (
+                                  <button
+                                    onClick={() => handleTeacherAction(teacher, "activate")}
+                                    disabled={isBusy}
+                                    className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
+                                  >
+                                    {isBusy && busyTeacherAction === "activate" ? "..." : "Activate"}
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => handleTeacherAction(teacher, "disable")}
+                                    disabled={isBusy}
+                                    className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--card-alt)] disabled:opacity-60"
+                                  >
+                                    {isBusy && busyTeacherAction === "disable" ? "..." : "Disable"}
+                                  </button>
+                                )}
                                 <button
-                                  onClick={() => handleTeacherAction(teacher, "activate")}
+                                  type="button"
+                                  onClick={() => setConfirmRemoveTeacherId(teacher.userId)}
                                   disabled={isBusy}
-                                  className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
+                                  className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
                                 >
-                                  {isBusy && busyTeacherAction === "activate" ? "..." : "Activate"}
+                                  Remove
                                 </button>
-                              ) : (
-                                <button
-                                  onClick={() => handleTeacherAction(teacher, "disable")}
-                                  disabled={isBusy}
-                                  className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--card-alt)] disabled:opacity-60"
-                                >
-                                  {isBusy && busyTeacherAction === "disable" ? "..." : "Disable"}
-                                </button>
-                              )}
-                              <button
-                                onClick={() => handleTeacherAction(teacher, "remove")}
-                                disabled={isBusy}
-                                className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-60"
-                              >
-                                {isBusy && busyTeacherAction === "remove" ? "..." : "Remove"}
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
+                              </div>
+                            </td>
+                          </tr>
+                          {isConfirmingRemoval ? (
+                            <tr className="border-b border-[var(--border)] bg-rose-50/70">
+                              <td colSpan={6} className="px-3 py-3">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                  <p className="text-sm text-rose-900">
+                                    Remove {teacher.name} from your school? They will lose access to school credits immediately.
+                                  </p>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setConfirmRemoveTeacherId(null)}
+                                      className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--card-alt)]"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleTeacherAction(teacher, "remove")}
+                                      disabled={isBusy}
+                                      className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                                    >
+                                      {isBusy && busyTeacherAction === "remove" ? "Removing..." : "Remove"}
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : null}
+                        </>
                       );
                     })
                   ) : (
@@ -200,7 +257,7 @@ export default function PrincipalTeachersPage() {
 
           <SectionCard title="Activity monitoring" subtitle="Quick activity snapshots for the most recent teacher accounts.">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {dashboard.teachers.slice(0, 6).map((teacher) => (
+              {visibleTeachers.slice(0, 6).map((teacher) => (
                 <div key={teacher.userId} className="rounded-xl border border-[var(--border)] bg-amber-50/60 p-3 dark:bg-amber-900/20">
                   <div className="flex items-start justify-between">
                     <div>
@@ -225,7 +282,7 @@ export default function PrincipalTeachersPage() {
                   </div>
                 </div>
               ))}
-              {!dashboard.teachers.length ? (
+              {!visibleTeachers.length ? (
                 <div className="rounded-xl border border-[var(--border)] bg-[var(--card-alt)] p-4 text-sm text-[var(--text-secondary)]">
                   Activity cards will appear once teachers join your school code.
                 </div>

@@ -1,12 +1,13 @@
 /**
  * Credit deduction logic for generation actions.
- * School credits are used first, then personal credits.
+ * School and personal credits are always strictly separated.
  */
 
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const GENERATION_CREDIT_COSTS = {
   LESSON_PACK: 4,
+  SLIDES: 2,
   WORKSHEET: 1,
   EXAM_BUILDER: 1,
 };
@@ -30,6 +31,7 @@ interface CreditDeductionResult {
   newPersonalBalance: number;
   previousSchoolBalance: number;
   newSchoolBalance: number;
+  errorCode?: "out_of_credits" | "school_out_of_credits" | "deduction_failed";
   error?: string;
 }
 
@@ -69,7 +71,7 @@ export async function checkTeacherCredits(
     let schoolBalance = 0;
     let usesSchoolCredits = false;
 
-    // If teacher belongs to a school, check school credits
+    // If teacher belongs to a school, only school credits are valid.
     if (schoolId) {
       const { data: school } = await admin
         .from("schools")
@@ -83,15 +85,14 @@ export async function checkTeacherCredits(
       }
     }
 
-    // Combined credits: school + personal
-    const totalAvailable = schoolBalance + personalBalance;
+    const availableCredits = schoolId ? schoolBalance : personalBalance;
 
     return {
       ok: true,
-      hasLessonPackCredits: totalAvailable >= GENERATION_CREDIT_COSTS.LESSON_PACK,
-      hasWorksheetCredits: totalAvailable >= GENERATION_CREDIT_COSTS.WORKSHEET,
-      hasExamCredits: totalAvailable >= GENERATION_CREDIT_COSTS.EXAM_BUILDER,
-      usesSchoolCredits,
+      hasLessonPackCredits: availableCredits >= GENERATION_CREDIT_COSTS.LESSON_PACK,
+      hasWorksheetCredits: availableCredits >= GENERATION_CREDIT_COSTS.WORKSHEET,
+      hasExamCredits: availableCredits >= GENERATION_CREDIT_COSTS.EXAM_BUILDER,
+      usesSchoolCredits: Boolean(schoolId) && usesSchoolCredits,
       schoolId,
       personalCreditsRemaining: personalBalance,
       schoolCreditsRemaining: schoolBalance,
@@ -160,9 +161,106 @@ export async function deductGenerationCredits(
       }
     }
 
-    // Check if sufficient credits (school + personal)
-    const totalAvailable = schoolBalance + personalBalance;
-    if (totalAvailable < creditCost) {
+    // Deduct strictly from school credits for school users (never personal fallback).
+    if (schoolId) {
+      if (schoolBalance < creditCost) {
+        return {
+          ok: false,
+          deductedFrom: "school",
+          previousPersonalBalance: personalBalance,
+          newPersonalBalance: personalBalance,
+          previousSchoolBalance: schoolBalance,
+          newSchoolBalance: schoolBalance,
+          errorCode: "school_out_of_credits",
+          error: "School has insufficient credits.",
+        };
+      }
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const { data: currentSchool, error: currentSchoolError } = await admin
+          .from("schools")
+          .select("shared_credits")
+          .eq("id", schoolId)
+          .maybeSingle();
+
+        if (currentSchoolError || !currentSchool) {
+          return {
+            ok: false,
+            deductedFrom: "school",
+            previousPersonalBalance: personalBalance,
+            newPersonalBalance: personalBalance,
+            previousSchoolBalance: schoolBalance,
+            newSchoolBalance: schoolBalance,
+            errorCode: "deduction_failed",
+            error: currentSchoolError?.message ?? "School record not found.",
+          };
+        }
+
+        const currentSchoolBalance = Number(currentSchool.shared_credits ?? 0);
+        if (currentSchoolBalance < creditCost) {
+          return {
+            ok: false,
+            deductedFrom: "school",
+            previousPersonalBalance: personalBalance,
+            newPersonalBalance: personalBalance,
+            previousSchoolBalance: currentSchoolBalance,
+            newSchoolBalance: currentSchoolBalance,
+            errorCode: "school_out_of_credits",
+            error: "School has insufficient credits.",
+          };
+        }
+
+        const nextSchoolBalance = currentSchoolBalance - creditCost;
+        const { data: updatedSchool, error: schoolError } = await admin
+          .from("schools")
+          .update({
+            shared_credits: nextSchoolBalance,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", schoolId)
+          .eq("shared_credits", currentSchoolBalance)
+          .select("id")
+          .maybeSingle();
+
+        if (schoolError) {
+          return {
+            ok: false,
+            deductedFrom: "school",
+            previousPersonalBalance: personalBalance,
+            newPersonalBalance: personalBalance,
+            previousSchoolBalance: currentSchoolBalance,
+            newSchoolBalance: currentSchoolBalance,
+            errorCode: "deduction_failed",
+            error: schoolError.message,
+          };
+        }
+
+        if (updatedSchool) {
+          return {
+            ok: true,
+            deductedFrom: "school",
+            previousPersonalBalance: personalBalance,
+            newPersonalBalance: personalBalance,
+            previousSchoolBalance: currentSchoolBalance,
+            newSchoolBalance: nextSchoolBalance,
+          };
+        }
+      }
+
+      return {
+        ok: false,
+        deductedFrom: "school",
+        previousPersonalBalance: personalBalance,
+        newPersonalBalance: personalBalance,
+        previousSchoolBalance: schoolBalance,
+        newSchoolBalance: schoolBalance,
+        errorCode: "deduction_failed",
+        error: "School credit balance changed. Please retry.",
+      };
+    }
+
+    // No school: deduct only from personal credits.
+    if (personalBalance < creditCost) {
       return {
         ok: false,
         deductedFrom: "personal",
@@ -170,62 +268,93 @@ export async function deductGenerationCredits(
         newPersonalBalance: personalBalance,
         previousSchoolBalance: schoolBalance,
         newSchoolBalance: schoolBalance,
-        error: "Insufficient credits. Please purchase more credits or join a school with available credits.",
+        errorCode: "out_of_credits",
+        error: "Insufficient personal credits.",
       };
     }
 
-    // Deduct from school first, then personal
     let newSchoolBalance = schoolBalance;
     let newPersonalBalance = personalBalance;
-    let deductedFrom: "school" | "personal" = "personal";
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const { data: currentProfile, error: currentProfileError } = await admin
+        .from("profiles")
+        .select("credits_balance")
+        .eq("id", userId)
+        .maybeSingle();
 
-    if (schoolId && schoolBalance >= creditCost) {
-      // Deduct from school
-      newSchoolBalance = schoolBalance - creditCost;
-      deductedFrom = "school";
-
-      // Atomic update for school credits
-      const { error: schoolError } = await admin
-        .from("schools")
-        .update({
-          shared_credits: newSchoolBalance,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", schoolId)
-        .eq("shared_credits", schoolBalance);
-
-      if (schoolError) {
-        // Retry logic or fallback to personal credits
-        return deductGenerationCredits(userId, creditCost);
+      if (currentProfileError || !currentProfile) {
+        return {
+          ok: false,
+          deductedFrom: "personal",
+          previousPersonalBalance: personalBalance,
+          newPersonalBalance: personalBalance,
+          previousSchoolBalance: schoolBalance,
+          newSchoolBalance: schoolBalance,
+          errorCode: "deduction_failed",
+          error: currentProfileError?.message ?? "User profile not found",
+        };
       }
-    } else {
-      // Deduct from personal
-      newPersonalBalance = personalBalance - creditCost;
-      deductedFrom = "personal";
 
-      // Atomic update for personal credits
-      const { error: personalError } = await admin
+      const currentPersonalBalance = Number(currentProfile.credits_balance ?? 0);
+      if (currentPersonalBalance < creditCost) {
+        return {
+          ok: false,
+          deductedFrom: "personal",
+          previousPersonalBalance: currentPersonalBalance,
+          newPersonalBalance: currentPersonalBalance,
+          previousSchoolBalance: schoolBalance,
+          newSchoolBalance: schoolBalance,
+          errorCode: "out_of_credits",
+          error: "Insufficient personal credits.",
+        };
+      }
+
+      newPersonalBalance = currentPersonalBalance - creditCost;
+      const { data: updatedProfile, error: personalError } = await admin
         .from("profiles")
         .update({
           credits_balance: newPersonalBalance,
           updated_at: new Date().toISOString(),
         })
         .eq("id", userId)
-        .eq("credits_balance", personalBalance);
+        .eq("credits_balance", currentPersonalBalance)
+        .select("id")
+        .maybeSingle();
 
       if (personalError) {
-        // Retry logic
-        return deductGenerationCredits(userId, creditCost);
+        return {
+          ok: false,
+          deductedFrom: "personal",
+          previousPersonalBalance: currentPersonalBalance,
+          newPersonalBalance: currentPersonalBalance,
+          previousSchoolBalance: schoolBalance,
+          newSchoolBalance: schoolBalance,
+          errorCode: "deduction_failed",
+          error: personalError.message,
+        };
+      }
+
+      if (updatedProfile) {
+        return {
+          ok: true,
+          deductedFrom: "personal",
+          previousPersonalBalance: currentPersonalBalance,
+          newPersonalBalance,
+          previousSchoolBalance: schoolBalance,
+          newSchoolBalance,
+        };
       }
     }
 
     return {
-      ok: true,
-      deductedFrom,
+      ok: false,
+      deductedFrom: "personal",
       previousPersonalBalance: personalBalance,
-      newPersonalBalance,
+      newPersonalBalance: personalBalance,
       previousSchoolBalance: schoolBalance,
-      newSchoolBalance,
+      newSchoolBalance: schoolBalance,
+      errorCode: "deduction_failed",
+      error: "Personal credit balance changed. Please retry.",
     };
   } catch (error) {
     const message =
@@ -237,6 +366,7 @@ export async function deductGenerationCredits(
       newPersonalBalance: 0,
       previousSchoolBalance: 0,
       newSchoolBalance: 0,
+      errorCode: "deduction_failed",
       error: message,
     };
   }

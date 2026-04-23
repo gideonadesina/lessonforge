@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { signOutAndRedirect } from "@/lib/auth/logout";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { useProfile } from "@/lib/useProfile";
@@ -16,8 +16,6 @@ import WeeklyInsight from "@/components/dashboard/WeeklyInsight";
 import { listSchemeOfWork } from "@/lib/planning/scheme";
 import { listAcademicEvents } from "@/lib/planning/academicCalendar";
 import SchoolCodeInput from "@/components/SchoolCodeInput";
-import LessonForgeOnboardingCard from "@/components/onboarding/LessonForgeOnboardingCard";
-import LessonForgeWelcomeCard from "@/components/onboarding/LessonForgeWelcomeCard";
 import AuthNotificationBanner from "@/components/auth/AuthNotificationBanner";
 import type {
   AcademicCalendarRow,
@@ -42,7 +40,15 @@ type LessonRow = {
 type SchoolMembershipApiResponse = {
   ok: boolean;
   data?: {
-    school: { id: string; name: string | null } | null;
+    school:
+      | {
+          id: string;
+          name: string | null;
+          shared_credits?: number | null;
+          credits_remaining?: number | null;
+          remaining_credits?: number | null;
+        }
+      | null;
   };
 };
 
@@ -95,16 +101,18 @@ export default function DashboardPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [schoolMembershipLoading, setSchoolMembershipLoading] = useState(true);
   const [hasSchoolMembership, setHasSchoolMembership] = useState(false);
+  const [schoolCreditsRemaining, setSchoolCreditsRemaining] = useState<number | null>(null);
   const [copiedReferral, setCopiedReferral] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-const [showWelcome, setShowWelcome] = useState(false);
-const [flowBusy, setFlowBusy] = useState(false);
+  const toastFlagsRef = useRef({
+    personalOutShown: false,
+    personalLowShown: false,
+    schoolOutShown: false,
+  });
   const teacherName =
     (profile as any)?.full_name ||
     (profile as any)?.name ||
     userEmail?.split("@")[0] ||
     "Teacher";
-    const firstName = String(teacherName).trim().split(" ")[0] || "Teacher";
 
   const loadSchoolMembership = useCallback(async () => {
     setSchoolMembershipLoading(true);
@@ -125,12 +133,32 @@ const [flowBusy, setFlowBusy] = useState(false);
       const json = (await res.json()) as SchoolMembershipApiResponse;
       if (!res.ok || !json.ok) {
         setHasSchoolMembership(false);
+        setSchoolCreditsRemaining(null);
         return;
       }
 
-      setHasSchoolMembership(Boolean(json.data?.school?.id));
+      const school = json.data?.school ?? null;
+      const hasSchool = Boolean(school?.id);
+      setHasSchoolMembership(hasSchool);
+      if (!hasSchool) {
+        setSchoolCreditsRemaining(null);
+        return;
+      }
+
+      const remainingCandidates = [
+        school?.remaining_credits,
+        school?.credits_remaining,
+        school?.shared_credits,
+      ];
+      const remainingValue = remainingCandidates.find(
+        (value) => typeof value === "number" && Number.isFinite(value)
+      );
+      setSchoolCreditsRemaining(
+        typeof remainingValue === "number" ? Math.max(0, remainingValue) : null
+      );
     } catch {
       setHasSchoolMembership(false);
+      setSchoolCreditsRemaining(null);
     } finally {
       setSchoolMembershipLoading(false);
     }
@@ -150,44 +178,15 @@ const [flowBusy, setFlowBusy] = useState(false);
     if (!profile) return;
 
     if (!profile.onboarding_completed) {
-      setShowOnboarding(true);
-      setShowWelcome(false);
+      router.replace("/onboarding");
       return;
     }
 
     if (!profile.welcome_seen) {
-      setShowOnboarding(false);
-      setShowWelcome(true);
+      router.replace("/onboarding");
       return;
     }
-
-    setShowOnboarding(false);
-    setShowWelcome(false);
-  }, [profile]);
-
-const markWelcomeSeen = useCallback(async () => {
-  if (!profile?.id) return;
-  setFlowBusy(true);
-  try {
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        welcome_seen: true,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", profile.id);
-    if (error) throw error;
-  } catch (error: unknown) {
-    setMsg(`Could not start workspace: ${getErrorMessage(error)}`);
-  } finally {
-    setFlowBusy(false);
-  }
-}, [profile?.id, supabase]);
-
-useEffect(() => {
-  if (!showWelcome || !profile?.id) return;
-  void markWelcomeSeen();
-}, [markWelcomeSeen, profile?.id, showWelcome]);
+  }, [profile, router]);
   
   useEffect(() => {
     const forgeWindow = window as Window & {
@@ -211,6 +210,79 @@ useEffect(() => {
   useEffect(() => {
     void loadSchoolMembership();
   }, [loadSchoolMembership]);
+
+  useEffect(() => {
+    if (!profile || schoolMembershipLoading) return;
+
+    const isSchoolPlan = hasSchoolMembership;
+    const schoolOutOfCredits =
+      isSchoolPlan &&
+      (schoolCreditsRemaining === 0 ||
+        (schoolCreditsRemaining == null && creditsRemaining === 0));
+
+    if (schoolOutOfCredits) {
+      if (!toastFlagsRef.current.schoolOutShown) {
+        showToast({
+          message: "Your school has run out of credits",
+          subtext: "Your principal has been notified",
+          duration: "persistent",
+          color: "rose",
+        });
+        toastFlagsRef.current.schoolOutShown = true;
+      }
+      return;
+    }
+
+    toastFlagsRef.current.schoolOutShown = false;
+
+    if (isSchoolPlan) {
+      return;
+    }
+
+    if (creditsRemaining === 0) {
+      if (!toastFlagsRef.current.personalOutShown) {
+        showToast({
+          message: "You have used all your credits",
+          subtext: "Purchase more to continue generating",
+          action: { label: "Get credits", href: "/pricing" },
+          duration: "persistent",
+          color: "rose",
+        });
+        toastFlagsRef.current.personalOutShown = true;
+      }
+      return;
+    }
+
+    toastFlagsRef.current.personalOutShown = false;
+
+    if (creditsRemaining > 0 && creditsRemaining <= 5) {
+      if (toastFlagsRef.current.personalLowShown) {
+        return;
+      }
+      const timeout = window.setTimeout(() => {
+        showToast({
+          message: `Credits running low - ${creditsRemaining} left`,
+          subtext: "Get more before you run out",
+          action: { label: "Top up", href: "/pricing" },
+          duration: 8000,
+          color: "amber",
+        });
+      }, 2000);
+      toastFlagsRef.current.personalLowShown = true;
+      return () => {
+        window.clearTimeout(timeout);
+      };
+    }
+
+    toastFlagsRef.current.personalLowShown = false;
+  }, [
+    creditsRemaining,
+    hasSchoolMembership,
+    profile,
+    schoolCreditsRemaining,
+    schoolMembershipLoading,
+    showToast,
+  ]);
 
   useEffect(() => {
     let alive = true;
@@ -444,9 +516,6 @@ useEffect(() => {
   ).size;
   const pendingItems = planningReminders.pendingTopicsCount;
 
-  const isOutOfCredits = creditsRemaining <= 0;
-  const isLowCredits = creditsRemaining > 0 && creditsRemaining <= 5;
-
   const referralCode =
     (profile as any)?.referral_code ||
     ((profile as any)?.id
@@ -470,36 +539,6 @@ useEffect(() => {
   }
 }
 
-  
-if (showOnboarding && profile) {
-    return (
-      <div className="min-h-screen bg-[#FAF9F6] px-4 py-8">
-       <LessonForgeOnboardingCard
-  profileId={profile.id}
-  initialAnswers={profile.onboarding_answers}
-  onCompleted={() => {
-    setShowOnboarding(false);
-    setShowWelcome(true);
-  }}
-/>
-      </div>
-    );
-  }
-
-  if (showWelcome && profile) {
-    return (
-      <div className="min-h-screen bg-[#FAF9F6] px-4 py-8">
-        <LessonForgeWelcomeCard
-          firstName={firstName}
-          roleType="teacher"
-         onStart={() => {
-  setShowWelcome(false);
-}}
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text-primary)]">
       <DashboardHeader />
@@ -516,29 +555,6 @@ if (showOnboarding && profile) {
         {msg ? (
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 text-sm text-[var(--text-secondary)] shadow-sm">
             {msg}
-          </div>
-        ) : null}
-
-        {isOutOfCredits ? (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900 shadow-sm dark:border-rose-900/50 dark:bg-rose-900/20 dark:text-rose-400">
-            <p className="font-semibold">You are out of credits.</p>
-            <p className="mt-1">
-              New generation actions are blocked, but your dashboard and saved
-              content remain available.
-            </p>
-            <Link
-              href="/settings"
-              className="mt-3 inline-flex rounded-lg border border-rose-300 bg-[var(--card)] px-3 py-2 text-xs font-semibold text-rose-900 dark:border-rose-900 dark:bg-rose-900/20 dark:text-rose-400"
-            >
-              Recharge / Upgrade
-            </Link>
-          </div>
-        ) : null}
-
-        {isLowCredits ? (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-400">
-            Credits are running low ({creditsRemaining} left). Plan a manual
-            recharge soon to avoid interruptions.
           </div>
         ) : null}
 

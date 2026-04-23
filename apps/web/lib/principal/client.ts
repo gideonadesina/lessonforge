@@ -17,22 +17,43 @@ export type PaymentQuote = {
 type DashboardApiResponse = {
   ok: boolean;
   onboardingRequired?: boolean;
-  data?: PrincipalDashboardPayload;
+  data?: PrincipalDashboardWithCredits;
   error?: string;
 };
+
+export type SchoolCreditsSummary = {
+  total: number;
+  used: number;
+  remaining: number;
+  percentUsed: number;
+  isLow: boolean;
+  isEmpty: boolean;
+};
+
+export type PrincipalDashboardWithCredits = PrincipalDashboardPayload & {
+  schoolCredits: SchoolCreditsSummary;
+};
  
-function isPrincipalDashboardPayload(value: unknown): value is PrincipalDashboardPayload {
+function isPrincipalDashboardPayload(value: unknown): value is PrincipalDashboardWithCredits {
   if (!value || typeof value !== "object") return false;
   const root = value as Record<string, unknown>;
   const overview = root.overview as Record<string, unknown> | undefined;
   const subscription = root.subscription as Record<string, unknown> | undefined;
+  const schoolCredits = root.schoolCredits as Record<string, unknown> | undefined;
  
   return Boolean(
     overview &&
       subscription &&
+      schoolCredits &&
       Array.isArray(root.teachers) &&
       typeof overview.totalTeachers === "number" &&
-      typeof subscription.slotLimit === "number"
+      typeof subscription.slotLimit === "number" &&
+      typeof schoolCredits.total === "number" &&
+      typeof schoolCredits.used === "number" &&
+      typeof schoolCredits.remaining === "number" &&
+      typeof schoolCredits.percentUsed === "number" &&
+      typeof schoolCredits.isLow === "boolean" &&
+      typeof schoolCredits.isEmpty === "boolean"
   );
 }
  
@@ -73,7 +94,7 @@ export function usePrincipalDashboard() {
   const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [dashboard, setDashboard] = useState<PrincipalDashboardPayload | null>(null);
+  const [dashboard, setDashboard] = useState<PrincipalDashboardWithCredits | null>(null);
   const [onboardingRequired, setOnboardingRequired] = useState(false);
  
   const getToken = useCallback(async () => {

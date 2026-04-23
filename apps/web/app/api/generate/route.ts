@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { consumeGenerationCredits, getGenerationCreditAvailability } from "@/lib/credits/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -1725,19 +1726,42 @@ export async function POST(req: NextRequest) {
       );
     }
 
-   const { data: creditData, error: creditErr } =
-  await supabase.rpc("consume_generation_credit");
-
-if (creditErr) {
-  console.error("[generate] Credit deduction failed after successful generation:", creditErr.message);
-} else if (!creditData?.ok) {
-  const msg = creditData?.error || "No credits";
-  const status =
-    typeof msg === "string" && msg.toLowerCase().includes("not authenticated")
-      ? 401
-      : 402;
-  return NextResponse.json({ error: msg }, { status });
-}
+    const creditAvailability = await getGenerationCreditAvailability(supabase, user.id);
+    if (!creditAvailability.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "credit_check_failed",
+          message: creditAvailability.error,
+          upgrade_url: null,
+        },
+        { status: 500 }
+      );
+    }
+    if (creditAvailability.creditsRemaining <= 0) {
+      if (creditAvailability.source === "school") {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "school_out_of_credits",
+            message:
+              "Your school has used all its credits. Your principal has been notified and will add more credits soon.",
+            upgrade_url: null,
+          },
+          { status: 402 }
+        );
+      }
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "out_of_credits",
+          message:
+            "You have used all your credits. Purchase more to continue generating lessons.",
+          upgrade_url: "/pricing",
+        },
+        { status: 402 }
+      );
+    }
 
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
@@ -1825,11 +1849,20 @@ if (creditErr) {
   type: "lesson",
 });
 
-if (saveErr) {
-  console.error("[generate] Failed to save to library:", saveErr.message);
-}
+    const deductionResult = await consumeGenerationCredits(supabase, user.id, 4);
+    if (!deductionResult.ok) {
+      console.error("[generate] Credit deduction failed after successful generation:", {
+        userId: user.id,
+        errorCode: deductionResult.errorCode,
+        error: deductionResult.error,
+      });
+    }
 
-return NextResponse.json({ data, saved: !saveErr }, { status: 200 });
+    if (saveErr) {
+      console.error("[generate] Failed to save to library:", saveErr.message);
+    }
+
+    return NextResponse.json({ data, saved: !saveErr }, { status: 200 });
   } catch (err: unknown) {
     const message =
       err instanceof Error ? err.message : typeof err === "string" ? err : "Unknown error";

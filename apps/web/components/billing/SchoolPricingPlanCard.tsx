@@ -25,8 +25,8 @@ export default function SchoolPricingPlanCard({
 
   return (
     <article
-      className={[
-        "relative flex h-full flex-col rounded-[20px] border bg-white p-6 shadow-[0_4px_24px_rgba(83,74,183,0.08)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_30px_rgba(83,74,183,0.14)]",
+  className={[
+    "relative flex h-full flex-col rounded-[20px] border bg-white p-6 pt-8 shadow-[0_4px_24px_rgba(83,74,183,0.08)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_30px_rgba(83,74,183,0.14)]",
         plan.highlighted
           ? "scale-[1.02] border-[#534AB7] ring-1 ring-[rgba(83,74,183,0.2)]"
           : "border-[#E2E8F0]",
