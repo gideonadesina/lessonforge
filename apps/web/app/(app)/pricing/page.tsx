@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   NEW_USER_FREE_CREDITS,
   TEACHER_PRICING_PLANS,
@@ -11,6 +11,7 @@ import { initializeTeacherCheckout } from "@/lib/billing/checkout";
 import TeacherPricingPlanCard from "@/components/billing/TeacherPricingPlanCard";
 import LessonForgeWordmark from "@/components/auth/LessonForgeWordmark";
 import AuthNotificationBanner from "@/components/auth/AuthNotificationBanner";
+import { track } from "@/lib/analytics";
 
 const FAQ_ITEMS = [
   {
@@ -38,11 +39,35 @@ export default function PricingPage() {
   const [busyPlanId, setBusyPlanId] = useState<string | null>(null);
   const freeLessonPacks = estimateLessonPacks(NEW_USER_FREE_CREDITS);
 
+  useEffect(() => {
+    track("plan_viewed", {
+      user_role: "teacher",
+      active_role: "teacher",
+      plan_name: "teacher_pricing",
+    });
+  }, []);
+
   async function handleTeacherPlanSelect(planId: (typeof TEACHER_PRICING_PLANS)[number]["id"]) {
+    const plan = TEACHER_PRICING_PLANS.find((item) => item.id === planId);
+    track("upgrade_clicked", {
+      user_role: "teacher",
+      active_role: "teacher",
+      plan_name: plan?.name ?? planId,
+    });
     setBusyPlanId(planId);
     try {
+      track("payment_started", {
+        user_role: "teacher",
+        active_role: "teacher",
+        plan_name: plan?.name ?? planId,
+      });
       await initializeTeacherCheckout(planId);
     } catch (error) {
+      track("payment_failed", {
+        user_role: "teacher",
+        active_role: "teacher",
+        plan_name: plan?.name ?? planId,
+      });
       console.error("Failed to start checkout:", error);
       alert("We could not start checkout right now. Please try again.");
     } finally {

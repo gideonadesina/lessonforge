@@ -9,6 +9,7 @@ import { useLessonCache } from "@/lib/lessons/useLessonCache";
 import { useProgressiveRenderer, SectionSkeleton, ProgressiveContent } from "@/lib/lessons/ProgressiveRenderer";
 import SlideViewer from "@/components/slides/SlideViewer";
 import { LessonPlanPdfDocument } from "@/components/lessons/LessonPlanPdfDocument";
+import { track } from "@/lib/analytics";
 
 // ─────────────────────────────────────────────────────────────
 // TYPES
@@ -793,6 +794,24 @@ export default function LibraryPage() {
 
   const handleDownloadImageCb = useCallback((src: string, title: string) => {
     handleDownloadImage(src, title);
+    track("export_png_clicked", {
+      user_role: "teacher",
+      active_role: "teacher",
+      subject: active?.subject,
+      curriculum: active?.curriculum,
+      generation_type: active?.type === "slides" ? "lesson_slides" : "lesson_pack",
+    });
+  }, [active]);
+
+  const openLibraryItem = useCallback((row: LessonRow) => {
+    setActive(row);
+    track("library_item_opened", {
+      user_role: "teacher",
+      active_role: "teacher",
+      subject: row.subject,
+      curriculum: row.curriculum,
+      generation_type: row.type === "slides" ? "lesson_slides" : "lesson_pack",
+    });
   }, []);
 
   const handleDownloadStructure = useCallback(() => {
@@ -850,6 +869,13 @@ export default function LibraryPage() {
       ).toBlob();
 
       downloadBlob(filename, blob);
+      track("export_pdf_clicked", {
+        user_role: "teacher",
+        active_role: "teacher",
+        subject,
+        curriculum: active.curriculum,
+        generation_type: "lesson_pack",
+      });
       setLessonPlanFormOpen(false);
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "Failed to generate lesson plan PDF.");
@@ -1085,13 +1111,13 @@ export default function LibraryPage() {
                   <div className="mt-3 text-lg font-bold text-[var(--text-primary)]">{l.topic || "Untitled lesson"}</div>
                   <div className="mt-1 text-xs text-[var(--text-tertiary)]">{timeAgo(l.created_at)}</div>
                 </div>
-                <button onClick={() => setActive(l)}
+                <button onClick={() => openLibraryItem(l)}
                   className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-slate-100">
                   View
                 </button>
               </div>
               <div className="mt-4 flex items-center justify-between">
-                <button onClick={() => setActive(l)}
+                <button onClick={() => openLibraryItem(l)}
                   className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-violet-700">
                   Open
                 </button>

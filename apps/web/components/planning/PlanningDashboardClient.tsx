@@ -11,6 +11,7 @@ import WeekAtGlanceGrid from "@/components/planning/WeekAtGlanceGrid";
 import TermProgressPanel from "@/components/planning/TermProgressPanel";
 import TimetableSetupWizardCard from "@/components/planning/TimetableSetupWizardCard";
 import ForgeGuideTipCard from "@/components/planning/ForgeGuideTipCard";
+import { track } from "@/lib/analytics";
 
 type NotificationsResponse = {
   notifications: Notification[];
@@ -341,6 +342,10 @@ export default function PlanningDashboardClient({
   ]);
 
   useEffect(() => {
+    track("planning_page_viewed", {
+      user_role: "teacher",
+      active_role: "teacher",
+    });
     void refreshAll();
   }, [refreshAll]);
 

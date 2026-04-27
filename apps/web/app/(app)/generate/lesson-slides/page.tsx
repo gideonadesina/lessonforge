@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import SlideViewer from "@/components/slides/SlideViewer";
 import type { SlideDeck } from "@/lib/slideRenderer";
+import { getInvalidJsonMessage, readJsonResponse } from "@/lib/http/safe-json";
+import { track } from "@/lib/analytics";
 
 // ─────────────────────────────────────────────────────────────
 // OPTIONS — Nigerian curriculum aligned
@@ -125,6 +127,7 @@ export default function LessonSlidesPage() {
 
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
+  const SLIDES_CREDIT_COST = 2;
   const [error, setError] = useState<string | null>(null);
   const [deck, setDeck] = useState<SlideDeck | null>(null);
 
@@ -163,6 +166,7 @@ export default function LessonSlidesPage() {
 
   const getResponseError = (payload: unknown): string | null => {
     if (!isRecord(payload)) return null;
+    if (typeof payload.message === "string") return payload.message;
     return typeof payload.error === "string" ? payload.error : null;
   };
 
@@ -189,13 +193,10 @@ export default function LessonSlidesPage() {
       body: JSON.stringify(formData),
     });
 
-    let json: unknown;
-    try {
-      json = await res.json();
-    } catch {
-      // Response body parsing failed — but generation succeeded
-      // Check library for the saved deck
-      setError("Slides generated but preview failed to load. Check your library.");
+    const parsedResponse = await readJsonResponse(res);
+    const json: unknown = parsedResponse.data ?? {};
+    if (parsedResponse.parseError) {
+      setError(getInvalidJsonMessage(res));
       return;
     }
 
@@ -233,7 +234,11 @@ export default function LessonSlidesPage() {
           }),
         });
 
-        const retryJson = await retryRes.json();
+        const retryParsedResponse = await readJsonResponse(retryRes);
+        if (retryParsedResponse.parseError) {
+          throw new Error(getInvalidJsonMessage(retryRes));
+        }
+        const retryJson = retryParsedResponse.data ?? {};
 
         if (!retryRes.ok) {
           throw new Error(getResponseError(retryJson) || "Failed to generate slides");
@@ -246,6 +251,16 @@ export default function LessonSlidesPage() {
 
         try { sessionStorage.removeItem("lessonforge_library_cache"); } catch {}
         setDeck(retryDeck);
+        track("lesson_slides_generated", {
+          user_role: "teacher",
+          active_role: "teacher",
+          credit_source: "personal",
+          credits_cost: SLIDES_CREDIT_COST,
+          subject: formData.subject,
+          school_level: formData.schoolLevel,
+          curriculum: formData.curriculum,
+          generation_type: "lesson_slides",
+        });
         return;
       }
 
@@ -267,6 +282,15 @@ export default function LessonSlidesPage() {
     }
 
     setDeck(generatedDeck);
+    track("lesson_slides_generated", {
+      user_role: "teacher",
+      active_role: "teacher",
+      credits_cost: SLIDES_CREDIT_COST,
+      subject: formData.subject,
+      school_level: formData.schoolLevel,
+      curriculum: formData.curriculum,
+      generation_type: "lesson_slides",
+    });
 
   } catch (err) {
     const message =

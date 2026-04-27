@@ -13,6 +13,7 @@ import {
 } from "@/components/principal/PrincipalStates";
 import { getErrorMessage, timeAgo, usePrincipalDashboard } from "@/lib/principal/client";
 import type { TeacherAction, TeacherListItem } from "@/lib/principal/types";
+import { track } from "@/lib/analytics";
 
 export default function PrincipalTeachersPage() {
   const { showToast } = useToast();
@@ -35,6 +36,17 @@ export default function PrincipalTeachersPage() {
   useEffect(() => {
     void loadDashboard();
   }, [loadDashboard]);
+
+  useEffect(() => {
+    if (!dashboard) return;
+    track("teacher_management_viewed", {
+      user_role: "principal",
+      active_role: "principal",
+      school_id: dashboard.school.id,
+      school_name: dashboard.school.name,
+      plan_name: dashboard.subscription.planName,
+    });
+  }, [dashboard]);
 
   async function handleTeacherAction(teacher: TeacherListItem, action: TeacherAction) {
     setBusyTeacherId(teacher.userId);

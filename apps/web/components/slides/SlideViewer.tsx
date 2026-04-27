@@ -12,6 +12,7 @@ import {
 import { exportToPdf } from "../../lib/exportToPdf";
 import { exportToPptx } from "../../lib/exportToPptx";
 import { exportSlideToPng } from "../../lib/exportToPng";
+import { track } from "@/lib/analytics";
 
 type SlideViewerProps = {
   deck: SlideDeck;
@@ -148,6 +149,12 @@ export default function SlideViewer({ deck }: SlideViewerProps) {
 
   const handleExportPDF = async () => {
     if (exportingPdf || !liveDeck) return;
+    track("export_pdf_clicked", {
+      user_role: "teacher",
+      active_role: "teacher",
+      subject: liveDeck.subject,
+      generation_type: "lesson_slides",
+    });
     setExportingPdf(true);
     setExportDropdownOpen(false);
     try {
@@ -162,6 +169,12 @@ export default function SlideViewer({ deck }: SlideViewerProps) {
 
   const handleExportPPTX = async () => {
     if (exportingPptx || !liveDeck) return;
+    track("export_pptx_clicked", {
+      user_role: "teacher",
+      active_role: "teacher",
+      subject: liveDeck.subject,
+      generation_type: "lesson_slides",
+    });
     setExportingPptx(true);
     setExportDropdownOpen(false);
     try {
@@ -176,6 +189,13 @@ export default function SlideViewer({ deck }: SlideViewerProps) {
 
   const handleExportGoogleSlides = async () => {
     if (exportingPptx || !liveDeck) return;
+    track("export_pptx_clicked", {
+      user_role: "teacher",
+      active_role: "teacher",
+      subject: liveDeck.subject,
+      generation_type: "lesson_slides",
+      export_target: "google_slides",
+    });
     setExportingPptx(true);
     setExportDropdownOpen(false);
     try {
@@ -192,6 +212,12 @@ export default function SlideViewer({ deck }: SlideViewerProps) {
 
   const handleExportPNG = async () => {
     if (exportingPng || !slideContainerRef.current) return;
+    track("export_png_clicked", {
+      user_role: "teacher",
+      active_role: "teacher",
+      subject: liveDeck?.subject,
+      generation_type: "lesson_slides",
+    });
     setExportingPng(true);
     setExportDropdownOpen(false);
     try {

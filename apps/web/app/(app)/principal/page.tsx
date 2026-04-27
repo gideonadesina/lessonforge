@@ -14,6 +14,7 @@ import {
 } from "@/components/principal/PrincipalStates";
 import { formatDateOnly, timeAgo, toNaira, usePrincipalDashboard } from "@/lib/principal/client";
 import { useProfile } from "@/lib/useProfile";
+import { track } from "@/lib/analytics";
  
 const QUICK_LINKS = [
   {
@@ -67,6 +68,13 @@ export default function PrincipalPage() {
 
   useEffect(() => {
     if (!dashboard) return;
+    track("principal_dashboard_viewed", {
+      user_role: "principal",
+      active_role: "principal",
+      school_id: dashboard.school.id,
+      school_name: dashboard.school.name,
+      plan_name: dashboard.subscription.planName,
+    });
 
     if (dashboard.schoolCredits.isEmpty) {
       if (!creditToastFlagsRef.current.emptyShown) {
@@ -87,6 +95,13 @@ export default function PrincipalPage() {
     if (dashboard.schoolCredits.isLow) {
       if (creditToastFlagsRef.current.lowShown) return;
       const timeout = window.setTimeout(() => {
+        track("school_credits_low_warning_seen", {
+          user_role: "principal",
+          active_role: "principal",
+          school_id: dashboard.school.id,
+          school_name: dashboard.school.name,
+          plan_name: dashboard.subscription.planName,
+        });
         showToast({
           message: `School credits running low - ${dashboard.schoolCredits.remaining} credits left (${dashboard.schoolCredits.percentUsed}% used). Top up soon to avoid interruption.`,
           action: { label: "Top up", href: "/principal/billing" },
@@ -136,6 +151,12 @@ export default function PrincipalPage() {
     try {
       await navigator.clipboard.writeText(code);
       setSchoolCodeCopied(true);
+      track("school_code_copied", {
+        user_role: "principal",
+        active_role: "principal",
+        school_id: dashboard?.school.id,
+        school_name: dashboard?.school.name,
+      });
       showToast("School code copied.");
       window.setTimeout(() => setSchoolCodeCopied(false), 2000);
     } catch {

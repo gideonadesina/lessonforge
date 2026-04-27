@@ -8,6 +8,7 @@ import {
   type SchoolPlanId,
   formatNaira,
 } from "@/lib/billing/pricing";
+import { track } from "@/lib/analytics";
 
 type Props = {
   getToken: () => Promise<string>;
@@ -59,8 +60,21 @@ export default function PrincipalOnboardingCard({ getToken, onCompleted, setPare
         throw new Error("Payment checkout URL missing.");
       }
 
+      const selectedPlan = SCHOOL_PRICING_PLANS.find((plan) => plan.id === planId);
+      track("payment_started", {
+        user_role: "principal",
+        active_role: "principal",
+        plan_name: selectedPlan?.name ?? planId,
+        school_name: schoolName.trim() || undefined,
+      });
       window.location.href = json.authorization_url;
     } catch (err: unknown) {
+      track("payment_failed", {
+        user_role: "principal",
+        active_role: "principal",
+        plan_name: resolvePlanId(teacherSlots),
+        school_name: schoolName.trim() || undefined,
+      });
       setParentError(getErrorMessage(err, "Onboarding failed."));
     } finally {
       setBusy(false);

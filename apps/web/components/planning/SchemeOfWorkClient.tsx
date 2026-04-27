@@ -20,6 +20,7 @@ import type {
   SchemeStatus,
 } from "@/lib/planning/types";
 import SchemeStatusBadge from "@/components/planning/SchemeStatusBadge";
+import { track } from "@/lib/analytics";
 
 type SchemeFormState = {
   class_name: string;
@@ -193,6 +194,15 @@ export default function SchemeOfWorkClient({
     }
 
     setSuccess(editingId ? "Scheme entry updated." : "Scheme entry added.");
+    if (!editingId) {
+      track("scheme_created", {
+        user_role: "teacher",
+        active_role: "teacher",
+        subject: payload.subject,
+        school_level: payload.class_name,
+        generation_type: "planning",
+      });
+    }
     resetForm();
     await loadEntries();
   }

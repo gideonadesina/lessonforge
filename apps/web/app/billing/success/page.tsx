@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { track } from "@/lib/analytics";
 
 type VerifyState = "loading" | "ok" | "error";
 
@@ -165,12 +166,18 @@ function SuccessInner() {
         if (!res.ok || json?.ok === false) {
           setState("error");
           setErrorMsg(json?.error || "Could not confirm payment. Please try again.");
+          track("payment_failed", {
+            user_role: isSchoolFlow ? "principal" : "teacher",
+            active_role: isSchoolFlow ? "principal" : "teacher",
+            plan_name: String(json?.plan ?? ""),
+          });
           return;
         }
 
         if (isSchoolFlow) {
           const planId = String(json.plan ?? "");
           const schoolId = String(json.schoolId ?? "");
+          const planName = SCHOOL_PLAN_NAMES[planId] ?? (planId || "School Plan");
           if (schoolId) {
             const { data: codeRow } = await supabase
               .from("school_codes")
@@ -182,7 +189,7 @@ function SuccessInner() {
           }
 
           setDetails({
-            planName: SCHOOL_PLAN_NAMES[planId] ?? (planId || "School Plan"),
+            planName,
             creditsAdded:
               typeof json.sharedCreditsAwarded === "number" ? json.sharedCreditsAwarded : null,
             previousBalance:
@@ -196,10 +203,17 @@ function SuccessInner() {
                 "Principal dashboard",
               ],
           });
+          track("payment_success", {
+            user_role: "principal",
+            active_role: "principal",
+            school_id: schoolId,
+            plan_name: planName,
+          });
         } else {
           const planId = String(json.plan ?? "");
+          const planName = TEACHER_PLAN_NAMES[planId] ?? (planId || "Teacher Plan");
           setDetails({
-            planName: TEACHER_PLAN_NAMES[planId] ?? (planId || "Teacher Plan"),
+            planName,
             creditsAdded: typeof json.creditsAwarded === "number" ? json.creditsAwarded : null,
             previousBalance:
               typeof json.previousBalance === "number" ? json.previousBalance : null,
@@ -212,6 +226,11 @@ function SuccessInner() {
                 "Library saving",
               ],
           });
+          track("payment_success", {
+            user_role: "teacher",
+            active_role: "teacher",
+            plan_name: planName,
+          });
         }
 
         setState("ok");
@@ -219,6 +238,10 @@ function SuccessInner() {
         if (!active) return;
         setState("error");
         setErrorMsg(e instanceof Error ? e.message : "Verification failed.");
+        track("payment_failed", {
+          user_role: isSchoolFlow ? "principal" : "teacher",
+          active_role: isSchoolFlow ? "principal" : "teacher",
+        });
       }
     }
 

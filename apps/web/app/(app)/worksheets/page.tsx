@@ -2,6 +2,8 @@
  
 import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { getInvalidJsonMessage, readJsonResponse } from "@/lib/http/safe-json";
+import { track } from "@/lib/analytics";
  
 type WorksheetSource = "generated" | "uploaded";
 type PrintLayout = "standard" | "exam" | "worksheet";
@@ -113,6 +115,14 @@ function needsPersonalCreditConfirmation(json: unknown) {
   const payload = (json ?? {}) as { errorCode?: unknown };
   return payload.errorCode === "needs_personal_confirmation";
 }
+
+async function readApiJson(response: Response) {
+  const parsed = await readJsonResponse(response);
+  if (parsed.parseError) {
+    throw new Error(getInvalidJsonMessage(response));
+  }
+  return parsed.data ?? {};
+}
  
 export default function WorksheetsPage() {
   // Builder state
@@ -220,7 +230,7 @@ export default function WorksheetsPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
  
-      const json = await res.json().catch(() => ({}));
+      const json = await readApiJson(res);
       if (!res.ok) throw new Error(getApiError(json, "Failed to load worksheets"));
       setItems(normalizeListResponse(json));
     } catch (e: unknown) {
@@ -269,7 +279,8 @@ export default function WorksheetsPage() {
         body: JSON.stringify(requestBody),
       });
  
-      let json = await res.json().catch(() => ({}));
+      let json = await readApiJson(res);
+      let creditSource: "personal" | "school" | undefined;
       if (!res.ok && res.status === 402 && needsPersonalCreditConfirmation(json)) {
         const payload = json as { cost?: unknown; personalCreditsAvailable?: unknown };
         const cost = typeof payload.cost === "number" ? payload.cost : 1;
@@ -293,7 +304,8 @@ export default function WorksheetsPage() {
           },
           body: JSON.stringify({ ...requestBody, usePersonalCredits: true }),
         });
-        json = await res.json().catch(() => ({}));
+        creditSource = "personal";
+        json = await readApiJson(res);
       }
       if (!res.ok) throw new Error(getApiError(json, "Generation failed"));
  
@@ -308,6 +320,14 @@ export default function WorksheetsPage() {
       setActive({ meta: payload.meta, generated: payload.generated });
       setPrintMode("student");
       setOpen(true);
+      track("worksheet_generated", {
+        user_role: "teacher",
+        active_role: "teacher",
+        credit_source: creditSource,
+        credits_cost: 1,
+        subject,
+        generation_type: "worksheet",
+      });
     } catch (e: unknown) {
       setError(getErrorMessage(e, "Generation failed"));
     } finally {
@@ -352,7 +372,7 @@ export default function WorksheetsPage() {
         body: form,
       });
  
-      const json = await res.json().catch(() => ({}));
+      const json = await readApiJson(res);
       if (!res.ok) throw new Error(getApiError(json, "Upload failed"));
  
       const payload = normalizeFullResponse(json);
@@ -393,7 +413,7 @@ export default function WorksheetsPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
  
-      const json = await res.json().catch(() => ({}));
+      const json = await readApiJson(res);
       if (!res.ok) throw new Error(getApiError(json, "Delete failed"));
  
       setItems((prev) => prev.filter((x) => x.id !== id));
@@ -407,6 +427,12 @@ export default function WorksheetsPage() {
   }
  
  async function openFromRow(row: WorksheetRow) {
+    track("library_item_opened", {
+      user_role: "teacher",
+      active_role: "teacher",
+      subject: row.subject,
+      generation_type: "worksheet",
+    });
     setError(null);
     setActive({ meta: row, generated: undefined });
     setPrintMode("student");
@@ -426,7 +452,7 @@ export default function WorksheetsPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
  
-      const json = await res.json().catch(() => ({}));
+      const json = await readApiJson(res);
       if (!res.ok) throw new Error(getApiError(json, "Failed to load worksheet"));
  
       const payload = normalizeFullResponse(json);
@@ -496,7 +522,7 @@ export default function WorksheetsPage() {
         }),
       });
  
-      const json = await res.json().catch(() => ({}));
+      const json = await readApiJson(res);
       if (!res.ok) throw new Error(getApiError(json, "Update failed"));
  
       const payload = normalizeFullResponse(json);
@@ -539,7 +565,7 @@ export default function WorksheetsPage() {
       });
  
       if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
+        const json = await readApiJson(res);
         throw new Error(getApiError(json, `Failed to export ${kind.toUpperCase()}`));
       }
  
@@ -553,6 +579,14 @@ export default function WorksheetsPage() {
       a.download = fileName;
       document.body.appendChild(a);
       a.click();
+      if (kind === "pdf") {
+        track("export_pdf_clicked", {
+          user_role: "teacher",
+          active_role: "teacher",
+          subject: active.meta.subject,
+          generation_type: "worksheet",
+        });
+      }
       a.remove();
       URL.revokeObjectURL(blobUrl);
     } catch (e: unknown) {

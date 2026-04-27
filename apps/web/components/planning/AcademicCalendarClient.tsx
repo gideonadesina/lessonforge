@@ -17,6 +17,7 @@ import type {
 } from "@/lib/planning/types";
 import { formatEventDate } from "@/lib/planning/utils";
 import EventTypeBadge from "@/components/planning/EventTypeBadge";
+import { track } from "@/lib/analytics";
 
 type AcademicCalendarFormState = {
   title: string;
@@ -207,6 +208,14 @@ export default function AcademicCalendarClient({
     }
 
     setSuccess(editingId ? "Academic event updated." : "Academic event added.");
+    if (!editingId) {
+      track("academic_event_created", {
+        user_role: "teacher",
+        active_role: "teacher",
+        generation_type: "planning",
+        event_type: payload.event_type,
+      });
+    }
     resetForm();
     await loadEvents();
   }

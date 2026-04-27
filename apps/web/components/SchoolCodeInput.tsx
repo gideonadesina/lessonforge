@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { track } from "@/lib/analytics";
 
 type JoinedData = {
   school: {
@@ -68,7 +69,15 @@ export default function SchoolCodeInput({ onJoined }: SchoolCodeInputProps) {
         return;
       }
 
-      await onJoined?.(json.data);
+      const joinedData = json.data as JoinedData;
+      track("teacher_joined_school", {
+        user_role: "teacher",
+        active_role: "teacher",
+        school_id: joinedData.school.id,
+        school_name: joinedData.school.name,
+        credit_source: "school",
+      });
+      await onJoined?.(joinedData);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Something went wrong. Please try again.");
     } finally {

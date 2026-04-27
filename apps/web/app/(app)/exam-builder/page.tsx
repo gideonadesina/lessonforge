@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { getInvalidJsonMessage, readJsonResponse } from "@/lib/http/safe-json";
+import { track } from "@/lib/analytics";
 
 import ExamBuilderForm from "@/components/exam-builder/ExamBuilderForm";
 import ExamList from "@/components/exam-builder/ExamList";
@@ -30,6 +32,14 @@ function getApiError(json: unknown, fallback: string) {
 function needsPersonalCreditConfirmation(json: unknown) {
   const payload = (json ?? {}) as { errorCode?: unknown };
   return payload.errorCode === "needs_personal_confirmation";
+}
+
+async function readApiJson(response: Response) {
+  const parsed = await readJsonResponse(response);
+  if (parsed.parseError) {
+    throw new Error(getInvalidJsonMessage(response));
+  }
+  return parsed.data ?? {};
 }
 
 function normalizeRecordResponse(json: unknown): ExamRecord | null {
@@ -100,7 +110,7 @@ export default function ExamBuilderPage() {
       const res = await fetch("/api/exams", {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const json = await res.json().catch(() => ({}));
+      const json = await readApiJson(res);
       if (!res.ok) {
         throw new Error(getApiError(json, "Failed to load exams"));
       }
@@ -122,13 +132,21 @@ export default function ExamBuilderPage() {
       const res = await fetch(`/api/exams?id=${encodeURIComponent(id)}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const json = await res.json().catch(() => ({}));
+      const json = await readApiJson(res);
       if (!res.ok) {
         throw new Error(getApiError(json, "Failed to open exam"));
       }
       const record = normalizeRecordResponse(json);
       if (!record) throw new Error("Exam response was empty");
       setActive(record);
+      track("library_item_opened", {
+        user_role: "teacher",
+        active_role: "teacher",
+        subject: record.subject,
+        school_level: record.school_level,
+        curriculum: record.curriculum,
+        generation_type: "exam",
+      });
     } catch (e: unknown) {
       setError(getErrorMessage(e, "Failed to open exam"));
     }
@@ -148,7 +166,8 @@ export default function ExamBuilderPage() {
         },
         body: JSON.stringify(form),
       });
-      let json = await res.json().catch(() => ({}));
+      let json = await readApiJson(res);
+      let creditSource: "personal" | "school" | undefined;
       if (!res.ok && res.status === 402 && needsPersonalCreditConfirmation(json)) {
         const payload = json as { cost?: unknown; personalCreditsAvailable?: unknown };
         const cost = typeof payload.cost === "number" ? payload.cost : 1;
@@ -172,7 +191,8 @@ export default function ExamBuilderPage() {
           },
           body: JSON.stringify({ ...form, usePersonalCredits: true }),
         });
-        json = await res.json().catch(() => ({}));
+        creditSource = "personal";
+        json = await readApiJson(res);
       }
       if (!res.ok) {
         throw new Error(getApiError(json, "Failed to generate exam"));
@@ -181,6 +201,16 @@ export default function ExamBuilderPage() {
       if (!record) throw new Error("Generated exam response was empty");
       setActive(record);
       setSelectedId(record.id);
+      track("exam_generated", {
+        user_role: "teacher",
+        active_role: "teacher",
+        credit_source: creditSource,
+        credits_cost: 1,
+        subject: form.subject,
+        school_level: form.schoolLevel,
+        curriculum: form.curriculum,
+        generation_type: "exam",
+      });
       await loadList();
     } catch (e: unknown) {
       setError(getErrorMessage(e, "Failed to generate exam"));
@@ -202,7 +232,7 @@ export default function ExamBuilderPage() {
           Authorization: `Bearer ${token}`,
         },
       });
-      const json = await res.json().catch(() => ({}));
+      const json = await readApiJson(res);
       if (!res.ok) {
         throw new Error(getApiError(json, "Delete failed"));
       }
@@ -229,7 +259,7 @@ export default function ExamBuilderPage() {
         },
         body: JSON.stringify({ action: "reuse", sourceExamId: id }),
       });
-      const json = await res.json().catch(() => ({}));
+      const json = await readApiJson(res);
       if (!res.ok) {
         throw new Error(getApiError(json, "Failed to reuse exam"));
       }
@@ -237,6 +267,14 @@ export default function ExamBuilderPage() {
       if (!record) throw new Error("Reused exam response was empty");
       setActive(record);
       setSelectedId(record.id);
+      track("library_item_opened", {
+        user_role: "teacher",
+        active_role: "teacher",
+        subject: record.subject,
+        school_level: record.school_level,
+        curriculum: record.curriculum,
+        generation_type: "exam",
+      });
       setShowEditor(false);
       await loadList();
     } catch (e: unknown) {
@@ -265,7 +303,7 @@ export default function ExamBuilderPage() {
           resultJson: nextResult,
         }),
       });
-      const json = await res.json().catch(() => ({}));
+      const json = await readApiJson(res);
       if (!res.ok) {
         throw new Error(getApiError(json, "Failed to save exam edits"));
       }
@@ -298,7 +336,7 @@ export default function ExamBuilderPage() {
       );
 
       if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
+        const json = await readApiJson(res);
         throw new Error(getApiError(json, "PDF export failed"));
       }
 
@@ -309,6 +347,14 @@ export default function ExamBuilderPage() {
       a.download = `${active.exam_title}-${teacherMode ? "teacher" : "student"}.pdf`;
       document.body.appendChild(a);
       a.click();
+      track("export_pdf_clicked", {
+        user_role: "teacher",
+        active_role: "teacher",
+        subject: active.subject,
+        school_level: active.school_level,
+        curriculum: active.curriculum,
+        generation_type: "exam",
+      });
       a.remove();
       URL.revokeObjectURL(url);
     } catch (e: unknown) {

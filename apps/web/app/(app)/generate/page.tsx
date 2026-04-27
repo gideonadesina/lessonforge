@@ -11,6 +11,8 @@ import { useGenerationProgress } from "@/components/generation/useGenerationProg
 import { useNetworkStatus } from "@/components/network/NetworkProvider";
 import { GenerationStage } from "@/components/generation/generationStages";
 import { LESSON_PACK_CREDIT_COST } from "@/lib/billing/pricing";
+import { getInvalidJsonMessage, readJsonResponse } from "@/lib/http/safe-json";
+import { track } from "@/lib/analytics";
 
 type VocabularyItem = {
   word?: string;
@@ -393,6 +395,7 @@ export default function GeneratePage() {
         numberOfSlides,
         durationMins,
       };
+      let creditSource: "personal" | "school" | undefined;
 
      let res = await fetch("/api/generate", {
   method: "POST",
@@ -404,7 +407,13 @@ export default function GeneratePage() {
 });
       clearInterval(progressInterval);
 
-      let json = await res.json();
+      let parsedResponse = await readJsonResponse<Record<string, unknown>>(res);
+      if (parsedResponse.parseError) {
+        setGenerationStage("failed");
+        failProgress();
+        throw new Error(getInvalidJsonMessage(res));
+      }
+      let json = parsedResponse.data ?? {};
 
       if (!res.ok && res.status === 402 && json?.errorCode === "needs_personal_confirmation") {
         setLoading(false);
@@ -435,7 +444,14 @@ export default function GeneratePage() {
           },
           body: JSON.stringify({ ...requestBody, usePersonalCredits: true }),
         });
-        json = await res.json();
+        creditSource = "personal";
+        parsedResponse = await readJsonResponse<Record<string, unknown>>(res);
+        if (parsedResponse.parseError) {
+          setGenerationStage("failed");
+          failProgress();
+          throw new Error(getInvalidJsonMessage(res));
+        }
+        json = parsedResponse.data ?? {};
       }
 
       if (!res.ok) {
@@ -444,7 +460,13 @@ export default function GeneratePage() {
         }
         setGenerationStage("failed");
         failProgress();
-        throw new Error(json?.error || json?.message || "Generation failed");
+        throw new Error(
+          typeof json.error === "string"
+            ? json.error
+            : typeof json.message === "string"
+            ? json.message
+            : "Generation failed"
+        );
       }
 
       const generated = json.data as Generated;
@@ -490,6 +512,16 @@ export default function GeneratePage() {
 
       setGenerationStage("completed");
       completeProgress();
+      track("lesson_pack_generated", {
+        user_role: "teacher",
+        active_role: "teacher",
+        credit_source: creditSource,
+        credits_cost: LESSON_PACK_CREDIT_COST,
+        subject: generated?.meta?.subject ?? subject,
+        school_level: generated?.meta?.schoolLevel ?? schoolLevel,
+        curriculum: generated?.meta?.curriculum ?? curriculum,
+        generation_type: "lesson_pack",
+      });
       setSaveMsg("✅ Auto-saved to Library");
       setIsGenerating(false);
     } catch (e: unknown) {
@@ -1735,6 +1767,14 @@ export default function GeneratePage() {
     }.png`;
     document.body.appendChild(a);
     a.click();
+    track("export_png_clicked", {
+      user_role: "teacher",
+      active_role: "teacher",
+      subject: meta.subject ?? subject,
+      school_level: meta.schoolLevel ?? schoolLevel,
+      curriculum: meta.curriculum ?? curriculum,
+      generation_type: "lesson_pack",
+    });
     a.remove();
   }
 

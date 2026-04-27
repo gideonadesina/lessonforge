@@ -9,6 +9,7 @@ import {
   getCreditUsageNote,
 } from "@/lib/billing/pricing";
 import SchoolPricingPlanCard from "@/components/billing/SchoolPricingPlanCard";
+import { track } from "@/lib/analytics";
 
 export default function PrincipalPricingPage() {
   const [busyPlanId, setBusyPlanId] = useState<string | null>(null);
@@ -16,6 +17,14 @@ export default function PrincipalPricingPage() {
   const [verifyReference, setVerifyReference] = useState<string | null>(null);
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const [verifyingPayment, setVerifyingPayment] = useState(false);
+
+  useEffect(() => {
+    track("plan_viewed", {
+      user_role: "principal",
+      active_role: "principal",
+      plan_name: "school_pricing",
+    });
+  }, []);
 
   async function getAccessToken() {
     const supabase = createBrowserSupabase();
@@ -73,10 +82,21 @@ export default function PrincipalPricingPage() {
 
   async function handleSchoolPlanSelect(planId: (typeof SCHOOL_PRICING_PLANS)[number]["id"]) {
     if (planId === "school_enterprise") {
+      track("upgrade_clicked", {
+        user_role: "principal",
+        active_role: "principal",
+        plan_name: "Enterprise",
+      });
       window.location.href = "mailto:support@lessonforge.io?subject=Enterprise%20Pricing%20Inquiry";
       return;
     }
 
+    const plan = SCHOOL_PRICING_PLANS.find((item) => item.id === planId);
+    track("upgrade_clicked", {
+      user_role: "principal",
+      active_role: "principal",
+      plan_name: plan?.name ?? planId,
+    });
     setBusyPlanId(planId);
     setError(null);
 
@@ -112,8 +132,18 @@ export default function PrincipalPricingPage() {
         throw new Error("Payment checkout URL missing");
       }
 
+      track("payment_started", {
+        user_role: "principal",
+        active_role: "principal",
+        plan_name: plan?.name ?? planId,
+      });
       window.location.href = json.authorization_url;
     } catch (err) {
+      track("payment_failed", {
+        user_role: "principal",
+        active_role: "principal",
+        plan_name: plan?.name ?? planId,
+      });
       const message = err instanceof Error ? err.message : "An error occurred";
       setError(message);
       setBusyPlanId(null);
