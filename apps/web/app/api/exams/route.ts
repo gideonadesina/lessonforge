@@ -11,7 +11,11 @@ import {
 } from "@/lib/exams/normalize";
 import { EXAM_MODEL } from "@/lib/exams/constants";
 import type { ExamRecord } from "@/lib/exams/types";
-import { consumeGenerationCredits, getGenerationCreditAvailability } from "@/lib/credits/server";
+import {
+  consumeGenerationCredits,
+  consumePersonalCreditsDirectly,
+  getGenerationCreditAvailability,
+} from "@/lib/credits/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +31,10 @@ type ExamPatchBody = {
 
 type ExamReuseBody = {
   sourceExamId: string;
+};
+
+type ExamGenerationPayload = Record<string, unknown> & {
+  usePersonalCredits?: boolean;
 };
 
 function jsonOk(data: unknown, status = 200) {
@@ -185,8 +193,9 @@ export async function POST(req: NextRequest) {
       return jsonErr("Invalid JSON body", 400);
     }
 
-    const payload = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+    const payload = (body && typeof body === "object" ? body : {}) as ExamGenerationPayload;
     const action = String(payload.action ?? "").trim().toLowerCase();
+    const usePersonalCredits = payload.usePersonalCredits === true;
 
     if (action === "reuse") {
       const reuseBody = payload as unknown as ExamReuseBody;
@@ -272,8 +281,29 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
-    if (creditAvailability.creditsRemaining <= 0) {
+    if (!usePersonalCredits && creditAvailability.creditsRemaining <= 0) {
       if (creditAvailability.source === "school") {
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .select("credits_balance")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        const personalBalance = Math.max(0, Number((profileData as any)?.credits_balance ?? 0));
+
+        if (personalBalance >= 1) {
+          return NextResponse.json(
+            {
+              ok: false,
+              errorCode: "needs_personal_confirmation",
+              personalCreditsAvailable: personalBalance,
+              message: "Your school has run out of credits.",
+              cost: 1,
+            },
+            { status: 402 }
+          );
+        }
+
         return NextResponse.json(
           {
             ok: false,
@@ -356,7 +386,9 @@ export async function POST(req: NextRequest) {
       return jsonErr(saveErr.message, 500);
     }
 
-    const deductionResult = await consumeGenerationCredits(supabase, user.id, 1);
+    const deductionResult = usePersonalCredits
+      ? await consumePersonalCreditsDirectly(supabase, user.id, 1)
+      : await consumeGenerationCredits(supabase, user.id, 1);
     if (!deductionResult.ok) {
       console.error("[exams] Credit deduction failed after successful generation:", {
         userId: user.id,

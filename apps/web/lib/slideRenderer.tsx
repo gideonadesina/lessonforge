@@ -17,6 +17,8 @@ export type TitleSlide = {
   hook_question?: string;
   visual_suggestion: string;
   visual_type: "hero";
+  image_url?: string | null;
+  image?: string | null;
 };
 
 export type LearningObjectivesSlide = {
@@ -26,6 +28,8 @@ export type LearningObjectivesSlide = {
   bloom_level?: string;
   visual_suggestion: string;
   visual_type: "support";
+  image_url?: string | null;
+  image?: string | null;
 };
 
 export type ConceptSlide = {
@@ -36,6 +40,8 @@ export type ConceptSlide = {
   analogy?: string;
   visual_suggestion: string;
   visual_type: "diagram";
+  image_url?: string | null;
+  image?: string | null;
 };
 
 export type VocabularySlide = {
@@ -44,6 +50,8 @@ export type VocabularySlide = {
   terms: { word: string; definition: string; example?: string }[];
   visual_suggestion: string;
   visual_type: "support";
+  image_url?: string | null;
+  image?: string | null;
 };
 
 export type WorkedExampleSlide = {
@@ -52,6 +60,8 @@ export type WorkedExampleSlide = {
   steps: { step_num: number; instruction: string; tip?: string }[];
   visual_suggestion: string;
   visual_type: "diagram";
+  image_url?: string | null;
+  image?: string | null;
 };
 
 export type CheckForUnderstandingSlide = {
@@ -61,6 +71,8 @@ export type CheckForUnderstandingSlide = {
   explanation?: string;
   visual_suggestion: string;
   visual_type: "support";
+  image_url?: string | null;
+  image?: string | null;
 };
 
 export type DiscussionSlide = {
@@ -70,6 +82,8 @@ export type DiscussionSlide = {
   think_pair_share?: boolean;
   visual_suggestion: string;
   visual_type: "support";
+  image_url?: string | null;
+  image?: string | null;
 };
 
 export type SummarySlide = {
@@ -79,6 +93,8 @@ export type SummarySlide = {
   connection_to_next?: string;
   visual_suggestion: string;
   visual_type: "support";
+  image_url?: string | null;
+  image?: string | null;
 };
 
 export type ExitTicketSlide = {
@@ -89,6 +105,8 @@ export type ExitTicketSlide = {
   self_rating?: boolean;
   visual_suggestion: string;
   visual_type: "support";
+  image_url?: string | null;
+  image?: string | null;
 };
 
 export type Slide =
@@ -124,7 +142,7 @@ function FallbackSlideView({ slide }: { slide: Slide }) {
       <p className="mt-3 max-w-xl text-sm leading-relaxed text-gray-500">
         This slide type{" "}
         <span className="font-semibold text-gray-700">
-          "{anySlide.type ?? "unknown"}"
+          &quot;{anySlide.type ?? "unknown"}&quot;
         </span>{" "}
         is not supported in this version.
       </p>

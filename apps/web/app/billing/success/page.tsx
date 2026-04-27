@@ -1,11 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 
 type VerifyState = "loading" | "ok" | "error";
+
+type SuccessDetails = {
+  planName: string;
+  creditsAdded: number | null;
+  previousBalance: number | null;
+  newBalance: number | null;
+  alreadyProcessed: boolean;
+  benefits: string[];
+};
+
+const TEACHER_PLAN_NAMES: Record<string, string> = {
+  basic: "Basic",
+  starter: "Starter",
+  pro: "Pro",
+  premium: "Premium",
+};
 
 const SCHOOL_PLAN_NAMES: Record<string, string> = {
   school_starter: "Starter",
@@ -14,12 +30,24 @@ const SCHOOL_PLAN_NAMES: Record<string, string> = {
   school_enterprise: "Enterprise",
 };
 
-const SCHOOL_PLAN_CREDITS: Record<string, number> = {
-  school_starter: 200,
-  school_growth: 450,
-  school_full: 850,
-  school_enterprise: 1200,
+const TEACHER_PLAN_BENEFITS: Record<string, string[]> = {
+  basic: ["Personal credits added", "Lesson generation access", "Library saving"],
+  starter: ["More lesson generations", "Worksheet and lesson tools", "Library saving"],
+  pro: ["Expanded credits", "Priority classroom creation tools", "Saved library access"],
+  premium: ["Highest teacher credit pack", "Full classroom creation toolkit", "Saved library access"],
 };
+
+const SCHOOL_PLAN_BENEFITS: Record<string, string[]> = {
+  school_starter: ["Shared school credits", "Teacher join code", "Principal dashboard"],
+  school_growth: ["Larger shared credit pool", "More teacher seats", "Principal dashboard"],
+  school_full: ["Full-school shared credits", "Expanded teacher seats", "Principal analytics"],
+  school_enterprise: ["Enterprise shared credits", "Highest teacher capacity", "Principal analytics"],
+};
+
+function formatNumber(value: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "-";
+  return value.toLocaleString();
+}
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -32,61 +60,63 @@ function CopyButton({ text }: { text: string }) {
         setTimeout(() => setCopied(false), 2000);
       }}
       style={{
-        padding: "8px 16px",
-        borderRadius: "8px",
-        border: "1.5px solid #534AB7",
-        background: copied ? "#534AB7" : "transparent",
-        color: copied ? "#fff" : "#534AB7",
-        fontSize: "12px",
-        fontWeight: "700",
-        fontFamily: "'Trebuchet MS', sans-serif",
+        border: "1px solid rgba(255,255,255,0.35)",
+        background: copied ? "#fff" : "rgba(255,255,255,0.08)",
+        color: copied ? "#1E1B4B" : "#fff",
+        borderRadius: 10,
         cursor: "pointer",
-        transition: "all 0.2s",
-        whiteSpace: "nowrap",
+        fontSize: 12,
+        fontWeight: 800,
+        padding: "9px 14px",
       }}
     >
-      {copied ? "✓ Copied!" : "Copy Code"}
+      {copied ? "Copied" : "Copy code"}
     </button>
   );
 }
 
 function LoadingScreen() {
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "#FAF9F6",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontFamily: "'Trebuchet MS', sans-serif",
-    }}>
-      <div style={{ textAlign: "center" }}>
-        <div style={{
-          width: "56px",
-          height: "56px",
-          borderRadius: "16px",
-          background: "linear-gradient(135deg, #534AB7, #3D35A0)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: "26px",
-          margin: "0 auto 20px",
-          animation: "pulse 1.5s ease-in-out infinite",
-        }}>🎓</div>
-        <p style={{ color: "#534AB7", fontWeight: "600", fontSize: "15px" }}>
-          Confirming your payment...
+    <main
+      style={{
+        alignItems: "center",
+        background: "#FAF9F6",
+        display: "flex",
+        fontFamily: "'Trebuchet MS', sans-serif",
+        justifyContent: "center",
+        minHeight: "100vh",
+        padding: 24,
+      }}
+    >
+      <section
+        style={{
+          background: "#fff",
+          border: "1px solid #E8E5DC",
+          borderRadius: 22,
+          boxShadow: "0 18px 50px rgba(30,27,75,0.08)",
+          maxWidth: 420,
+          padding: 34,
+          textAlign: "center",
+          width: "100%",
+        }}
+      >
+        <div
+          style={{
+            background: "linear-gradient(135deg, #534AB7, #2F7D6D)",
+            borderRadius: 18,
+            height: 58,
+            margin: "0 auto 18px",
+            width: 58,
+          }}
+        />
+        <h1 style={{ color: "#1E1B4B", fontFamily: "Georgia, serif", fontSize: 24, margin: 0 }}>
+          Confirming payment...
+        </h1>
+        <p style={{ color: "#64748B", fontSize: 14, lineHeight: 1.6, margin: "10px 0 0" }}>
+          We are securely verifying your transaction and updating your credits.
         </p>
-        <p style={{ color: "#94A3B8", fontSize: "13px", marginTop: "6px" }}>
-          This takes just a moment
-        </p>
-        <style>{`
-          @keyframes pulse {
-            0%, 100% { transform: scale(1); box-shadow: 0 4px 20px rgba(83,74,183,0.3); }
-            50% { transform: scale(1.08); box-shadow: 0 8px 32px rgba(83,74,183,0.5); }
-          }
-        `}</style>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
 
@@ -94,19 +124,17 @@ function SuccessInner() {
   const sp = useSearchParams();
   const router = useRouter();
   const reference = sp.get("reference");
-  const type = sp.get("type"); // "school" or "teacher"
+  const type = sp.get("type");
   const flow = sp.get("flow");
+  const isSchoolFlow = type === "school" || flow === "principal_onboarding";
 
   const [state, setState] = useState<VerifyState>("loading");
   const [errorMsg, setErrorMsg] = useState("");
-  const [credits, setCredits] = useState<number | null>(null);
-  const [plan, setPlan] = useState<string | null>(null);
+  const [details, setDetails] = useState<SuccessDetails | null>(null);
   const [schoolCode, setSchoolCode] = useState<string | null>(null);
-  const [countdown, setCountdown] = useState(8);
+  const [countdown, setCountdown] = useState(10);
 
   const supabase = useMemo(() => createBrowserSupabase(), []);
-
-  const isSchoolFlow = type === "school" || flow === "principal_onboarding";
 
   useEffect(() => {
     let active = true;
@@ -119,9 +147,10 @@ function SuccessInner() {
       }
 
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
         const token = session?.access_token ?? "";
-
         const endpoint = isSchoolFlow
           ? `/api/paystack/school/verify?reference=${encodeURIComponent(reference)}`
           : `/api/paystack/verify?reference=${encodeURIComponent(reference)}`;
@@ -130,60 +159,62 @@ function SuccessInner() {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
           cache: "no-store",
         });
-
         const json = await res.json().catch(() => ({}));
         if (!active) return;
 
-        if (res.ok && json?.ok !== false) {
-          setState("ok");
-
-          if (isSchoolFlow) {
-            // Get school code from database
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-              const { data: schoolMember } = await supabase
-                .from("school_members")
-                .select("school_id")
-                .eq("user_id", user.id)
-                .maybeSingle();
-
-              if (schoolMember?.school_id) {
-                const { data: codeRow } = await supabase
-                  .from("school_codes")
-                  .select("code")
-                  .eq("school_id", schoolMember.school_id)
-                  .eq("is_active", true)
-                  .maybeSingle();
-
-                if (codeRow?.code) setSchoolCode(codeRow.code);
-              }
-
-              // Get plan from payment metadata
-              if (json.plan) {
-                setPlan(SCHOOL_PLAN_NAMES[json.plan] ?? json.plan);
-                setCredits(SCHOOL_PLAN_CREDITS[json.plan] ?? json.sharedCreditsAwarded ?? null);
-              }
-            }
-          } else {
-            // Teacher flow — get updated profile
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-              const { data: profile } = await supabase
-                .from("profiles")
-                .select("credits_balance, plan")
-                .eq("id", user.id)
-                .single();
-
-              if (profile) {
-                setCredits(profile.credits_balance);
-                setPlan(profile.plan);
-              }
-            }
-          }
-        } else {
+        if (!res.ok || json?.ok === false) {
           setState("error");
           setErrorMsg(json?.error || "Could not confirm payment. Please try again.");
+          return;
         }
+
+        if (isSchoolFlow) {
+          const planId = String(json.plan ?? "");
+          const schoolId = String(json.schoolId ?? "");
+          if (schoolId) {
+            const { data: codeRow } = await supabase
+              .from("school_codes")
+              .select("code")
+              .eq("school_id", schoolId)
+              .eq("is_active", true)
+              .maybeSingle();
+            if (active && codeRow?.code) setSchoolCode(codeRow.code);
+          }
+
+          setDetails({
+            planName: SCHOOL_PLAN_NAMES[planId] ?? (planId || "School Plan"),
+            creditsAdded:
+              typeof json.sharedCreditsAwarded === "number" ? json.sharedCreditsAwarded : null,
+            previousBalance:
+              typeof json.previousBalance === "number" ? json.previousBalance : null,
+            newBalance: typeof json.newBalance === "number" ? json.newBalance : null,
+            alreadyProcessed: Boolean(json.alreadyProcessed),
+            benefits:
+              SCHOOL_PLAN_BENEFITS[planId] ?? [
+                "Shared school credits",
+                "Teacher join code",
+                "Principal dashboard",
+              ],
+          });
+        } else {
+          const planId = String(json.plan ?? "");
+          setDetails({
+            planName: TEACHER_PLAN_NAMES[planId] ?? (planId || "Teacher Plan"),
+            creditsAdded: typeof json.creditsAwarded === "number" ? json.creditsAwarded : null,
+            previousBalance:
+              typeof json.previousBalance === "number" ? json.previousBalance : null,
+            newBalance: typeof json.newBalance === "number" ? json.newBalance : null,
+            alreadyProcessed: Boolean(json.alreadyProcessed),
+            benefits:
+              TEACHER_PLAN_BENEFITS[planId] ?? [
+                "Credits added",
+                "Lesson generation access",
+                "Library saving",
+              ],
+          });
+        }
+
+        setState("ok");
       } catch (e) {
         if (!active) return;
         setState("error");
@@ -192,336 +223,296 @@ function SuccessInner() {
     }
 
     void verify();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [reference, isSchoolFlow, supabase]);
 
-  // Countdown auto-redirect
   useEffect(() => {
     if (state !== "ok") return;
-    const interval = setInterval(() => {
-      setCountdown((c) => {
-        if (c <= 1) {
-          clearInterval(interval);
+    const interval = window.setInterval(() => {
+      setCountdown((current) => {
+        if (current <= 1) {
+          window.clearInterval(interval);
           router.push(isSchoolFlow ? "/principal" : "/dashboard");
           return 0;
         }
-        return c - 1;
+        return current - 1;
       });
     }, 1000);
-    return () => clearInterval(interval);
+
+    return () => window.clearInterval(interval);
   }, [state, router, isSchoolFlow]);
 
   if (state === "loading") return <LoadingScreen />;
 
-  return (
-    <div style={{
-      minHeight: "100vh",
-      background: "#FAF9F6",
-      fontFamily: "'Trebuchet MS', sans-serif",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: "24px",
-    }}>
-      <style>{`
-        @keyframes slideUp {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes confetti {
-          0% { opacity: 0; transform: translateY(-10px) scale(0.8); }
-          50% { opacity: 1; transform: translateY(0) scale(1.1); }
-          100% { opacity: 1; transform: translateY(0) scale(1); }
-        }
-      `}</style>
-
-      <div style={{ maxWidth: "560px", width: "100%", animation: "slideUp 0.5s ease" }}>
-
-        {state === "error" ? (
-          /* ── Error State ── */
-          <div style={{
+  if (state === "error") {
+    return (
+      <main
+        style={{
+          alignItems: "center",
+          background: "#FAF9F6",
+          display: "flex",
+          fontFamily: "'Trebuchet MS', sans-serif",
+          justifyContent: "center",
+          minHeight: "100vh",
+          padding: 24,
+        }}
+      >
+        <section
+          style={{
             background: "#fff",
             border: "1px solid #FCA5A5",
-            borderRadius: "20px",
-            padding: "36px",
-            boxShadow: "0 4px 24px rgba(0,0,0,0.06)",
+            borderRadius: 22,
+            boxShadow: "0 18px 50px rgba(30,27,75,0.08)",
+            maxWidth: 480,
+            padding: 34,
             textAlign: "center",
-          }}>
-            <div style={{ fontSize: "48px", marginBottom: "16px" }}>⚠️</div>
-            <h1 style={{
-              fontFamily: "Georgia, serif",
-              fontSize: "24px",
-              fontWeight: "700",
-              color: "#1E1B4B",
-              marginBottom: "10px",
-            }}>Payment Verification Failed</h1>
-            <p style={{ color: "#64748B", fontSize: "14px", marginBottom: "24px", lineHeight: "1.6" }}>
-              {errorMsg}
-            </p>
-            <div style={{ display: "flex", gap: "10px", justifyContent: "center", flexWrap: "wrap" }}>
-              <Link href={isSchoolFlow ? "/principal/pricing" : "/pricing"} style={{
-                padding: "11px 20px",
-                borderRadius: "10px",
-                background: "linear-gradient(135deg, #534AB7, #3D35A0)",
-                color: "#fff",
-                fontWeight: "700",
-                fontSize: "13px",
-                textDecoration: "none",
-              }}>
-                Try Again
-              </Link>
-              <Link href={isSchoolFlow ? "/principal" : "/dashboard"} style={{
-                padding: "11px 20px",
-                borderRadius: "10px",
-                border: "1.5px solid #E2E8F0",
-                color: "#475569",
-                fontWeight: "600",
-                fontSize: "13px",
-                textDecoration: "none",
-              }}>
-                Go to Dashboard
-              </Link>
-            </div>
-            {reference && (
-              <p style={{ color: "#94A3B8", fontSize: "11px", marginTop: "20px", fontFamily: "monospace" }}>
-                Ref: {reference}
-              </p>
-            )}
-          </div>
-        ) : (
-          /* ── Success State ── */
-          <>
-            {/* Celebration banner */}
-            <div style={{
-              background: "linear-gradient(135deg, rgba(251,191,36,0.15), rgba(83,74,183,0.12))",
-              border: "1px solid rgba(251,191,36,0.3)",
-              borderRadius: "16px",
-              padding: "18px 22px",
-              marginBottom: "20px",
-              textAlign: "center",
-              animation: "confetti 0.6s ease both",
-            }}>
-              <div style={{ fontSize: "32px", marginBottom: "8px" }}>🎊</div>
-              <div style={{
-                fontFamily: "Georgia, serif",
-                fontSize: "18px",
-                fontWeight: "700",
-                color: "#1E1B4B",
-                marginBottom: "4px",
-              }}>
-                {isSchoolFlow ? "School workspace activated!" : "Credits added successfully!"}
-              </div>
-              <div style={{ color: "#64748B", fontSize: "13px" }}>
-                {isSchoolFlow
-                  ? "Your school is ready. Share the code below with your teachers."
-                  : "Your account has been upgraded. Start generating immediately."}
-              </div>
-            </div>
+            width: "100%",
+          }}
+        >
+          <h1 style={{ color: "#1E1B4B", fontFamily: "Georgia, serif", fontSize: 26, margin: 0 }}>
+            Payment verification failed
+          </h1>
+          <p style={{ color: "#64748B", fontSize: 14, lineHeight: 1.6 }}>{errorMsg}</p>
+          <Link href={isSchoolFlow ? "/principal" : "/dashboard"} style={primaryButtonStyle}>
+            Go to dashboard
+          </Link>
+        </section>
+      </main>
+    );
+  }
 
-            {/* Main card */}
-            <div style={{
-              background: "#fff",
-              border: "1px solid #E2E8F0",
-              borderRadius: "20px",
-              padding: "32px",
-              boxShadow: "0 4px 24px rgba(83,74,183,0.08)",
-              marginBottom: "16px",
-            }}>
-              {/* Plan + Credits */}
-              <div style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "12px",
-                marginBottom: "24px",
-              }}>
-                <div style={{
-                  background: "#EEEDFE",
-                  borderRadius: "14px",
-                  padding: "16px",
-                }}>
-                  <div style={{ fontSize: "11px", color: "#534AB7", fontWeight: "700", letterSpacing: "1.5px", marginBottom: "6px" }}>
-                    PLAN
-                  </div>
-                  <div style={{
-                    fontFamily: "Georgia, serif",
-                    fontSize: "20px",
-                    fontWeight: "700",
-                    color: "#1E1B4B",
-                  }}>
-                    {plan ?? (isSchoolFlow ? "School Plan" : "Pro")}
-                  </div>
-                </div>
+  const resolvedDetails =
+    details ??
+    ({
+      planName: isSchoolFlow ? "School Plan" : "Teacher Plan",
+      creditsAdded: null,
+      previousBalance: null,
+      newBalance: null,
+      alreadyProcessed: false,
+      benefits: [],
+    } satisfies SuccessDetails);
 
-                <div style={{
-                  background: "#FFFBEB",
-                  border: "1px solid #FDE68A",
-                  borderRadius: "14px",
-                  padding: "16px",
-                }}>
-                  <div style={{ fontSize: "11px", color: "#92400E", fontWeight: "700", letterSpacing: "1.5px", marginBottom: "6px" }}>
-                    {isSchoolFlow ? "SHARED CREDITS" : "YOUR CREDITS"}
-                  </div>
-                  <div style={{
-                    fontFamily: "Georgia, serif",
-                    fontSize: "20px",
-                    fontWeight: "700",
-                    color: "#1E1B4B",
-                  }}>
-                    {credits !== null ? credits : "—"}
-                  </div>
-                </div>
-              </div>
-
-              {/* School code section */}
-              {isSchoolFlow && (
-                <div style={{
-                  background: "linear-gradient(135deg, #1E1B4B, #3D35A0)",
-                  borderRadius: "16px",
-                  padding: "20px 22px",
-                  marginBottom: "20px",
-                }}>
-                  <div style={{
-                    fontSize: "11px",
-                    color: "rgba(255,255,255,0.6)",
-                    letterSpacing: "2px",
-                    fontWeight: "700",
-                    marginBottom: "10px",
-                  }}>
-                    YOUR SCHOOL CODE
-                  </div>
-                  <div style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "12px",
-                    flexWrap: "wrap",
-                  }}>
-                    <div style={{
-                      fontFamily: "monospace",
-                      fontSize: "28px",
-                      fontWeight: "800",
-                      color: "#fff",
-                      letterSpacing: "6px",
-                    }}>
-                      {schoolCode ?? "Loading..."}
-                    </div>
-                    {schoolCode && <CopyButton text={schoolCode} />}
-                  </div>
-                  <p style={{
-                    color: "rgba(255,255,255,0.5)",
-                    fontSize: "12px",
-                    marginTop: "10px",
-                    lineHeight: "1.5",
-                  }}>
-                    Share this code with your teachers. They enter it on their dashboard to join your school and access shared credits.
-                  </p>
-                </div>
-              )}
-
-              {/* Next steps */}
-              <div style={{ marginBottom: "20px" }}>
-                <div style={{
-                  fontSize: "12px",
-                  fontWeight: "700",
-                  color: "#94A3B8",
-                  letterSpacing: "1.5px",
-                  marginBottom: "12px",
-                }}>
-                  NEXT STEPS
-                </div>
-               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-  {(isSchoolFlow
-    ? [
-        { icon: "📋", text: "Go to your Principal Dashboard to see school credits" },
-        { icon: "👩‍🏫", text: "Share the school code with your teachers" },
-        { icon: "🎓", text: "Teachers join school → credits are shared automatically" },
-        { icon: "📊", text: "Monitor teacher activity from your Principal Analytics" },
-      ]
-    : [
-        { icon: "⚡", text: "Credits are in your account immediately" },
-        { icon: "📋", text: "Generate lesson plans, worksheets, slides, and exams" },
-        { icon: "📚", text: "All generated content saves to your Library automatically" },
-      ]
-  ).map(({ icon, text }) => (
-    <div
-      key={text}
+  return (
+    <main
       style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "10px",
-        padding: "10px 14px",
-        background: "#FAFAFA",
-        borderRadius: "10px",
-        border: "1px solid #F1F5F9",
+        background: "linear-gradient(180deg, #FAF9F6 0%, #F4F1EA 100%)",
+        color: "#1E1B4B",
+        fontFamily: "'Trebuchet MS', sans-serif",
+        minHeight: "100vh",
+        padding: "32px 20px",
       }}
     >
-      <span style={{ fontSize: "16px" }}>{icon}</span>
-      <span style={{ fontSize: "13px", color: "#475569" }}>{text}</span>
-    </div>
-  ))}
-</div>
+      <section style={{ margin: "0 auto", maxWidth: 760 }}>
+        <div
+          style={{
+            background: "#fff",
+            border: "1px solid #E8E5DC",
+            borderRadius: 28,
+            boxShadow: "0 24px 70px rgba(30,27,75,0.12)",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              background: "linear-gradient(135deg, #1E1B4B, #534AB7 60%, #2F7D6D)",
+              color: "#fff",
+              padding: "34px 34px 30px",
+            }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 2, opacity: 0.75 }}>
+              PAYMENT SUCCESSFUL
+            </div>
+            <h1 style={{ fontFamily: "Georgia, serif", fontSize: 36, lineHeight: 1.1, margin: "10px 0 8px" }}>
+              Payment successful
+            </h1>
+            <p style={{ fontSize: 15, lineHeight: 1.6, margin: 0, maxWidth: 560, opacity: 0.82 }}>
+              Your {isSchoolFlow ? "school workspace" : "account"} has been updated. You can keep working now.
+            </p>
+            {resolvedDetails.alreadyProcessed ? (
+              <div
+                style={{
+                  background: "rgba(255,255,255,0.12)",
+                  border: "1px solid rgba(255,255,255,0.18)",
+                  borderRadius: 12,
+                  fontSize: 13,
+                  marginTop: 18,
+                  padding: "10px 12px",
+                }}
+              >
+                This payment was already confirmed, so we are showing the saved success details.
               </div>
+            ) : null}
+          </div>
 
-              {/* CTA buttons */}
-              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                <Link
-                  href={isSchoolFlow ? "/principal" : "/dashboard"}
-                  style={{
-                    flex: 1,
-                    minWidth: "140px",
-                    padding: "13px 20px",
-                    borderRadius: "12px",
-                    background: "linear-gradient(135deg, #534AB7, #3D35A0)",
-                    color: "#fff",
-                    fontWeight: "700",
-                    fontSize: "14px",
-                    textDecoration: "none",
-                    textAlign: "center",
-                    boxShadow: "0 4px 16px rgba(83,74,183,0.35)",
-                  }}
-                >
-                  {isSchoolFlow ? "Go to Principal Dashboard →" : "Start Generating →"}
+          <div style={{ padding: 34 }}>
+            <div
+              style={{
+                display: "grid",
+                gap: 12,
+                gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                marginBottom: 24,
+              }}
+            >
+              <Metric label="Plan purchased" value={resolvedDetails.planName} />
+              <Metric
+                label={isSchoolFlow ? "School credits added" : "Credits added"}
+                value={formatNumber(resolvedDetails.creditsAdded)}
+              />
+              <Metric label="Previous balance" value={formatNumber(resolvedDetails.previousBalance)} />
+              <Metric
+                label={isSchoolFlow ? "School balance" : "New balance"}
+                value={formatNumber(resolvedDetails.newBalance)}
+                accent
+              />
+            </div>
+
+            <div
+              style={{
+                border: "1px solid #E8E5DC",
+                borderRadius: 18,
+                marginBottom: 22,
+                padding: 18,
+              }}
+            >
+              <div style={{ color: "#64748B", fontSize: 12, fontWeight: 800, letterSpacing: 1.4, marginBottom: 12 }}>
+                BENEFITS UNLOCKED
+              </div>
+              <div style={{ display: "grid", gap: 10 }}>
+                {resolvedDetails.benefits.map((benefit) => (
+                  <div key={benefit} style={{ alignItems: "center", display: "flex", gap: 10 }}>
+                    <span
+                      style={{
+                        background: "#E7F6EF",
+                        borderRadius: 999,
+                        color: "#167A52",
+                        display: "inline-flex",
+                        fontSize: 12,
+                        fontWeight: 900,
+                        height: 22,
+                        justifyContent: "center",
+                        lineHeight: "22px",
+                        width: 22,
+                      }}
+                    >
+                      OK
+                    </span>
+                    <span style={{ color: "#334155", fontSize: 14 }}>{benefit}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {isSchoolFlow ? (
+              <div
+                style={{
+                  background: "#1E1B4B",
+                  borderRadius: 18,
+                  color: "#fff",
+                  marginBottom: 22,
+                  padding: 20,
+                }}
+              >
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, opacity: 0.6 }}>
+                  SCHOOL JOIN CODE
+                </div>
+                <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "space-between", marginTop: 10 }}>
+                  <strong style={{ fontFamily: "monospace", fontSize: 28, letterSpacing: 5 }}>
+                    {schoolCode ?? "Loading..."}
+                  </strong>
+                  {schoolCode ? <CopyButton text={schoolCode} /> : null}
+                </div>
+              </div>
+            ) : null}
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+              {isSchoolFlow ? (
+                <Link href="/principal" style={primaryButtonStyle}>
+                  Go to principal dashboard
                 </Link>
-                {!isSchoolFlow && (
-                  <Link href="/generate" style={{
-                    padding: "13px 20px",
-                    borderRadius: "12px",
-                    border: "1.5px solid #534AB7",
-                    color: "#534AB7",
-                    fontWeight: "700",
-                    fontSize: "14px",
-                    textDecoration: "none",
-                    textAlign: "center",
-                  }}>
-                    Generate Now
-                  </Link>
-                )}
-              </div>
-            </div>
-
-            {/* Auto-redirect notice */}
-            <div style={{
-              textAlign: "center",
-              padding: "12px",
-              background: "rgba(83,74,183,0.06)",
-              borderRadius: "10px",
-            }}>
-              <p style={{ fontSize: "12px", color: "#64748B" }}>
-                Redirecting to {isSchoolFlow ? "Principal Dashboard" : "Dashboard"} in{" "}
-                <strong style={{ color: "#534AB7" }}>{countdown}s</strong>
-              </p>
-              {reference && (
-                <p style={{ fontSize: "11px", color: "#94A3B8", marginTop: "4px", fontFamily: "monospace" }}>
-                  Ref: {reference}
-                </p>
+              ) : (
+                <Link href="/dashboard" style={primaryButtonStyle}>
+                  Go to dashboard
+                </Link>
               )}
+              <Link href="/generate" style={secondaryButtonStyle}>
+                Generate lesson
+              </Link>
+              {!isSchoolFlow ? (
+                <Link href="/dashboard" style={secondaryButtonStyle}>
+                  Go to dashboard
+                </Link>
+              ) : null}
             </div>
-          </>
-        )}
+          </div>
+        </div>
+
+        <p style={{ color: "#64748B", fontSize: 12, marginTop: 14, textAlign: "center" }}>
+          Redirecting to {isSchoolFlow ? "Principal Dashboard" : "Dashboard"} in{" "}
+          <strong style={{ color: "#534AB7" }}>{countdown}s</strong>
+          {reference ? ` | Ref: ${reference}` : ""}
+        </p>
+      </section>
+    </main>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  accent = false,
+}: {
+  label: string;
+  value: string;
+  accent?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        background: accent ? "#E7F6EF" : "#F8F7F2",
+        border: accent ? "1px solid #BFE8D4" : "1px solid #ECE8DE",
+        borderRadius: 16,
+        padding: 16,
+      }}
+    >
+      <div style={{ color: accent ? "#167A52" : "#64748B", fontSize: 11, fontWeight: 800, letterSpacing: 1.4 }}>
+        {label.toUpperCase()}
+      </div>
+      <div style={{ color: "#1E1B4B", fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 800, marginTop: 6 }}>
+        {value}
       </div>
     </div>
   );
 }
+
+const primaryButtonStyle: CSSProperties = {
+  background: "linear-gradient(135deg, #534AB7, #3D35A0)",
+  borderRadius: 12,
+  boxShadow: "0 10px 24px rgba(83,74,183,0.25)",
+  color: "#fff",
+  display: "inline-flex",
+  fontSize: 14,
+  fontWeight: 800,
+  justifyContent: "center",
+  minWidth: 170,
+  padding: "13px 18px",
+  textDecoration: "none",
+};
+
+const secondaryButtonStyle: CSSProperties = {
+  background: "#fff",
+  border: "1px solid #D9D4C7",
+  borderRadius: 12,
+  color: "#1E1B4B",
+  display: "inline-flex",
+  fontSize: 14,
+  fontWeight: 800,
+  justifyContent: "center",
+  minWidth: 150,
+  padding: "13px 18px",
+  textDecoration: "none",
+};
 
 export default function BillingSuccessPage() {
   return (

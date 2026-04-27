@@ -420,7 +420,7 @@ export async function GET(req: NextRequest) {
     }
 
     const schoolCreditsRow = (schoolCreditsRaw ?? null) as SchoolCreditsRow;
-    const totalSchoolCredits = Math.max(
+    const remainingSchoolCredits = Math.max(
       0,
       Number(schoolCreditsRow?.shared_credits ?? 0)
     );
@@ -428,10 +428,7 @@ export async function GET(req: NextRequest) {
       0,
       Number(schoolCreditsRow?.credits_used ?? 0)
     );
-    const remainingSchoolCredits = Math.max(
-      0,
-      totalSchoolCredits - usedSchoolCredits
-    );
+    const totalSchoolCredits = remainingSchoolCredits + usedSchoolCredits;
     const percentUsed =
       totalSchoolCredits > 0
         ? Math.round((usedSchoolCredits / totalSchoolCredits) * 100)

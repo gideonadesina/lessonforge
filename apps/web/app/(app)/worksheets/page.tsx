@@ -93,10 +93,25 @@ function getFilenameFromDisposition(disposition: string | null, fallback: string
 }
  
 function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return "The request timed out before the generation finished. Please try again.";
+  }
   if (error && typeof error === "object" && "message" in error) {
     return String((error as { message?: unknown }).message ?? fallback);
   }
   return fallback;
+}
+
+function getApiError(json: unknown, fallback: string) {
+  const payload = (json ?? {}) as { error?: unknown; message?: unknown };
+  const message = typeof payload.message === "string" ? payload.message.trim() : "";
+  const error = typeof payload.error === "string" ? payload.error.trim() : "";
+  return message || error || fallback;
+}
+
+function needsPersonalCreditConfirmation(json: unknown) {
+  const payload = (json ?? {}) as { errorCode?: unknown };
+  return payload.errorCode === "needs_personal_confirmation";
 }
  
 export default function WorksheetsPage() {
@@ -206,7 +221,7 @@ export default function WorksheetsPage() {
       });
  
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((json as { error?: string })?.error || "Failed to load worksheets");
+      if (!res.ok) throw new Error(getApiError(json, "Failed to load worksheets"));
       setItems(normalizeListResponse(json));
     } catch (e: unknown) {
       setError(getErrorMessage(e, "Failed to load worksheets"));
@@ -226,34 +241,61 @@ export default function WorksheetsPage() {
     try {
       const token = await getAccessToken();
       if (!token) throw new Error("Not logged in");
+
+      const requestBody = {
+        source: "generated",
+        subject,
+        grade,
+        topic,
+        worksheetType,
+        difficulty,
+        numQuestions,
+        durationMins,
+        title: title || undefined,
+        schoolName: schoolName || undefined,
+        className: className || undefined,
+        worksheetDate: worksheetDate || undefined,
+        printLayout,
+        contentMode,
+        instructions: splitInstructions(instructionsText),
+      };
  
-      const res = await fetch("/api/worksheets", {
+      let res = await fetch("/api/worksheets", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          source: "generated",
-          subject,
-          grade,
-          topic,
-          worksheetType,
-          difficulty,
-          numQuestions,
-          durationMins,
-          title: title || undefined,
-          schoolName: schoolName || undefined,
-          className: className || undefined,
-          worksheetDate: worksheetDate || undefined,
-          printLayout,
-          contentMode,
-          instructions: splitInstructions(instructionsText),
-        }),
+        body: JSON.stringify(requestBody),
       });
  
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((json as { error?: string })?.error || "Generation failed");
+      let json = await res.json().catch(() => ({}));
+      if (!res.ok && res.status === 402 && needsPersonalCreditConfirmation(json)) {
+        const payload = json as { cost?: unknown; personalCreditsAvailable?: unknown };
+        const cost = typeof payload.cost === "number" ? payload.cost : 1;
+        const personalCreditsAvailable =
+          typeof payload.personalCreditsAvailable === "number"
+            ? payload.personalCreditsAvailable
+            : "available";
+        const confirmed = window.confirm(
+          `Your school has run out of credits.\n\nUse your personal credits instead?\n\nThis will use ${cost} of your ${personalCreditsAvailable} personal credits.`
+        );
+
+        if (!confirmed) {
+          throw new Error("Generation cancelled.");
+        }
+
+        res = await fetch("/api/worksheets", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ ...requestBody, usePersonalCredits: true }),
+        });
+        json = await res.json().catch(() => ({}));
+      }
+      if (!res.ok) throw new Error(getApiError(json, "Generation failed"));
  
       const payload = normalizeFullResponse(json);
  
@@ -311,7 +353,7 @@ export default function WorksheetsPage() {
       });
  
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((json as { error?: string })?.error || "Upload failed");
+      if (!res.ok) throw new Error(getApiError(json, "Upload failed"));
  
       const payload = normalizeFullResponse(json);
  
@@ -352,7 +394,7 @@ export default function WorksheetsPage() {
       });
  
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((json as { error?: string })?.error || "Delete failed");
+      if (!res.ok) throw new Error(getApiError(json, "Delete failed"));
  
       setItems((prev) => prev.filter((x) => x.id !== id));
       if (active?.meta?.id === id) {
@@ -385,7 +427,7 @@ export default function WorksheetsPage() {
       });
  
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((json as { error?: string })?.error || "Failed to load worksheet");
+      if (!res.ok) throw new Error(getApiError(json, "Failed to load worksheet"));
  
       const payload = normalizeFullResponse(json);
       setActive({
@@ -455,7 +497,7 @@ export default function WorksheetsPage() {
       });
  
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((json as { error?: string })?.error || "Update failed");
+      if (!res.ok) throw new Error(getApiError(json, "Update failed"));
  
       const payload = normalizeFullResponse(json);
       if (payload.meta) {
@@ -498,7 +540,7 @@ export default function WorksheetsPage() {
  
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        throw new Error((json as { error?: string })?.error || `Failed to export ${kind.toUpperCase()}`);
+        throw new Error(getApiError(json, `Failed to export ${kind.toUpperCase()}`));
       }
  
       const blob = await res.blob();

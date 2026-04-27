@@ -1,7 +1,11 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { consumeGenerationCredits, getGenerationCreditAvailability } from "@/lib/credits/server";
+import {
+  consumeGenerationCredits,
+  consumePersonalCreditsDirectly,
+  getGenerationCreditAvailability,
+} from "@/lib/credits/server";
  
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,6 +46,7 @@ type WorksheetRequestBody = {
  
   printLayout?: PrintLayout;
   contentMode?: ContentMode;
+  usePersonalCredits?: boolean;
 };
  
 type WorksheetPatchBody = {
@@ -186,21 +191,44 @@ function getFallbackVisualPrompts(
 ): string[] {
   if (mode === "coloring") {
     return [
-      `${topic} outline`,
-      "Apple outline",
-      "House outline",
-      "Flower outline",
-      "Fish outline",
+      `${topic} simple black-and-white coloring outline`,
+      `${topic} large printable outline for pupils to color`,
+      `${topic} child-friendly outline with wide empty spaces`,
     ];
   }
  
   return [
-    `${topic} labeled outline`,
-    `${subject} practical diagram outline`,
-    "Human heart labeled outline",
-    "Plant cell labeled outline",
-    "Simple electric circuit labeled outline",
+    `${topic} labeled black-and-white outline`,
+    `${topic} practical activity setup labeled outline`,
+    `${topic} specimen or apparatus observation diagram outline`,
+    `${subject} practical visual for ${topic} outline`,
   ];
+}
+
+function buildTopicBoundVisualPrompts(
+  mode: VisualContentMode,
+  prompts: string[],
+  subject: string,
+  topic: string
+) {
+  const fallback = getFallbackVisualPrompts(mode, subject, topic);
+  const source = prompts.length > 0 ? prompts : fallback;
+  const cleaned = source
+    .map((prompt) => prompt.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .map((prompt) => {
+      if (mode === "coloring") {
+        return `Topic: ${topic}. Draw only ${prompt} as a clean black-and-white printable outline for pupils to color. No color, no cartoon scene, no unrelated objects.`;
+      }
+
+      if (mode === "practical") {
+        return `Topic: ${topic}. Draw a relevant practical/lab/activity visual for ${subject}: ${prompt}. Use a clean black-and-white educational outline tied to the topic. No unrelated specimen or apparatus.`;
+      }
+
+      return `Topic: ${topic}. Draw ${prompt} as a clean black-and-white educational outline tied to the topic. No unrelated objects.`;
+    });
+
+  return dedupeKeepOrder(cleaned);
 }
  
 function getVisualMode(mode: ContentMode, worksheetText: string): VisualContentMode | null {
@@ -232,6 +260,7 @@ Special requirements:
 - Make it highly practical, classroom-ready, and easy for students to use during science/biology practicals.
 - Follow the user's exact topic, specimen, apparatus, or experiment request.
 - Include biology/science-friendly questions only where relevant to the requested topic.
+- For practical mode, visuals must show the actual practical activity, specimen, apparatus, process, or observation setup implied by the topic.
 - If diagrams are needed, generate diagram placeholders BASED ON THE USER'S REQUEST in this exact style:
   [Diagram: <topic-relevant black-and-white outline>]
 
@@ -243,6 +272,8 @@ Special requirements:
 
 - Include a "visualPrompts" array (3 to 6 prompts) for black-and-white printable outline diagrams.
 - Each visual prompt must be specific, label-ready, and directly tied to the user’s topic.
+- Each visual prompt must name the requested topic, specimen, apparatus, or practical activity.
+- Never request decorative photos, colorful images, cartoon scenes, random clipart, or generic stock images.
 - Prefer prompts like:
   "Human heart labeled outline"
   "Longitudinal section of flower labeled outline"
@@ -285,6 +316,7 @@ Special requirements:
 - Keep language very simple and child-friendly.
 - Use short instructions.
 - Generate coloring placeholders BASED ON THE USER'S TOPIC.
+- Coloring visuals must be black-and-white outline drawings only, with no color, no shading, no filled backgrounds, and no cartoon scene.
 - Use this format:
   [Coloring Picture: <relevant object from topic> outline]
 
@@ -294,6 +326,8 @@ Special requirements:
   If topic is "Light" → sun, candle, bulb  
 
 - Include a "visualPrompts" array (3 to 8 prompts) that match the topic for black-and-white printable outlines.
+- Each visual prompt must name the requested topic or an object directly within that topic.
+- Never request random colorful images, cartoon scenes, generic clipart, unrelated animals/objects, or decorative photos.
 
 - Keep large spacing and fewer tasks.
 - Focus on coloring, tracing, matching, or simple recognition.
@@ -367,14 +401,27 @@ async function generateOutlineImage(
     args.mode === "coloring"
       ? `
 Create a black-and-white printable coloring outline image for children.
-No color, no grayscale shading, no watermark, no logo, no background scene.
+Use monochrome black line art on a plain white background.
+No color, no grayscale shading, no filled areas, no watermark, no logo, no background scene.
 Use clear thick outlines and large empty spaces for coloring.
+Draw only the requested topic/object; do not add unrelated objects.
 No text on the image.
+`
+      : args.mode === "practical"
+      ? `
+Create a black-and-white printable practical/lab/activity visual.
+Use monochrome black line art on a plain white background.
+Show the relevant specimen, apparatus, process, observation setup, or activity for the requested topic.
+No color, no grayscale shading, no filled areas, no watermark, no logo, no decorative background scene.
+Make it suitable for classroom observation, labeling, or practical work.
+No text paragraphs on the image.
 `
       : `
 Create a black-and-white printable educational line diagram outline.
-No color, no grayscale shading, no watermark, no logo, no background scene.
+Use monochrome black line art on a plain white background.
+No color, no grayscale shading, no filled areas, no watermark, no logo, no background scene.
 Make it suitable for students to label in class.
+Draw only the requested topic/object; do not add unrelated objects.
 No text paragraphs on the image.
 `;
  
@@ -417,7 +464,12 @@ async function generateWorksheetVisuals(
   }
 ): Promise<WorksheetVisual[]> {
   const maxCount = args.mode === "coloring" ? 8 : 6;
-  const uniquePrompts = dedupeKeepOrder(args.prompts).slice(0, maxCount);
+  const uniquePrompts = buildTopicBoundVisualPrompts(
+    args.mode,
+    args.prompts,
+    args.subject,
+    args.topic
+  ).slice(0, maxCount);
  
   const visuals: WorksheetVisual[] = [];
   for (const p of uniquePrompts) {
@@ -612,6 +664,7 @@ export async function POST(req: NextRequest) {
     const source = normalizeSource(body.source);
     const printLayout = normalizePrintLayout(body.printLayout);
     const contentMode = normalizeContentMode(body.contentMode);
+    const usePersonalCredits = body.usePersonalCredits === true;
     const count = clampInt(body.numQuestions, 3, 50, contentMode === "coloring" ? 5 : 10);
     const duration = clampInt(body.durationMins, 10, 180, contentMode === "coloring" ? 20 : 30);
 
@@ -628,8 +681,32 @@ export async function POST(req: NextRequest) {
           { status: 500 }
         );
       }
-      if (creditAvailability.creditsRemaining <= 0) {
+      if (!usePersonalCredits && creditAvailability.creditsRemaining <= 0) {
         if (creditAvailability.source === "school") {
+          const { data: profileData } = await supabase
+            .from("profiles")
+            .select("credits_balance")
+            .eq("id", user.id)
+            .maybeSingle();
+
+          const personalBalance = Math.max(
+            0,
+            Number((profileData as any)?.credits_balance ?? 0)
+          );
+
+          if (personalBalance >= 1) {
+            return NextResponse.json(
+              {
+                ok: false,
+                errorCode: "needs_personal_confirmation",
+                personalCreditsAvailable: personalBalance,
+                message: "Your school has run out of credits.",
+                cost: 1,
+              },
+              { status: 402 }
+            );
+          }
+
           return NextResponse.json(
             {
               ok: false,
@@ -906,7 +983,9 @@ if (primaryVisual?.imageDataUrl) {
       return jsonErr(saveErr.message, 500);
     }
 
-    const deductionResult = await consumeGenerationCredits(supabase, user.id, 1);
+    const deductionResult = usePersonalCredits
+      ? await consumePersonalCreditsDirectly(supabase, user.id, 1)
+      : await consumeGenerationCredits(supabase, user.id, 1);
     if (!deductionResult.ok) {
       console.error("[worksheets] Credit deduction failed after successful generation:", {
         userId: user.id,

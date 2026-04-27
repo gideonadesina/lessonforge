@@ -15,7 +15,6 @@ import RecentActivity from "@/components/dashboard/RecentActivity";
 import WeeklyInsight from "@/components/dashboard/WeeklyInsight";
 import { listSchemeOfWork } from "@/lib/planning/scheme";
 import { listAcademicEvents } from "@/lib/planning/academicCalendar";
-import SchoolCodeInput from "@/components/SchoolCodeInput";
 import AuthNotificationBanner from "@/components/auth/AuthNotificationBanner";
 import type {
   AcademicCalendarRow,
@@ -45,6 +44,7 @@ type SchoolMembershipApiResponse = {
           id: string;
           name: string | null;
           shared_credits?: number | null;
+          credits_used?: number | null;
           credits_remaining?: number | null;
           remaining_credits?: number | null;
         }
@@ -101,6 +101,7 @@ export default function DashboardPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [schoolMembershipLoading, setSchoolMembershipLoading] = useState(true);
   const [hasSchoolMembership, setHasSchoolMembership] = useState(false);
+  const [schoolName, setSchoolName] = useState<string | null>(null);
   const [schoolCreditsRemaining, setSchoolCreditsRemaining] = useState<number | null>(null);
   const [copiedReferral, setCopiedReferral] = useState(false);
   const toastFlagsRef = useRef({
@@ -124,6 +125,7 @@ export default function DashboardPage() {
       const token = session?.access_token ?? "";
       if (!token) {
         setHasSchoolMembership(false);
+        setSchoolName(null);
         return;
       }
 
@@ -133,6 +135,7 @@ export default function DashboardPage() {
       const json = (await res.json()) as SchoolMembershipApiResponse;
       if (!res.ok || !json.ok) {
         setHasSchoolMembership(false);
+        setSchoolName(null);
         setSchoolCreditsRemaining(null);
         return;
       }
@@ -140,7 +143,9 @@ export default function DashboardPage() {
       const school = json.data?.school ?? null;
       const hasSchool = Boolean(school?.id);
       setHasSchoolMembership(hasSchool);
+      setSchoolName(hasSchool ? school?.name ?? "School workspace" : null);
       if (!hasSchool) {
+        setSchoolName(null);
         setSchoolCreditsRemaining(null);
         return;
       }
@@ -158,6 +163,7 @@ export default function DashboardPage() {
       );
     } catch {
       setHasSchoolMembership(false);
+      setSchoolName(null);
       setSchoolCreditsRemaining(null);
     } finally {
       setSchoolMembershipLoading(false);
@@ -525,6 +531,10 @@ export default function DashboardPage() {
   const referralLink = referralCode
     ? `https://lessonforge.app/signup?ref=${encodeURIComponent(referralCode)}`
     : "";
+  const dashboardCreditsRemaining =
+    hasSchoolMembership && schoolCreditsRemaining != null
+      ? schoolCreditsRemaining
+      : creditsRemaining;
 
  async function copyReferralLink() {
   if (!referralLink) return;
@@ -547,7 +557,7 @@ export default function DashboardPage() {
       <WeeklyInsight
         totalLessons={stats.totalLessons}
         recent7d={stats.recent7d}
-        creditsRemaining={creditsRemaining}
+        creditsRemaining={dashboardCreditsRemaining}
         worksheetsCreated={stats.worksheetsCreated}
       />
 
@@ -558,22 +568,24 @@ export default function DashboardPage() {
           </div>
         ) : null}
 
-        {!schoolMembershipLoading && !hasSchoolMembership ? (
-          <section className="rounded-2xl border border-violet-200 bg-violet-50/50 p-4 shadow-sm dark:border-violet-900/50 dark:bg-violet-900/10">
-            <div className="mb-3">
-              <h2 className="text-sm font-bold text-[var(--text-primary)]">
-                Join your school workspace
-              </h2>
-              <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                Enter your school code from your principal to activate your
-                teacher seat.
-              </p>
+        {!schoolMembershipLoading && hasSchoolMembership ? (
+          <section className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 shadow-sm dark:border-emerald-900/50 dark:bg-emerald-900/10">
+            <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">
+                  School Mode
+                </div>
+                <h2 className="mt-1 text-sm font-bold text-[var(--text-primary)]">
+                  {schoolName ?? "School workspace"}
+                </h2>
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                  Using school credits for generations first.
+                </p>
+              </div>
+              <div className="text-sm font-extrabold text-emerald-700 dark:text-emerald-300">
+                {schoolCreditsRemaining ?? "—"} school credits
+              </div>
             </div>
-          <SchoolCodeInput
-  onJoined={(_data) => {
-    void loadSchoolMembership();
-  }}
-/>
           </section>
         ) : null}
 

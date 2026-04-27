@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(node -e \"const h = require\\('html2canvas'\\); console.log\\('html2canvas version:', require\\('./node_modules/html2canvas/package.json'\\).version\\)\")",
+      "Bash(npx tsc *)"
+    ]
+  }
+}

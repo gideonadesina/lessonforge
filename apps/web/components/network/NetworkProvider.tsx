@@ -25,7 +25,18 @@ const UNSTABLE_MESSAGE = "Connection unstable. Trying to continue…";
 const BACK_ONLINE_MESSAGE = "Back online. Resuming…";
 
 const NETWORK_TIMEOUT_MS = 20000;
+const LONG_RUNNING_REQUEST_TIMEOUT_MS = 180000;
 const STALLED_REQUEST_MS = 12000;
+
+function getRequestTimeoutMs(input: RequestInfo | URL): number {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.pathname : input.url;
+  return url.includes("/api/generate-slides") ||
+    url.includes("/api/generate") ||
+    url.includes("/api/worksheets") ||
+    url.includes("/api/exams")
+    ? LONG_RUNNING_REQUEST_TIMEOUT_MS
+    : NETWORK_TIMEOUT_MS;
+}
 
 function mergeSignal(signalA?: AbortSignal | null, signalB?: AbortSignal): AbortSignal | undefined {
   if (!signalA) return signalB;
@@ -44,7 +55,6 @@ function mergeSignal(signalA?: AbortSignal | null, signalB?: AbortSignal): Abort
 }
 
 export function NetworkProvider({ children }: { children: ReactNode }) {
-  const [mounted, setMounted] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [status, setStatus] = useState<NetworkStatus>("online");
   const [bannerMessage, setBannerMessage] = useState<string>("");
@@ -119,7 +129,6 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
   }, [setNetworkStatus]);
 
   useEffect(() => {
-    setMounted(true);
     mountedRef.current = true;
 
     if (typeof window === "undefined") return;
@@ -132,9 +141,9 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
       setNetworkStatus("offline");
     };
 
-    if (!navigator.onLine) {
-      setNetworkStatus("offline");
-    }
+    const initialOfflineId = !navigator.onLine
+      ? window.setTimeout(handleOffline, 0)
+      : null;
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
@@ -143,6 +152,9 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
       mountedRef.current = false;
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
+      if (initialOfflineId !== null) {
+        window.clearTimeout(initialOfflineId);
+      }
       if (hideTimerRef.current && typeof window !== "undefined") {
         window.clearTimeout(hideTimerRef.current);
       }
@@ -151,7 +163,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const win = window as any;
+    const win = window as Window & typeof globalThis & Record<string, unknown>;
 
     if (win[FETCH_WRAPPED_FLAG]) return;
 
@@ -161,7 +173,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
 
     const patchedFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const controller = new AbortController();
-      const timeoutId = window.setTimeout(() => controller.abort(), NETWORK_TIMEOUT_MS);
+      const timeoutId = window.setTimeout(() => controller.abort(), getRequestTimeoutMs(input));
       const mergedSignal = mergeSignal(init?.signal ?? undefined, controller.signal);
       const finalInit = { ...init, signal: mergedSignal };
       let stalledId: number | null = window.setTimeout(() => {
@@ -188,14 +200,14 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
         }
 
         return response;
-      } catch (error: any) {
+      } catch (error: unknown) {
         if (stalledId) {
           window.clearTimeout(stalledId);
           stalledId = null;
         }
         window.clearTimeout(timeoutId);
 
-        if (error?.name === "AbortError") {
+        if (error instanceof DOMException && error.name === "AbortError") {
           reportFailure(true);
         } else if (!navigator.onLine) {
           reportFailure(false);
@@ -211,7 +223,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
 
     return () => {
       if (win[ORIGINAL_FETCH_KEY]) {
-        window.fetch = win[ORIGINAL_FETCH_KEY];
+        window.fetch = win[ORIGINAL_FETCH_KEY] as typeof window.fetch;
         delete win[ORIGINAL_FETCH_KEY];
       }
       delete win[FETCH_WRAPPED_FLAG];
@@ -227,33 +239,31 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     <NetworkContext.Provider value={value}>
       {children}
 
-      {mounted && (
-        <div className="fixed right-5 top-20 z-50 max-w-xs rounded-2xl border px-4 py-3 shadow-lg transition-all duration-300"
-          style={{
-            opacity: showBanner ? 1 : 0,
-            pointerEvents: showBanner ? "auto" : "none",
-            transform: showBanner ? "translateY(0)" : "translateY(-10px)",
-            backgroundColor:
-              status === "offline"
-                ? "#f8d7da"
-                : status === "unstable"
-                ? "#fff4e5"
-                : "#e6ffed",
-            borderColor:
-              status === "offline"
-                ? "#f5c6cb"
-                : status === "unstable"
-                ? "#ffe6a3"
-                : "#a3f7bf",
-          }}
+      <div className="fixed right-5 top-20 z-50 max-w-xs rounded-2xl border px-4 py-3 shadow-lg transition-all duration-300"
+        style={{
+          opacity: showBanner ? 1 : 0,
+          pointerEvents: showBanner ? "auto" : "none",
+          transform: showBanner ? "translateY(0)" : "translateY(-10px)",
+          backgroundColor:
+            status === "offline"
+              ? "#f8d7da"
+              : status === "unstable"
+              ? "#fff4e5"
+              : "#e6ffed",
+          borderColor:
+            status === "offline"
+              ? "#f5c6cb"
+              : status === "unstable"
+              ? "#ffe6a3"
+              : "#a3f7bf",
+        }}
+      >
+        <div className="text-sm font-semibold"
+          style={{ color: status === "offline" ? "#842029" : status === "unstable" ? "#7a5700" : "#0f5132" }}
         >
-          <div className="text-sm font-semibold"
-            style={{ color: status === "offline" ? "#842029" : status === "unstable" ? "#7a5700" : "#0f5132" }}
-          >
-            {bannerMessage}
-          </div>
+          {bannerMessage}
         </div>
-      )}
+      </div>
     </NetworkContext.Provider>
   );
 }

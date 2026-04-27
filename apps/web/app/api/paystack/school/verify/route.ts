@@ -123,6 +123,8 @@ export async function GET(req: Request) {
       plan: planId,
       sharedCreditsAwarded: paymentResult.sharedCreditsAwarded,
       teacherLimitAwarded: paymentResult.teacherLimitAwarded,
+      previousBalance: paymentResult.previousBalance,
+      newBalance: paymentResult.newBalance,
       alreadyProcessed: paymentResult.alreadyProcessed,
     });
   } catch (error) {

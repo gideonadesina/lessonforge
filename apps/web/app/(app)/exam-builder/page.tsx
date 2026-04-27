@@ -11,10 +11,25 @@ import ExamSectionEditor from "@/components/exam-builder/ExamSectionEditor";
 import type { ExamBuilderInput, ExamListRow, ExamRecord, ExamResult } from "@/lib/exams/types";
 
 function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return "The request timed out before the generation finished. Please try again.";
+  }
   if (error && typeof error === "object" && "message" in error) {
     return String((error as { message?: unknown }).message ?? fallback);
   }
   return fallback;
+}
+
+function getApiError(json: unknown, fallback: string) {
+  const payload = (json ?? {}) as { error?: unknown; message?: unknown };
+  const message = typeof payload.message === "string" ? payload.message.trim() : "";
+  const error = typeof payload.error === "string" ? payload.error.trim() : "";
+  return message || error || fallback;
+}
+
+function needsPersonalCreditConfirmation(json: unknown) {
+  const payload = (json ?? {}) as { errorCode?: unknown };
+  return payload.errorCode === "needs_personal_confirmation";
 }
 
 function normalizeRecordResponse(json: unknown): ExamRecord | null {
@@ -87,7 +102,7 @@ export default function ExamBuilderPage() {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error((json as { error?: string }).error ?? "Failed to load exams");
+        throw new Error(getApiError(json, "Failed to load exams"));
       }
       setItems(normalizeListResponse(json));
     } catch (e: unknown) {
@@ -109,7 +124,7 @@ export default function ExamBuilderPage() {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error((json as { error?: string }).error ?? "Failed to open exam");
+        throw new Error(getApiError(json, "Failed to open exam"));
       }
       const record = normalizeRecordResponse(json);
       if (!record) throw new Error("Exam response was empty");
@@ -125,7 +140,7 @@ export default function ExamBuilderPage() {
     try {
       const token = await getToken();
       if (!token) throw new Error("Not logged in");
-      const res = await fetch("/api/exams", {
+      let res = await fetch("/api/exams", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -133,9 +148,34 @@ export default function ExamBuilderPage() {
         },
         body: JSON.stringify(form),
       });
-      const json = await res.json().catch(() => ({}));
+      let json = await res.json().catch(() => ({}));
+      if (!res.ok && res.status === 402 && needsPersonalCreditConfirmation(json)) {
+        const payload = json as { cost?: unknown; personalCreditsAvailable?: unknown };
+        const cost = typeof payload.cost === "number" ? payload.cost : 1;
+        const personalCreditsAvailable =
+          typeof payload.personalCreditsAvailable === "number"
+            ? payload.personalCreditsAvailable
+            : "available";
+        const confirmed = window.confirm(
+          `Your school has run out of credits.\n\nUse your personal credits instead?\n\nThis will use ${cost} of your ${personalCreditsAvailable} personal credits.`
+        );
+
+        if (!confirmed) {
+          throw new Error("Generation cancelled.");
+        }
+
+        res = await fetch("/api/exams", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ ...form, usePersonalCredits: true }),
+        });
+        json = await res.json().catch(() => ({}));
+      }
       if (!res.ok) {
-        throw new Error((json as { error?: string }).error ?? "Failed to generate exam");
+        throw new Error(getApiError(json, "Failed to generate exam"));
       }
       const record = normalizeRecordResponse(json);
       if (!record) throw new Error("Generated exam response was empty");
@@ -164,7 +204,7 @@ export default function ExamBuilderPage() {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error((json as { error?: string }).error ?? "Delete failed");
+        throw new Error(getApiError(json, "Delete failed"));
       }
       setItems((prev) => prev.filter((item) => item.id !== id));
       if (active?.id === id) {
@@ -191,7 +231,7 @@ export default function ExamBuilderPage() {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error((json as { error?: string }).error ?? "Failed to reuse exam");
+        throw new Error(getApiError(json, "Failed to reuse exam"));
       }
       const record = normalizeRecordResponse(json);
       if (!record) throw new Error("Reused exam response was empty");
@@ -227,7 +267,7 @@ export default function ExamBuilderPage() {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error((json as { error?: string }).error ?? "Failed to save exam edits");
+        throw new Error(getApiError(json, "Failed to save exam edits"));
       }
       const record = normalizeRecordResponse(json);
       if (!record) throw new Error("Save response was empty");
@@ -259,7 +299,7 @@ export default function ExamBuilderPage() {
 
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        throw new Error((json as { error?: string }).error ?? "PDF export failed");
+        throw new Error(getApiError(json, "PDF export failed"));
       }
 
       const blob = await res.blob();

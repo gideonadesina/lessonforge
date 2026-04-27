@@ -104,6 +104,11 @@ type FormData = {
 // MAIN PAGE
 // ─────────────────────────────────────────────────────────────
 
+type JsonRecord = Record<string, unknown>;
+
+const isRecord = (value: unknown): value is JsonRecord =>
+  typeof value === "object" && value !== null;
+
 export default function LessonSlidesPage() {
   const supabase = createBrowserSupabase();
 
@@ -122,10 +127,8 @@ export default function LessonSlidesPage() {
   const [loadingStep, setLoadingStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [deck, setDeck] = useState<SlideDeck | null>(null);
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
     // reset grade when school level changes
     setFormData((prev) => ({ ...prev, grade: "" }));
   }, [formData.schoolLevel]);
@@ -147,50 +150,136 @@ export default function LessonSlidesPage() {
   const selectedDuration = DURATION_OPTIONS.find((d) => d.value === formData.duration)!;
   const canSubmit = !loading && !!formData.topic && !!formData.subject && !!formData.grade;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    setDeck(null);
-    setLoadingStep(0);
+  const getDeckFromResponse = (payload: unknown): SlideDeck | null => {
+    if (!isRecord(payload)) return null;
 
+    const data = payload.data;
+    const candidate = payload.deck ?? (isRecord(data) ? data.deck ?? data : data);
+
+    return isRecord(candidate) && Array.isArray(candidate.slides) && candidate.slides.length
+      ? (candidate as SlideDeck)
+      : null;
+  };
+
+  const getResponseError = (payload: unknown): string | null => {
+    if (!isRecord(payload)) return null;
+    return typeof payload.error === "string" ? payload.error : null;
+  };
+
+ const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setLoading(true);
+  setError(null);
+  setDeck(null);
+  setLoadingStep(0);
+
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      throw new Error("Session expired. Please login again.");
+    }
+
+    const res = await fetch("/api/generate-slides", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify(formData),
+    });
+
+    let json: unknown;
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      json = await res.json();
+    } catch {
+      // Response body parsing failed — but generation succeeded
+      // Check library for the saved deck
+      setError("Slides generated but preview failed to load. Check your library.");
+      return;
+    }
 
-      if (!session?.access_token) {
+    if (!res.ok) {
+      const status = res.status;
+
+      if (status === 402 && isRecord(json) && json.errorCode === "needs_personal_confirmation") {
+        setLoading(false);
+        const cost = typeof json.cost === "number" ? json.cost : "the required";
+        const personalCreditsAvailable =
+          typeof json.personalCreditsAvailable === "number"
+            ? json.personalCreditsAvailable
+            : "available";
+        const confirmed = window.confirm(
+          `Your school has run out of credits.\n\nUse your personal credits instead?\n\nThis will use ${cost} of your ${personalCreditsAvailable} personal credits.`
+        );
+
+        if (!confirmed) {
+          setError("Generation cancelled.");
+          return;
+        }
+
+        setLoading(true);
+        setError(null);
+
+        const retryRes = await fetch("/api/generate-slides", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            ...formData,
+            usePersonalCredits: true,
+          }),
+        });
+
+        const retryJson = await retryRes.json();
+
+        if (!retryRes.ok) {
+          throw new Error(getResponseError(retryJson) || "Failed to generate slides");
+        }
+
+        const retryDeck = getDeckFromResponse(retryJson);
+        if (!retryDeck) {
+          throw new Error("Slides generated but preview failed to load. Check your library.");
+        }
+
+        try { sessionStorage.removeItem("lessonforge_library_cache"); } catch {}
+        setDeck(retryDeck);
+        return;
+      }
+
+      if (status === 402) {
+        throw new Error("Not enough credits. Please upgrade your plan.");
+      }
+
+      if (status === 401) {
         throw new Error("Session expired. Please login again.");
       }
 
-      const res = await fetch("/api/generate-slides", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify(formData),
-      });
-
-    const json = await res.json();
-
-      if (!res.ok) {
-        const status = res.status;
-        if (status === 402) throw new Error("Not enough credits. Please upgrade your plan.");
-        if (status === 401) throw new Error("Session expired. Please login again.");
-        throw new Error(json?.error || "Failed to generate slides");
-      }
-
-      // Clear library cache so the new deck appears immediately in the library
-      try { sessionStorage.removeItem("lessonforge_library_cache"); } catch {}
-
-      setDeck(json.deck);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setLoading(false);
+      throw new Error(getResponseError(json) || "Failed to generate slides");
     }
-  };
+
+    try { sessionStorage.removeItem("lessonforge_library_cache"); } catch {}
+    const generatedDeck = getDeckFromResponse(json);
+    if (!generatedDeck) {
+      throw new Error("Slides generated but preview failed to load. Check your library.");
+    }
+
+    setDeck(generatedDeck);
+
+  } catch (err) {
+    const message =
+      err instanceof DOMException && err.name === "AbortError"
+        ? "Slide generation timed out in the browser. Please try again or check your library."
+        : err instanceof Error
+        ? err.message
+        : "Something went wrong";
+    setError(message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // ── Loading screen ──────────────────────────────────────
   if (loading) {

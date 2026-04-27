@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback, memo } from "react";
+import { pdf } from "@react-pdf/renderer";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { resolveLessonContent } from "@/lib/lessons/resolveLessonContent";
 import { LessonSkeleton } from "@/lib/lessons/LessonSkeleton";
 import { useLessonCache } from "@/lib/lessons/useLessonCache";
 import { useProgressiveRenderer, SectionSkeleton, ProgressiveContent } from "@/lib/lessons/ProgressiveRenderer";
+import SlideViewer from "@/components/slides/SlideViewer";
+import { LessonPlanPdfDocument } from "@/components/lessons/LessonPlanPdfDocument";
 
 // ─────────────────────────────────────────────────────────────
 // TYPES
@@ -63,6 +66,25 @@ function downloadFile(filename: string, content: string, type = "text/plain;char
   URL.revokeObjectURL(url);
 }
 
+function downloadBlob(filename: string, blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function safeFilenamePart(value: unknown, fallback: string) {
+  const cleaned = String(value ?? fallback)
+    .replace(/[^\w\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "_");
+  return cleaned || fallback;
+}
+
 function handleDownloadImage(src: string, title: string) {
   const a = document.createElement("a");
   a.href = src;
@@ -74,12 +96,23 @@ function handleDownloadImage(src: string, title: string) {
 
 function getLessonPayload(row: LessonRow | null) {
   if (!row) return null;
+
   const raw = row.result_json ?? row.content ?? null;
   if (!raw) return null;
+
+  let parsed = raw;
+
   if (typeof raw === "string") {
-    try { return JSON.parse(raw); } catch { return raw; }
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return null;
+    }
   }
-  return raw;
+
+  if (!parsed || typeof parsed !== "object") return null;
+
+  return parsed?.deck ?? parsed?.data?.deck ?? parsed?.data ?? parsed;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -274,11 +307,113 @@ function buildLessonStructureTextFromRow(row: LessonRow | null): string {
 
 function handleDownloadLessonStructureFromRow(row: LessonRow | null) {
   if (!row) return;
+
+  const raw = row.result_json ?? row.content ?? null;
+  if (!raw) return;
+
+  // Detect slide deck vs lesson pack
+  const isSlides = row.type === "slides" || raw?.slides?.length > 0 && raw?.deck_title;
+
+  if (isSlides) {
+    handleDownloadSlideDeck(row, raw);
+    return;
+  }
+
+  // Original lesson pack download
   const gen = resolveLessonContent(row);
   const meta = gen?.meta ?? {};
-  const safeSubject = String(meta?.subject ?? row.subject ?? "subject").replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_");
-  const safeTopic = String(meta?.topic ?? row.topic ?? "topic").replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_");
-  downloadFile(`LessonForge_${safeSubject}_${safeTopic}_Structure.txt`, buildLessonStructureTextFromRow(row));
+  const safeSubject = String(meta?.subject ?? row.subject ?? "subject")
+    .replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_");
+  const safeTopic = String(meta?.topic ?? row.topic ?? "topic")
+    .replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_");
+  downloadFile(
+    `LessonForge_${safeSubject}_${safeTopic}_Structure.txt`,
+    buildLessonStructureTextFromRow(row)
+  );
+}
+
+function handleDownloadSlideDeck(row: LessonRow, raw: any) {
+  const deck = raw?.deck ?? raw;
+  const slides = deck?.slides ?? [];
+  const title = deck?.deck_title ?? row.topic ?? "slides";
+
+  const lines: string[] = [];
+  lines.push("LESSONFORGE SLIDE DECK");
+  lines.push("=".repeat(50));
+  lines.push(`Title: ${title}`);
+  lines.push(`Subject: ${deck?.subject ?? row.subject ?? ""}`);
+  lines.push(`Grade: ${deck?.grade ?? row.grade ?? ""}`);
+  lines.push(`Bloom Level: ${deck?.bloom_level ?? ""}`);
+  lines.push(`Total Slides: ${slides.length}`);
+  lines.push("");
+
+  slides.forEach((slide: any, i: number) => {
+    lines.push(`SLIDE ${i + 1} — ${(slide.type ?? "").toUpperCase()}`);
+    lines.push("-".repeat(30));
+
+    if (slide.title) lines.push(`Title: ${slide.title}`);
+    if (slide.subtitle) lines.push(`Subtitle: ${slide.subtitle}`);
+    if (slide.hook_question) lines.push(`Hook: ${slide.hook_question}`);
+    if (slide.explanation) lines.push(`Explanation: ${slide.explanation}`);
+    if (slide.key_point) lines.push(`Key Point: ${slide.key_point}`);
+    if (slide.analogy) lines.push(`Analogy: ${slide.analogy}`);
+    if (slide.prompt) lines.push(`Prompt: ${slide.prompt}`);
+    if (slide.question) lines.push(`Question: ${slide.question}`);
+    if (slide.teacher_notes) lines.push(`Teacher Notes: ${slide.teacher_notes}`);
+    if (slide.time_minutes) lines.push(`Time: ${slide.time_minutes} mins`);
+
+    if (Array.isArray(slide.objectives)) {
+      lines.push("Objectives:");
+      slide.objectives.forEach((o: string) => lines.push(`  - ${o}`));
+    }
+
+    if (Array.isArray(slide.terms)) {
+      lines.push("Vocabulary Terms:");
+      slide.terms.forEach((t: any) => {
+        lines.push(`  ${t.word ?? t.term ?? ""}: ${t.definition ?? ""}`);
+        if (t.example) lines.push(`    e.g. ${t.example}`);
+      });
+    }
+
+    if (Array.isArray(slide.steps)) {
+      lines.push("Steps:");
+      slide.steps.forEach((s: any) => {
+        lines.push(`  Step ${s.step_num}: ${s.instruction}`);
+        if (s.tip) lines.push(`    Tip: ${s.tip}`);
+      });
+    }
+
+    if (Array.isArray(slide.choices)) {
+      lines.push("Choices:");
+      slide.choices.forEach((c: any) => {
+        lines.push(`  ${c.label}. ${c.text}${c.is_correct ? " ✓" : ""}`);
+      });
+      if (slide.explanation) lines.push(`  Explanation: ${slide.explanation}`);
+    }
+
+    if (Array.isArray(slide.takeaways)) {
+      lines.push("Takeaways:");
+      slide.takeaways.forEach((t: string) => lines.push(`  - ${t}`));
+    }
+
+    if (Array.isArray(slide.sentence_starters)) {
+      lines.push("Sentence Starters:");
+      slide.sentence_starters.forEach((s: string) => lines.push(`  ${s}`));
+    }
+
+    if (slide.differentiation) {
+      lines.push("Differentiation:");
+      if (slide.differentiation.support) lines.push(`  Support: ${slide.differentiation.support}`);
+      if (slide.differentiation.extension) lines.push(`  Extension: ${slide.differentiation.extension}`);
+    }
+
+    lines.push("");
+  });
+
+  lines.push("Generated with LessonForge");
+
+  const safeTitle = title.replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_");
+  downloadFile(`LessonForge_${safeTitle}_slides.txt`, lines.join("\n"));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -633,6 +768,11 @@ export default function LibraryPage() {
   const [sort, setSort] = useState<SortMode>("newest");
   const [active, setActive] = useState<LessonRow | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
+  const [lessonPlanFormOpen, setLessonPlanFormOpen] = useState(false);
+  const [pdfTeacherName, setPdfTeacherName] = useState("");
+  const [pdfSchoolName, setPdfSchoolName] = useState("");
+  const [pdfLessonDate, setPdfLessonDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [isGeneratingLessonPlanPdf, setIsGeneratingLessonPlanPdf] = useState(false);
 
   const { data: activeWithPayload, isLoading: isLoadingLessonContent } = useLessonCache(active?.id ?? null);
 
@@ -642,6 +782,9 @@ export default function LibraryPage() {
   }, [activeWithPayload, isLoadingLessonContent]);
 
   const { isSectionReady } = useProgressiveRenderer(resolvedLessonContent);
+
+  const canDownloadLessonPlan =
+    !!active && active.type !== "slides" && !!resolvedLessonContent && !isLoadingLessonContent;
 
   // Stable callbacks — never recreated between renders
   const handlePreviewImage = useCallback((img: { src: string; title: string }) => {
@@ -655,6 +798,72 @@ export default function LibraryPage() {
   const handleDownloadStructure = useCallback(() => {
     handleDownloadLessonStructureFromRow(active);
   }, [active]);
+
+  const handleOpenLessonPlanForm = useCallback(() => {
+    if (!canDownloadLessonPlan) return;
+    setLessonPlanFormOpen(true);
+  }, [canDownloadLessonPlan]);
+
+  const handleDownloadLessonPlanPdf = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!active || !resolvedLessonContent || isGeneratingLessonPlanPdf) return;
+
+    const teacherName = pdfTeacherName.trim();
+    const schoolName = pdfSchoolName.trim();
+    const lessonDate = pdfLessonDate.trim();
+
+    if (!teacherName || !schoolName || !lessonDate) {
+      alert("Teacher full name, school name, and date of lesson are required.");
+      return;
+    }
+
+    setIsGeneratingLessonPlanPdf(true);
+    try {
+      const meta = resolvedLessonContent?.meta ?? {};
+      const subject = String(meta?.subject ?? active.subject ?? "");
+      const grade = String(meta?.grade ?? active.grade ?? "");
+      const topic = String(meta?.topic ?? active.topic ?? "");
+      const durationValue = meta?.durationMins ?? meta?.duration ?? "";
+      const duration = durationValue
+        ? String(durationValue).toLowerCase().includes("minute")
+          ? String(durationValue)
+          : `${durationValue} minutes`
+        : "";
+      const filename = `${safeFilenamePart(subject, "Subject")}_${safeFilenamePart(
+        grade,
+        "Class"
+      )}_${safeFilenamePart(topic, "Topic")}_LessonPlan.pdf`;
+
+      const blob = await pdf(
+        <LessonPlanPdfDocument
+          lesson={resolvedLessonContent}
+          meta={{
+            teacherName,
+            schoolName,
+            lessonDate,
+            subject,
+            grade,
+            topic,
+            duration,
+          }}
+        />
+      ).toBlob();
+
+      downloadBlob(filename, blob);
+      setLessonPlanFormOpen(false);
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Failed to generate lesson plan PDF.");
+    } finally {
+      setIsGeneratingLessonPlanPdf(false);
+    }
+  }, [
+    active,
+    isGeneratingLessonPlanPdf,
+    pdfLessonDate,
+    pdfSchoolName,
+    pdfTeacherName,
+    resolvedLessonContent,
+  ]);
 
   const onDelete = useCallback(async (id: string) => {
     if (!confirm("Delete this lesson?")) return;
@@ -909,6 +1118,15 @@ export default function LibraryPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                {active.type !== "slides" && (
+                  <button
+                    onClick={handleOpenLessonPlanForm}
+                    disabled={!canDownloadLessonPlan}
+                    className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-slate-100 disabled:opacity-60"
+                  >
+                    Download Lesson Plan
+                  </button>
+                )}
                 <button onClick={handleDownloadStructure}
                   className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-slate-100">
                   Download Structure
@@ -921,9 +1139,59 @@ export default function LibraryPage() {
             </div>
 
             {/* Modal body */}
-            <div className="max-h-[70vh] overflow-auto p-4">
+           <div className="max-h-[70vh] overflow-auto p-4">
               {isLoadingLessonContent ? (
                 <LessonSkeleton />
+              ) : active.type === "slides" ? (
+                (() => {
+                  const raw =
+  activeWithPayload?.result_json ??
+  (activeWithPayload as any)?.content ??
+  active.result_json ??
+  (active as any).content ??
+  null;
+                 const candidate =
+  raw?.deck ??
+  raw?.data?.deck ??
+  raw;
+
+const slideDeck = {
+  deck_title:
+    candidate?.deck_title ??
+    candidate?.meta?.topic ??
+    active.topic ??
+    "Lesson",
+
+  subject:
+    candidate?.subject ??
+    candidate?.meta?.subject ??
+    active.subject ??
+    "",
+
+  grade:
+    candidate?.grade ??
+    candidate?.meta?.grade ??
+    active.grade ??
+    "",
+
+  bloom_level:
+    candidate?.bloom_level ??
+    candidate?.meta?.bloom ??
+    "",
+
+  slides:
+    candidate?.slides ??
+    [],
+};
+                  if (!Array.isArray(slideDeck.slides) || slideDeck.slides.length === 0) {
+                    return (
+                      <div className="p-6 text-center text-sm text-[var(--text-secondary)]">
+                        Slide deck content could not be loaded.
+                      </div>
+                    );
+                  }
+                  return <SlideViewer deck={slideDeck as any} />;
+                })()
               ) : resolvedLessonContent ? (
                 <LessonPreview
                   gen={resolvedLessonContent}
@@ -953,6 +1221,78 @@ export default function LibraryPage() {
                 Done
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {lessonPlanFormOpen && active && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-[var(--card)] p-5 shadow-2xl">
+            <div className="mb-4">
+              <div className="text-lg font-bold text-[var(--text-primary)]">
+                Download Lesson Plan
+              </div>
+              <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                Add the school submission details for this PDF.
+              </div>
+            </div>
+
+            <form onSubmit={handleDownloadLessonPlanPdf} className="space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">
+                  Teacher full name
+                </label>
+                <input
+                  value={pdfTeacherName}
+                  onChange={(e) => setPdfTeacherName(e.target.value)}
+                  required
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-violet-400"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">
+                  School name
+                </label>
+                <input
+                  value={pdfSchoolName}
+                  onChange={(e) => setPdfSchoolName(e.target.value)}
+                  required
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-violet-400"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">
+                  Date of lesson
+                </label>
+                <input
+                  type="date"
+                  value={pdfLessonDate}
+                  onChange={(e) => setPdfLessonDate(e.target.value)}
+                  required
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-violet-400"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setLessonPlanFormOpen(false)}
+                  disabled={isGeneratingLessonPlanPdf}
+                  className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-slate-100 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isGeneratingLessonPlanPdf}
+                  className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-violet-700 disabled:opacity-60"
+                >
+                  {isGeneratingLessonPlanPdf ? "Preparing..." : "Download PDF"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

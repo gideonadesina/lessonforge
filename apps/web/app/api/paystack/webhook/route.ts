@@ -118,6 +118,8 @@ export async function POST(req: Request) {
         reference: schoolPaymentResult.reference,
         schoolId: schoolPaymentResult.schoolId,
         sharedCreditsAwarded: schoolPaymentResult.sharedCreditsAwarded,
+        previousBalance: schoolPaymentResult.previousBalance,
+        newBalance: schoolPaymentResult.newBalance,
         alreadyProcessed: schoolPaymentResult.alreadyProcessed,
       });
     }
@@ -185,6 +187,8 @@ export async function POST(req: Request) {
       received: true,
       reference,
       creditsAwarded: paymentResult.creditsAwarded,
+      previousBalance: paymentResult.previousBalance,
+      newBalance: paymentResult.newBalance,
       alreadyProcessed: paymentResult.alreadyProcessed,
     });
   } catch (error) {

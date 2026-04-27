@@ -343,14 +343,6 @@ export default function GeneratePage() {
   ]);
 
   async function onGenerate() {
-    if (hasInsufficientCredits) {
-      setShowPaywall(true);
-      setError(
-        `You need at least ${LESSON_PACK_CREDIT_COST} credits to generate one lesson pack.`
-      );
-      return;
-    }
-
     if (!isOnline) {
       setError("You're offline. Reconnect to generate your lesson pack.");
       setLoading(false);
@@ -391,27 +383,60 @@ export default function GeneratePage() {
         }
       }, 5000);
 
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          curriculum: curriculum.trim(),
-          schoolLevel: schoolLevel.trim(),
-          subject: subject.trim(),
-          grade: grade.trim(),
-          age: age.trim(),           // ← NEW
-          topic: topic.trim(),
-          numberOfSlides,
-          durationMins,
-        }),
-      });
+      const requestBody = {
+        curriculum: curriculum.trim(),
+        schoolLevel: schoolLevel.trim(),
+        subject: subject.trim(),
+        grade: grade.trim(),
+        age: age.trim(),
+        topic: topic.trim(),
+        numberOfSlides,
+        durationMins,
+      };
 
+     let res = await fetch("/api/generate", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${session.access_token}`,
+  },
+  body: JSON.stringify(requestBody),
+});
       clearInterval(progressInterval);
 
-      const json = await res.json();
+      let json = await res.json();
+
+      if (!res.ok && res.status === 402 && json?.errorCode === "needs_personal_confirmation") {
+        setLoading(false);
+        setIsGenerating(false);
+        const cost = typeof json.cost === "number" ? json.cost : LESSON_PACK_CREDIT_COST;
+        const personalCreditsAvailable =
+          typeof json.personalCreditsAvailable === "number"
+            ? json.personalCreditsAvailable
+            : "available";
+        const confirmed = window.confirm(
+          `Your school has run out of credits.\n\nUse your personal credits instead?\n\nThis will use ${cost} of your ${personalCreditsAvailable} personal credits.`
+        );
+
+        if (!confirmed) {
+          setGenerationStage("failed");
+          failProgress();
+          throw new Error("Generation cancelled.");
+        }
+
+        setLoading(true);
+        setIsGenerating(true);
+        setGenerationStage("planning");
+        res = await fetch("/api/generate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ ...requestBody, usePersonalCredits: true }),
+        });
+        json = await res.json();
+      }
 
       if (!res.ok) {
         if (res.status === 402) {

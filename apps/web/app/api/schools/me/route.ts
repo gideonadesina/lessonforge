@@ -21,6 +21,12 @@ function supabaseWithToken(token: string) {
   });
 }
 
+function isPrincipalRole(role: string | null | undefined) {
+  return ["principal", "admin", "owner", "school_admin", "headteacher"].includes(
+    String(role ?? "").toLowerCase()
+  );
+}
+
 export async function GET(req: NextRequest) {
   try {
     const token = getBearerToken(req);
@@ -37,22 +43,36 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Unauthorized (invalid token)" }, { status: 401 });
     }
 
-    // 2) Find membership (latest only)
+    // 2) Find membership. Prefer a principal membership over a latest teacher row.
     const { data: memberships, error: memErr } = await supabase
       .from("school_members")
       .select("school_id, role, created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(1);
+      .limit(10);
 
     if (memErr) {
       return NextResponse.json({ ok: false, error: memErr.message }, { status: 500 });
     }
 
-    const member = memberships?.[0] ?? null;
+    const membershipRows = memberships ?? [];
+    const member =
+      membershipRows.find((row) => isPrincipalRole(row.role)) ?? membershipRows[0] ?? null;
+
+    const { data: ownedSchool } = await supabase
+      .from("schools")
+      .select("id, name, code, created_at, shared_credits, credits_used")
+      .eq("created_by", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const effectiveSchoolId = member?.school_id ?? ownedSchool?.id ?? null;
+    const effectiveRole = member?.role ?? (ownedSchool?.id ? "principal" : null);
+    const joinedAt = member?.created_at ?? ownedSchool?.created_at ?? null;
 
     // Not in any school
-    if (!member?.school_id) {
+    if (!effectiveSchoolId) {
       return NextResponse.json(
         {
           ok: true,
@@ -68,11 +88,15 @@ export async function GET(req: NextRequest) {
     }
 
     // 3) Load school
-    const { data: school, error: schoolErr } = await supabase
-      .from("schools")
-      .select("id, name, code, created_at")
-      .eq("id", member.school_id)
-      .single();
+    const schoolResult = ownedSchool?.id === effectiveSchoolId
+      ? { data: ownedSchool, error: null }
+      : await supabase
+          .from("schools")
+          .select("id, name, code, created_at, shared_credits, credits_used")
+          .eq("id", effectiveSchoolId)
+          .single();
+
+    const { data: school, error: schoolErr } = schoolResult;
 
     // If school not accessible (deleted or RLS), still return membership
     if (schoolErr || !school) {
@@ -82,9 +106,9 @@ export async function GET(req: NextRequest) {
           data: {
             user: { id: user.id, email: user.email ?? null },
             membership: {
-              school_id: member.school_id,
-              role: member.role ?? "teacher",
-              joined_at: member.created_at ?? null,
+              school_id: effectiveSchoolId,
+              role: effectiveRole ?? "teacher",
+              joined_at: joinedAt,
             },
             school: null,
             license: null,
@@ -129,15 +153,18 @@ export async function GET(req: NextRequest) {
         data: {
           user: { id: user.id, email: user.email ?? null },
           membership: {
-            school_id: member.school_id,
-            role: member.role ?? "teacher",
-            joined_at: member.created_at ?? null,
+            school_id: effectiveSchoolId,
+            role: effectiveRole ?? "teacher",
+            joined_at: joinedAt,
           },
           school: {
             id: school.id,
             name: school.name ?? null,
             code: (school as any).code ?? null,
             created_at: (school as any).created_at ?? null,
+            shared_credits: Math.max(0, Number((school as any).shared_credits ?? 0)),
+            credits_used: Math.max(0, Number((school as any).credits_used ?? 0)),
+            credits_remaining: Math.max(0, Number((school as any).shared_credits ?? 0)),
           },
           license,
         },

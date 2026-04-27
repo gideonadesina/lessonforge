@@ -58,6 +58,7 @@ export default function PrincipalPage() {
     emptyShown: false,
     lowShown: false,
   });
+  const [schoolCodeCopied, setSchoolCodeCopied] = useState(false);
  
   useEffect(() => {
     void loadDashboard();
@@ -130,6 +131,17 @@ export default function PrincipalPage() {
  
     return nextAlerts;
   }, [dashboard]);
+
+  async function copySchoolCode(code: string) {
+    try {
+      await navigator.clipboard.writeText(code);
+      setSchoolCodeCopied(true);
+      showToast("School code copied.");
+      window.setTimeout(() => setSchoolCodeCopied(false), 2000);
+    } catch {
+      showToast("Could not copy school code.");
+    }
+  }
  
  if (loading) return <div style={{color:"red",fontSize:"24px",padding:"40px"}}>LOADING...</div>;
 if (forbidden) return <div style={{color:"red",fontSize:"24px",padding:"40px"}}>FORBIDDEN</div>;
@@ -204,6 +216,29 @@ if (!dashboard && !onboardingRequired) return <div style={{color:"red",fontSize:
   value={dashboard.overview.weeklyActivityCount}
   subtitle="Last 7 days events"
 />
+          </div>
+
+          <div className="rounded-2xl border border-violet-200 bg-violet-50/70 p-4 shadow-sm dark:border-violet-900/50 dark:bg-violet-900/10">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
+                  Teacher Join Code
+                </div>
+                <div className="mt-1 font-mono text-2xl font-black tracking-wider text-[var(--text-primary)]">
+                  {dashboard.school.code}
+                </div>
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                  Share this with teachers so they can join from the School section.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => copySchoolCode(dashboard.school.code)}
+                className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-violet-700"
+              >
+                {schoolCodeCopied ? "Copied" : "Copy code"}
+              </button>
+            </div>
           </div>
  
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">

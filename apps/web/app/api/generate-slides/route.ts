@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { consumeGenerationCredits, getGenerationCreditAvailability } from "@/lib/credits/server";
+import { consumePersonalCreditsDirectly } from "@/lib/credits/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 60;
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -69,18 +71,19 @@ async function fetchPexelsImage(
   apiKey: string
 ): Promise<{ url: string; photographer: string; alt: string } | null> {
   try {
-    // Clean the query — remove instructional jargon, keep the visual concept
-    const cleanQuery = query
-      .replace(/diagram|illustration|close-?up|showing|depicting|with arrows/gi, "")
-      .replace(/classroom-?safe|classroom-?friendly|educational style/gi, "")
-      .trim()
-      .slice(0, 100); // Pexels works best with short, focused queries
+   const cleanQuery = query
+  .replace(/classroom-?safe|classroom-?friendly|educational style/gi, "")
+  .replace(/\s+/g, " ")
+  .trim()
+  .slice(0, 100);
+
+    if (!cleanQuery) return null;
 
     const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(cleanQuery)}&per_page=5&orientation=landscape&size=large`;
 
     const res = await fetch(url, {
       headers: { Authorization: apiKey },
-      signal: AbortSignal.timeout(5000), // 5s timeout — don't slow down the response
+      signal: AbortSignal.timeout(15000),
     });
 
     if (!res.ok) return null;
@@ -90,11 +93,8 @@ async function fetchPexelsImage(
 
     if (!Array.isArray(photos) || photos.length === 0) return null;
 
-    // Pick from top results with slight randomness for variety
     const pick = photos[Math.floor(Math.random() * Math.min(3, photos.length))];
-
-    const imageUrl =
-      pick?.src?.large2x ?? pick?.src?.large ?? pick?.src?.medium ?? null;
+    const imageUrl = pick?.src?.large2x ?? pick?.src?.large ?? pick?.src?.medium ?? null;
 
     if (!imageUrl) return null;
 
@@ -104,19 +104,45 @@ async function fetchPexelsImage(
       alt: pick?.alt ?? cleanQuery,
     };
   } catch {
-    return null; // never crash the generation if image fetch fails
+    return null;
   }
 }
 
-// Fetch images for all slides in parallel — fast
 async function enrichSlidesWithImages(
   slides: any[],
-  pexelsKey: string
+  pexelsKey: string,
+  subject: string,
+  topic: string
 ): Promise<any[]> {
   const results = await Promise.allSettled(
     slides.map(async (slide) => {
-      const query = slide?.visual_suggestion ?? slide?.title ?? "";
-      if (!query) return slide;
+      const visualType = slide?.visual_type ?? "support";
+      const baseQuery = slide?.visual_suggestion ?? slide?.title ?? topic;
+
+      if (!baseQuery) return slide;
+
+      const s = subject.toLowerCase();
+
+      let context = "classroom education";
+
+      if (s.includes("biology")) context = "biology science diagram";
+      else if (s.includes("physics")) context = "physics science experiment";
+      else if (s.includes("chemistry")) context = "chemistry laboratory science";
+      else if (s.includes("geography")) context = "geography map landscape";
+      else if (s.includes("economics")) context = "economics chart graph market";
+      else if (s.includes("commerce") || s.includes("business")) context = "business market finance";
+      else if (s.includes("math")) context = "mathematics graph equation";
+      else if (s.includes("computer") || s.includes("ict")) context = "computer technology coding";
+      else if (s.includes("agric")) context = "agriculture farming crops";
+      else if (s.includes("literature") || s.includes("english")) context = "books reading literature";
+      else if (s.includes("music")) context = "music instruments classroom";
+      else if (s.includes("art")) context = "art drawing painting classroom";
+      else if (s.includes("civic") || s.includes("government")) context = "community leadership citizenship";
+
+      const query =
+        visualType === "diagram"
+          ? `${topic} ${baseQuery} ${context}`
+          : `${baseQuery} ${context}`;
 
       const image = await fetchPexelsImage(query, pexelsKey);
       if (!image) return slide;
@@ -543,8 +569,7 @@ export async function POST(req: NextRequest) {
         { status: 403 }
       );
     }
-
-    // ── Parse body ────────────────────────────────────────
+// ── Parse body ────────────────────────────────────────
     let body: GenerateSlidesBody;
     try {
       body = (await req.json()) as GenerateSlidesBody;
@@ -563,12 +588,12 @@ export async function POST(req: NextRequest) {
       schoolLevel,
     } = body ?? {};
 
+    // Declare once here — used in both the early credit check and deduction
+    const usePersonalCredits = (body as any)?.usePersonalCredits === true;
+
     if (!topic || !grade || !subject || !duration || !tone || !bloom) {
       return NextResponse.json(
-        {
-          error:
-            "Missing required fields: topic, grade, subject, duration, tone, bloom",
-        },
+        { error: "Missing required fields: topic, grade, subject, duration, tone, bloom" },
         { status: 400 }
       );
     }
@@ -576,34 +601,50 @@ export async function POST(req: NextRequest) {
     const creditAvailability = await getGenerationCreditAvailability(supabase, user.id);
     if (!creditAvailability.ok) {
       return NextResponse.json(
-        {
-          ok: false,
-          error: "credit_check_failed",
-          message: creditAvailability.error,
-          upgrade_url: null,
-        },
+        { ok: false, error: "credit_check_failed", message: creditAvailability.error, upgrade_url: null },
         { status: 500 }
       );
     }
-    if (creditAvailability.creditsRemaining <= 0) {
+
+    if (!usePersonalCredits && creditAvailability.creditsRemaining <= 0) {
       if (creditAvailability.source === "school") {
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .select("credits_balance")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        const personalBalance = Math.max(0, Number((profileData as any)?.credits_balance ?? 0));
+
+        if (personalBalance >= SLIDES_CREDIT_COST) {
+          return NextResponse.json(
+            {
+              ok: false,
+              errorCode: "needs_personal_confirmation",
+              personalCreditsAvailable: personalBalance,
+              message: "Your school has run out of credits.",
+              cost: SLIDES_CREDIT_COST,
+            },
+            { status: 402 }
+          );
+        }
+
         return NextResponse.json(
           {
             ok: false,
             error: "school_out_of_credits",
-            message:
-              "Your school has used all its credits. Your principal has been notified and will add more credits soon.",
+            message: "Your school has used all its credits. Your principal has been notified and will add more credits soon.",
             upgrade_url: null,
           },
           { status: 402 }
         );
       }
+
       return NextResponse.json(
         {
           ok: false,
           error: "out_of_credits",
-          message:
-            "You have used all your credits. Purchase more to continue generating lessons.",
+          message: "You have used all your credits. Purchase more to continue generating lessons.",
           upgrade_url: "/pricing",
         },
         { status: 402 }
@@ -613,25 +654,12 @@ export async function POST(req: NextRequest) {
     // ── Check API keys ────────────────────────────────────
     const openaiKey = process.env.OPENAI_API_KEY;
     if (!openaiKey) {
-      return NextResponse.json(
-        { error: "OPENAI_API_KEY is not configured" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "OPENAI_API_KEY is not configured" }, { status: 500 });
     }
 
-    // Pexels key is optional — if missing, slides return without images
     const pexelsKey = process.env.PEXELS_API_KEY ?? "";
 
-    // ── Build prompt ──────────────────────────────────────
-    const systemPrompt = buildSystemPrompt({
-      grade,
-      bloom,
-      duration,
-      tone,
-      subject,
-      curriculum,
-      schoolLevel,
-    });
+    const systemPrompt = buildSystemPrompt({ grade, bloom, duration, tone, subject, curriculum, schoolLevel });
 
     const messages: ChatMessage[] = [
       { role: "system", content: systemPrompt },
@@ -652,10 +680,6 @@ Make this immediately usable by a real teacher. Every slide must have teacher_no
       },
     ];
 
-    // ── Generate deck with OpenAI ─────────────────────────
-    // IMPORTANT: Credits are deducted AFTER successful generation.
-    // This means a teacher never loses credits on a failed generation.
-
     const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -665,8 +689,8 @@ Make this immediately usable by a real teacher. Every slide must have teacher_no
       body: JSON.stringify({
         model: OPENAI_MODEL,
         max_tokens: OPENAI_MAX_TOKENS,
-        response_format: { type: "json_object" }, // forces valid JSON every time
-        temperature: 0.7, // enough creativity without going off-topic
+        response_format: { type: "json_object" },
+        temperature: 0.7,
         messages,
       }),
     });
@@ -674,11 +698,7 @@ Make this immediately usable by a real teacher. Every slide must have teacher_no
     if (!openaiRes.ok) {
       const errText = await openaiRes.text().catch(() => "");
       return NextResponse.json(
-        {
-          error: "OpenAI request failed",
-          status: openaiRes.status,
-          detail: errText,
-        },
+        { error: "OpenAI request failed", status: openaiRes.status, detail: errText },
         { status: 500 }
       );
     }
@@ -695,99 +715,96 @@ Make this immediately usable by a real teacher. Every slide must have teacher_no
     const rawContent = openaiData.choices?.[0]?.message?.content;
 
     if (!rawContent || typeof rawContent !== "string") {
-      return NextResponse.json(
-        { error: "No content returned from OpenAI" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "No content returned from OpenAI" }, { status: 500 });
     }
 
-    // ── Parse JSON ────────────────────────────────────────
     let deck: unknown;
     try {
       deck = JSON.parse(rawContent);
     } catch (parseErr) {
-      const message =
-        parseErr instanceof Error ? parseErr.message : "Unknown parse error";
+      const message = parseErr instanceof Error ? parseErr.message : "Unknown parse error";
       return NextResponse.json(
         { error: "Failed to parse slide deck JSON", detail: message },
         { status: 500 }
       );
     }
 
-    // ── Validate deck structure ───────────────────────────
     const validation = validateDeck(deck);
     if (!validation.valid) {
       return NextResponse.json(
-        {
-          error: "Generated deck is incomplete. Please try again.",
-          detail: validation.reason,
-        },
+        { error: "Generated deck is incomplete. Please try again.", detail: validation.reason },
         { status: 500 }
       );
     }
 
-    // ── Enrich with real images from Pexels ───────────────
-    // Runs in parallel — all image fetches fire at the same time
-    // If Pexels key is missing or any fetch fails, slide is returned without image (never crashes)
     const deckObj = deck as Record<string, unknown>;
     const rawSlides = deckObj.slides as any[];
 
+   // ── 3. Deduct credits ─────────────────────────────────
+    const deductionResult = usePersonalCredits
+      ? await consumePersonalCreditsDirectly(supabase, user.id, SLIDES_CREDIT_COST)
+      : await consumeGenerationCredits(supabase, user.id, SLIDES_CREDIT_COST);
+
+    if (!deductionResult.ok) {
+      if (deductionResult.errorCode === "needs_personal_confirmation") {
+        return NextResponse.json(
+          {
+            ok: false,
+            errorCode: "needs_personal_confirmation",
+            personalCreditsAvailable: deductionResult.personalCreditsAvailable,
+            message: "Your school has run out of credits.",
+            cost: SLIDES_CREDIT_COST,
+          },
+          { status: 402 }
+        );
+      }
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "credit_deduction_failed",
+          message: deductionResult.error,
+        },
+        { status: 402 }
+      );
+    }
+
+    // ── 4. Fetch Pexels images ────────────────────────────
     const enrichedSlides = pexelsKey
-      ? await enrichSlidesWithImages(rawSlides, pexelsKey)
+      ? await enrichSlidesWithImages(rawSlides, pexelsKey, subject, topic)
       : rawSlides;
 
+    // ── 5. Build final deck ───────────────────────────────
     const finalDeck = {
       ...deckObj,
       slides: enrichedSlides,
-      // Computed summary for the frontend dashboard
       meta: {
-        topic,
-        subject,
-        grade,
-        duration,
-        bloom,
+        topic, subject, grade, duration, bloom,
         curriculum: curriculum ?? null,
         schoolLevel: schoolLevel ?? null,
         total_slides: enrichedSlides.length,
-        total_time_minutes: enrichedSlides.reduce(
-          (sum: number, s: any) => sum + (s?.time_minutes ?? 0),
-          0
-        ),
+        total_time_minutes: enrichedSlides.reduce((sum: number, s: any) => sum + (s?.time_minutes ?? 0), 0),
         has_images: enrichedSlides.some((s: any) => !!s?.image_url),
         generated_at: new Date().toISOString(),
       },
     };
 
-    // ── Deduct credits ONLY after successful generation ───
-    // This is the correct order. Teacher never loses credits on failure.
-    const deductionResult = await consumeGenerationCredits(supabase, user.id, SLIDES_CREDIT_COST);
-    if (!deductionResult.ok) {
-      console.error("[generate-slides] Credit deduction failed after successful generation:", {
-        userId: user.id,
-        errorCode: deductionResult.errorCode,
-        error: deductionResult.error,
-      });
-    }
-
-    // ── Save deck to library ──────────────────────────────────
-    const { error: saveErr } = await supabase
-      .from("lessons")
-      .insert({
-        subject,
-        topic,
-        grade,
-        curriculum: curriculum ?? null,
-        result_json: finalDeck,
-        type: "slides",
-      });
+    // ── Save to library ───────────────────────────────────
+   const { error: saveErr } = await supabase.from("lessons").insert({
+      user_id: user.id,
+      subject,
+      topic,
+      grade,
+      curriculum: curriculum ?? null,
+      result_json: finalDeck,
+      type: "slides",
+    });
 
     if (saveErr) {
       console.error("[generate-slides] Failed to save to library:", saveErr.message);
     }
 
-// ── Return enriched deck ──────────────────────────────────
     return NextResponse.json({ deck: finalDeck, saved: !saveErr });
-
 
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown server error";

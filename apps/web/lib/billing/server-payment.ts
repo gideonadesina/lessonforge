@@ -314,6 +314,27 @@ export async function grantCreditsForPayment(
   const creditsAwarded = getPlanCredits(plan);
   const now = new Date().toISOString();
 
+  const { data: claimed, error: claimError } = await admin
+    .from("teacher_payment_transactions")
+    .update({
+      processed: true,
+      processed_at: now,
+      updated_at: now,
+    })
+    .eq("reference", reference)
+    .eq("user_id", userId)
+    .eq("processed", false)
+    .select("reference")
+    .maybeSingle();
+
+  if (claimError) {
+    throw new Error(`Failed to claim payment for processing: ${claimError.message}`);
+  }
+
+  if (!claimed) {
+    throw new Error("Payment has already been processed or is processing");
+  }
+
   const { previousBalance, newBalance } = await incrementCreditsAtomic(
     userId,
     creditsAwarded
@@ -323,8 +344,12 @@ export async function grantCreditsForPayment(
     .from("teacher_payment_transactions")
     .update({
       processed: true,
-      processed_at: now,
       credits_awarded_at: now,
+      result_snapshot: {
+        creditsAwarded,
+        previousBalance,
+        newBalance,
+      },
       updated_at: now,
     })
     .eq("reference", reference)
@@ -367,13 +392,24 @@ export async function processTeacherPayment(
 
     if (!transactionRecord.isNew && transactionRecord.alreadyProcessed) {
       const admin = createAdminClient();
-      const { data: profile } = await admin
+      const [{ data: profile }, { data: transaction }] = await Promise.all([
+        admin
         .from("profiles")
         .select("credits_balance")
         .eq("id", input.userId)
-        .maybeSingle();
+          .maybeSingle(),
+        admin
+          .from("teacher_payment_transactions")
+          .select("result_snapshot")
+          .eq("reference", input.reference)
+          .maybeSingle(),
+      ]);
 
       const newBalance = Number(profile?.credits_balance ?? 0);
+      const snapshot = transaction?.result_snapshot as
+        | { previousBalance?: number; newBalance?: number }
+        | null
+        | undefined;
 
       return {
         ok: true,
@@ -381,8 +417,12 @@ export async function processTeacherPayment(
         userId: input.userId,
         plan: input.plan,
         creditsAwarded: transactionRecord.creditsAwarded,
-        previousBalance: Math.max(0, newBalance - transactionRecord.creditsAwarded),
-        newBalance,
+        previousBalance:
+          typeof snapshot?.previousBalance === "number"
+            ? snapshot.previousBalance
+            : Math.max(0, newBalance - transactionRecord.creditsAwarded),
+        newBalance:
+          typeof snapshot?.newBalance === "number" ? snapshot.newBalance : newBalance,
         alreadyProcessed: true,
       };
     }
@@ -406,6 +446,47 @@ export async function processTeacherPayment(
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Payment processing failed";
+    if (message.includes("already been processed or is processing")) {
+      const admin = createAdminClient();
+      const [{ data: profile }, { data: transaction }] = await Promise.all([
+        admin
+          .from("profiles")
+          .select("credits_balance")
+          .eq("id", input.userId)
+          .maybeSingle(),
+        admin
+          .from("teacher_payment_transactions")
+          .select("credits_awarded, result_snapshot")
+          .eq("reference", input.reference)
+          .maybeSingle(),
+      ]);
+      const creditsAwarded = Number(
+        transaction?.credits_awarded ?? getPlanCredits(input.plan)
+      );
+      const currentBalance = Math.max(0, Number(profile?.credits_balance ?? 0));
+      const snapshot = transaction?.result_snapshot as
+        | { previousBalance?: number; newBalance?: number }
+        | null
+        | undefined;
+
+      return {
+        ok: true,
+        reference: input.reference,
+        userId: input.userId,
+        plan: input.plan,
+        creditsAwarded,
+        previousBalance:
+          typeof snapshot?.previousBalance === "number"
+            ? snapshot.previousBalance
+            : Math.max(0, currentBalance - creditsAwarded),
+        newBalance:
+          typeof snapshot?.newBalance === "number"
+            ? snapshot.newBalance
+            : currentBalance,
+        alreadyProcessed: true,
+      };
+    }
+
     return {
       ok: false,
       reference: input.reference,

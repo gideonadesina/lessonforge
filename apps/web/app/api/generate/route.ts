@@ -1,11 +1,16 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { consumeGenerationCredits, getGenerationCreditAvailability } from "@/lib/credits/server";
+import {
+  consumeGenerationCredits,
+  consumePersonalCreditsDirectly,
+  getGenerationCreditAvailability,
+} from "@/lib/credits/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 60;
 
 export type ExamAlignment = "None" | "WAEC" | "NECO";
 export type SchoolLevel = "EYFS" | "Primary" | "Secondary";
@@ -38,6 +43,7 @@ export type GeneratePayload = {
   numberOfSlides?: number;
   durationMins?: number;
   user_id?: string;
+  usePersonalCredits?: boolean;
 };
 
 export type VocabularyItem = {
@@ -1362,149 +1368,52 @@ Return VALID JSON only.
 }
 
 async function generateSlideImage(
-  client: OpenAI,
   params: {
-    subject: string;
-    topic: string;
+    subject?: string;
+    topic?: string;
     schoolLevel?: string;
     curriculum?: string;
     examAlignment?: string;
     slideTitle?: string;
     imageQuery?: string;
-  }
+  },
+  pexelsKey: string
 ): Promise<string | null> {
   try {
-    const prompt = `
-Create a clean educational illustration for a lesson slide.
+    if (!pexelsKey) return null;
 
-Subject: ${params.subject}
-Topic: ${params.topic}
-School Level: ${params.schoolLevel ?? "Secondary"}
-Curriculum: ${params.curriculum ?? "Nigerian Curriculum"}
-Exam Alignment: ${params.examAlignment ?? "None"}
-Slide Title: ${params.slideTitle ?? ""}
-Image Focus: ${params.imageQuery ?? params.topic}
+    // Build a focused search query from the most specific info available
+    const raw = params.imageQuery || params.slideTitle || params.topic || "";
 
-Requirements:
-Create a high-quality educational image strictly based on the exact lesson concept, topic, subject, and school level provided.
+    // Clean up instructional jargon that confuses stock photo search
+    const query = raw
+      .replace(/diagram|illustration|labeled|annotated|showing|depicting|with arrows|close-?up/gi, "")
+      .replace(/classroom-?safe|educational style|textbook/gi, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 80);
 
-The image must actively teach the concept, not merely decorate it.
+    if (!query) return null;
 
-STRICT STYLE CONSTRAINTS:
-- The image must NOT appear cartoonish, childish, playful, entertainment-style, exaggerated, or heavily stylized.
-- The image must resemble a textbook diagram, classroom teaching aid, scientific illustration, academic concept visual, or professional educational poster.
-- If the output looks decorative, cartoon-like, or unserious, it is incorrect.
+    const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=5&orientation=landscape&size=large`;
 
-CORE EDUCATIONAL GOAL:
-- The image must clearly improve understanding of the lesson.
-- It must visually explain the concept in a way that supports teaching and learning.
-- Prioritize educational clarity, concept accuracy, and instructional value over artistic beauty.
-- Avoid vague, generic, or decorative visuals.
-
-CONTENT ACCURACY:
-- The image must be strictly relevant to the exact lesson concept.
-- Avoid irrelevant objects, unrelated backgrounds, unnecessary decoration, or distracting elements.
-- Only include people if they are directly necessary to explain the concept.
-- Avoid random human figures or stock-photo style scenes unless a real-life scene is truly the best educational choice.
-
-IMAGE FORMAT PREFERENCE:
-Choose the most educationally effective image format for the topic, such as:
-- labeled diagram
-- annotated concept illustration
-- process visual
-- apparatus or specimen visual
-- realistic subject illustration
-- structured academic scene
-
-Do NOT generate an image that is merely attractive. Generate one that actively teaches.
-
-LABELING AND INSTRUCTIONAL DESIGN:
-- For science, biology, chemistry, physics, geography, technology, mathematics, business, economics, accounting, and other concept-heavy subjects, prefer labeled educational diagrams over decorative illustrations.
-- Include labels when they improve understanding, such as:
-  - names of parts
-  - arrows pointing to structures
-  - short concept markers
-  - stage indicators
-  - simple section names
-  - logical callouts
-- If the concept has structures, parts, stages, formulas, relationships, functions, tools, or processes, visually show them clearly.
-- Labels must be accurate, readable, well-placed, concise, and educationally meaningful.
-- Do not use long paragraphs inside the image.
-- If the image explains a process, show the flow clearly using arrows, sequence markers, or short step annotations.
-
-TEXT INSIDE IMAGE:
-- Only include text when it directly improves learning.
-- Allowed text includes:
-  - labels
-  - part names
-  - arrows
-  - short process markers
-  - short educational callouts
-- Do not include unrelated text, decorative text, long explanations, or unnecessary writing.
-
-RENDERING STYLE:
-- Use clean, precise lines and clear visual structure.
-- Use realistic proportions where applicable.
-- Use balanced, minimal, and academic color usage.
-- Prefer neutral, natural, or educational tones rather than playful palettes.
-- For real-world scenes, use realistic lighting and textures.
-- For diagrams, use clean and flat academic rendering.
-- Avoid glossy cartoon rendering, 3D animated style, Pixar-like style, comic-book style, or playful children’s illustration style.
-
-COMPOSITION AND LAYOUT:
-- Keep the main subject clear and central.
-- Ensure good spacing between key elements.
-- Avoid clutter.
-- Maintain strong focus on the lesson concept.
-- Make the image presentation-ready for classroom teaching, slides, worksheets, notes, and school materials.
-
-SCHOOL-LEVEL STYLE GUIDANCE:
-- If School Level is EYFS / Nursery:
-  Use simple, clean, realistic educational visuals with clear subject focus.
-  Avoid cartoon style, playful illustration, exaggerated features, or childish design.
-  Use real-world objects, realistic representations, natural proportions, and professional educational clarity.
-  Keep the composition simple and easy to understand, but still serious and classroom-appropriate.
-
-- If School Level is Primary:
-  Use clear, structured, slightly simplified realistic educational visuals.
-  Keep the image easy for children to understand, but avoid cartoon, decorative, or unserious styles.
-  Maintain neat composition and academic clarity.
-
-- If School Level is Secondary:
-  Use mature, realistic, textbook-quality diagrams, academic illustrations, or structured concept visuals.
-  Include richer labels, clearer annotations, and more detailed instructional support where helpful.
-
-QUALITY AND USABILITY RULES:
-- The image must be classroom-safe, education-focused, and genuinely useful for teaching.
-- The image must look intentional, clear, and presentation-ready.
-- The image must support lesson understanding, not just visual appeal.
-- No watermarks.
-- No unrelated text.
-- No irrelevant decorative background.
-- No random people.
-- No childish design.
-- No cartoon style.
-- No entertainment-style illustration.
-
-FINAL STANDARD:
-The final image should feel like something a teacher would confidently use in class, include in a worksheet, add to a lesson note, or present in a professional school slide.
-
-If the image does not clearly teach the concept, then it is not acceptable.
-`.trim();
-
-    const imageResp = await client.images.generate({
-      model: "gpt-image-1",
-      prompt,
-      size: "1536x1024",
-      quality: "medium",
+    const res = await fetch(url, {
+      headers: { Authorization: pexelsKey },
+      signal: AbortSignal.timeout(8000),
     });
 
-    const b64 = imageResp?.data?.[0]?.b64_json;
-    if (!b64 || typeof b64 !== "string") return null;
+    if (!res.ok) return null;
 
-    return `data:image/png;base64,${b64}`;
-  } catch (error) {
-    console.error("❌ OpenAI image generation failed:", error);
+    const data = await res.json();
+    const photos = data?.photos;
+
+    if (!Array.isArray(photos) || photos.length === 0) return null;
+
+    // Pick from top 3 results with slight randomness for variety
+    const pick = photos[Math.floor(Math.random() * Math.min(3, photos.length))];
+    return pick?.src?.large2x ?? pick?.src?.large ?? pick?.src?.medium ?? null;
+
+  } catch {
     return null;
   }
 }
@@ -1726,7 +1635,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const creditAvailability = await getGenerationCreditAvailability(supabase, user.id);
+    const usePersonalCredits = body.usePersonalCredits === true;
+
+   const creditAvailability = await getGenerationCreditAvailability(supabase, user.id);
     if (!creditAvailability.ok) {
       return NextResponse.json(
         {
@@ -1738,8 +1649,34 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
-    if (creditAvailability.creditsRemaining <= 0) {
+
+    // ── 1. Check credits available ────────────────────────
+    if (!usePersonalCredits && creditAvailability.creditsRemaining <= 0) {
       if (creditAvailability.source === "school") {
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .select("credits_balance")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        const personalBalance = Math.max(
+          0,
+          Number((profileData as any)?.credits_balance ?? 0)
+        );
+
+        if (personalBalance >= 4) {
+          return NextResponse.json(
+            {
+              ok: false,
+              errorCode: "needs_personal_confirmation",
+              personalCreditsAvailable: personalBalance,
+              message: "Your school has run out of credits.",
+              cost: 4,
+            },
+            { status: 402 }
+          );
+        }
+
         return NextResponse.json(
           {
             ok: false,
@@ -1751,6 +1688,7 @@ export async function POST(req: NextRequest) {
           { status: 402 }
         );
       }
+
       return NextResponse.json(
         {
           ok: false,
@@ -1770,6 +1708,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (req.signal?.aborted) {
+      return NextResponse.json(
+        { error: "Request cancelled" },
+        { status: 499 }
+      );
+    }
+
+    const pexelsKey = process.env.PEXELS_API_KEY ?? "";
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
     console.log("🎯 Generating lesson for:", {
@@ -1783,6 +1729,7 @@ export async function POST(req: NextRequest) {
       durationMins: clampNumber(body.durationMins, 10, 180, 40),
     });
 
+    // ── 2. Run OpenAI generation ──────────────────────────
     const resp = await client.responses.create({
       model: "gpt-4.1-mini",
       input: [
@@ -1803,72 +1750,99 @@ export async function POST(req: NextRequest) {
 
     const raw = resp.output_text ?? "";
 
+    // ── 3. If OpenAI fails → return error, NO credits deducted ──
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
     } catch {
       console.error("❌ BAD JSON FROM MODEL:", raw);
       return NextResponse.json(
-        { error: "Model returned invalid JSON" },
+        { error: "Model returned invalid JSON — no credits deducted. Please try again." },
         { status: 502 }
       );
     }
 
     const data = normalizeGeneratedData(parsed, body);
 
-   if (Array.isArray(data.slides) && data.slides.length > 0) {
-  const imageResults = await Promise.allSettled(
-    data.slides.map((slide) =>
-      generateSlideImage(client, {
-        subject: body.subject,
-        topic: body.topic,
-        schoolLevel: body.schoolLevel,
-        curriculum: body.curriculum,
-        examAlignment: body.examAlignment,
-        slideTitle: slide.title,
-        imageQuery: slide.imageQuery || slide.title || body.topic,
-      })
-    )
-  );
+    // ── 4. OpenAI succeeded → deduct credits ─────────────
+    const deductionResult = usePersonalCredits
+      ? await consumePersonalCreditsDirectly(supabase, user.id, 4)
+      : await consumeGenerationCredits(supabase, user.id, 4);
 
-  data.slides.forEach((slide, i) => {
-    const result = imageResults[i];
-    slide.image =
-      result.status === "fulfilled" && result.value
-        ? result.value
-        : FALLBACK_IMG;
-  });
-}
-
-    const { error: saveErr } = await supabase.from("lessons").insert({
-  subject: body.subject,
-  topic: body.topic,
-  grade: body.grade,
-  curriculum: body.curriculum ?? null,
-  result_json: data,
-  type: "lesson",
-});
-
-    const deductionResult = await consumeGenerationCredits(supabase, user.id, 4);
     if (!deductionResult.ok) {
-      console.error("[generate] Credit deduction failed after successful generation:", {
-        userId: user.id,
-        errorCode: deductionResult.errorCode,
-        error: deductionResult.error,
+      if (deductionResult.errorCode === "needs_personal_confirmation") {
+        return NextResponse.json(
+          {
+            ok: false,
+            errorCode: "needs_personal_confirmation",
+            personalCreditsAvailable: deductionResult.personalCreditsAvailable,
+            message: "Your school has run out of credits.",
+            cost: 4,
+          },
+          { status: 402 }
+        );
+      }
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "credit_deduction_failed",
+          message: deductionResult.error,
+        },
+        { status: 402 }
+      );
+    }
+
+    // ── 5. Fetch Pexels images in parallel ────────────────
+    if (Array.isArray(data.slides) && data.slides.length > 0) {
+      const imageResults = await Promise.allSettled(
+        data.slides.map((slide) =>
+          generateSlideImage(
+            {
+              subject: body.subject,
+              topic: body.topic,
+              schoolLevel: body.schoolLevel,
+              curriculum: body.curriculum,
+              examAlignment: body.examAlignment,
+              slideTitle: slide.title,
+              imageQuery: slide.imageQuery || slide.title || body.topic,
+            },
+            pexelsKey
+          )
+        )
+      );
+
+      data.slides.forEach((slide, i) => {
+        const result = imageResults[i];
+        slide.image =
+          result.status === "fulfilled" && result.value
+            ? result.value
+            : FALLBACK_IMG;
       });
     }
+
+    // ── 6. Save to library ────────────────────────────────
+    const { error: saveErr } = await supabase.from("lessons").insert({
+      user_id: user.id,
+      subject: body.subject,
+      topic: body.topic,
+      grade: body.grade,
+      curriculum: body.curriculum ?? null,
+      result_json: data,
+      type: "lesson",
+    });
 
     if (saveErr) {
       console.error("[generate] Failed to save to library:", saveErr.message);
     }
 
+    // ── 7. Return ─────────────────────────────────────────
     return NextResponse.json({ data, saved: !saveErr }, { status: 200 });
+
   } catch (err: unknown) {
     const message =
       err instanceof Error ? err.message : typeof err === "string" ? err : "Unknown error";
-
     console.error("❌ Generation error:", err);
-
     return NextResponse.json(
       { error: "Generation failed", message },
       { status: 500 }

@@ -10,6 +10,8 @@ type SchoolData = {
   name: string | null;
   code: string | null;
   created_at: string | null;
+  shared_credits?: number | null;
+  credits_remaining?: number | null;
 };
 
 type MembershipData = {
@@ -36,6 +38,14 @@ type JoinedSchool = {
   name: string | null;
   code: string | null;
 };
+
+function formatSchoolRole(role: string | null | undefined) {
+  const normalized = String(role ?? "teacher").toLowerCase();
+  if (["principal", "admin", "owner", "school_admin", "headteacher"].includes(normalized)) {
+    return "Principal";
+  }
+  return "Teacher / Member";
+}
 
 function SchoolIcon() {
   return (
@@ -189,6 +199,10 @@ export default function SchoolPage() {
     const license = meData.license;
     const seatsTotal = license?.seats_total ?? null;
     const seatsUsed = license?.seats_used ?? null;
+    const creditsRemaining = Math.max(
+      0,
+      Number(school.credits_remaining ?? school.shared_credits ?? 0)
+    );
 
     return (
       <div className="mx-auto max-w-[480px] px-4 py-8">
@@ -198,11 +212,14 @@ export default function SchoolPage() {
               <SchoolIcon />
             </div>
             <div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#534AB7]">
+                School Mode
+              </div>
               <h1 className="text-[18px] font-medium text-slate-900">
                 {school.name ?? "Your school"}
               </h1>
               <span className="inline-flex items-center rounded-full bg-[#EEEDFE] px-3 py-0.5 text-[11px] font-medium text-[#3C3489]">
-                School plan
+                Using school credits
               </span>
             </div>
           </div>
@@ -212,21 +229,21 @@ export default function SchoolPage() {
               School credits
             </div>
             <div className="text-[22px] font-medium text-slate-900">
-              Managed by your principal
+              {creditsRemaining}
             </div>
             <div className="mt-1 text-[12px] text-slate-500">
-              Credits are shared across your school
+              remaining shared credits
             </div>
             <div className="mt-0.5 text-[12px] text-slate-500">
-              Your principal manages billing and credits
+              Lesson Pack: 4 · Lesson Slides: 2 · Worksheets/Exams: 1
             </div>
           </div>
 
           <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
             <div className="flex items-center justify-between px-4 py-3">
               <span className="text-[13px] text-slate-600">Your role</span>
-              <span className="text-[13px] font-medium capitalize text-slate-900">
-                {membership?.role ?? "Teacher"}
+              <span className="text-[13px] font-medium text-slate-900">
+                {formatSchoolRole(membership?.role)}
               </span>
             </div>
             {seatsTotal !== null ? (
@@ -286,6 +303,7 @@ export default function SchoolPage() {
         <SchoolCodeInput
           onJoined={(data) => {
             setJustJoined(data.school);
+            void loadMe();
           }}
         />
 

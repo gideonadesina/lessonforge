@@ -56,6 +56,8 @@ export interface ProcessSchoolPaymentResult {
   plan: SchoolPlanId;
   sharedCreditsAwarded: number;
   teacherLimitAwarded: number;
+  previousBalance: number;
+  newBalance: number;
   alreadyProcessed: boolean;
   error?: string;
 }
@@ -226,7 +228,7 @@ export async function recordSchoolPaymentTransaction(
 
 async function updateSchoolCreditsAtomic(
   schoolId: string,
-  creditsToSet: number,
+  creditsToAdd: number,
   maxAttempts: number = 3
 ): Promise<{ previousBalance: number; newBalance: number }> {
   const admin = createAdminClient();
@@ -247,7 +249,7 @@ async function updateSchoolCreditsAtomic(
       throw new Error("Invalid current school credits balance");
     }
 
-    const newBalance = creditsToSet;
+    const newBalance = previousBalance + creditsToAdd;
 
     const { data: updated, error: updateError } = await admin
       .from("schools")
@@ -355,6 +357,8 @@ async function markSchoolPaymentProcessed(
   snapshot: {
     sharedCreditsAwarded: number;
     teacherLimitAwarded: number;
+    previousBalance: number;
+    newBalance: number;
     schoolCode: string;
   }
 ) {
@@ -365,7 +369,6 @@ async function markSchoolPaymentProcessed(
     .from("school_payment_transactions")
     .update({
       processed: true,
-      processed_at: now,
       shared_credits_awarded_at: now,
       result_snapshot: snapshot,
       updated_at: now,
@@ -376,6 +379,31 @@ async function markSchoolPaymentProcessed(
     throw new Error(`Failed to mark school payment processed: ${error.message}`);
   }
 
+}
+
+async function claimSchoolPaymentForProcessing(reference: string) {
+  const admin = createAdminClient();
+  const now = new Date().toISOString();
+
+  const { data, error } = await admin
+    .from("school_payment_transactions")
+    .update({
+      processed: true,
+      processed_at: now,
+      updated_at: now,
+    })
+    .eq("reference", reference)
+    .eq("processed", false)
+    .select("reference")
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to claim school payment for processing: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("School payment has already been processed or is processing");
+  }
 }
 
 /**
@@ -397,6 +425,8 @@ export async function processSchoolPayment(
       plan: "school_starter",
       sharedCreditsAwarded: 0,
       teacherLimitAwarded: 0,
+      previousBalance: 0,
+      newBalance: 0,
       alreadyProcessed: false,
       error: normalized.error,
     };
@@ -409,6 +439,25 @@ export async function processSchoolPayment(
     const transaction = await recordSchoolPaymentTransaction(input);
 
     if (!transaction.isNew && transaction.alreadyProcessed) {
+      const admin = createAdminClient();
+      const [{ data: school }, { data: existingTransaction }] = await Promise.all([
+        admin
+          .from("schools")
+          .select("shared_credits")
+          .eq("id", input.schoolId)
+          .maybeSingle(),
+        admin
+          .from("school_payment_transactions")
+          .select("result_snapshot")
+          .eq("reference", input.reference)
+          .maybeSingle(),
+      ]);
+      const currentBalance = Math.max(0, Number(school?.shared_credits ?? 0));
+      const snapshot = existingTransaction?.result_snapshot as
+        | { previousBalance?: number; newBalance?: number }
+        | null
+        | undefined;
+
       // Already processed, return success without double-crediting
       return {
         ok: true,
@@ -417,6 +466,14 @@ export async function processSchoolPayment(
         plan: input.plan,
         sharedCreditsAwarded: transaction.sharedCreditsAwarded,
         teacherLimitAwarded: transaction.teacherLimitAwarded,
+        previousBalance:
+          typeof snapshot?.previousBalance === "number"
+            ? snapshot.previousBalance
+            : Math.max(0, currentBalance - transaction.sharedCreditsAwarded),
+        newBalance:
+          typeof snapshot?.newBalance === "number"
+            ? snapshot.newBalance
+            : currentBalance,
         alreadyProcessed: true,
       };
     }
@@ -426,8 +483,10 @@ export async function processSchoolPayment(
       throw new Error("Unable to resolve school plan pricing");
     }
 
-    // Assign credits to current purchase entitlement (no expiry)
-    await assignSchoolCreditsForPayment(
+    await claimSchoolPaymentForProcessing(input.reference);
+
+    // Add credits to current purchase entitlement (no expiry)
+    const balanceResult = await assignSchoolCreditsForPayment(
       input.schoolId,
       planPricing.sharedCredits
     );
@@ -440,8 +499,6 @@ export async function processSchoolPayment(
       .from("schools")
       .update({
         plan_type: input.plan,
-        shared_credits: planPricing.sharedCredits,
-        credits_used: 0,
         subscription_active: true,
         teacher_limit: planPricing.teacherLimit,
         updated_at: now,
@@ -458,6 +515,8 @@ export async function processSchoolPayment(
       {
         sharedCreditsAwarded: planPricing.sharedCredits,
         teacherLimitAwarded: planPricing.teacherLimit,
+        previousBalance: balanceResult.previousBalance,
+        newBalance: balanceResult.newBalance,
         schoolCode,
       }
     );
@@ -469,6 +528,8 @@ export async function processSchoolPayment(
       plan: input.plan,
       sharedCreditsAwarded: planPricing.sharedCredits,
       teacherLimitAwarded: planPricing.teacherLimit,
+      previousBalance: balanceResult.previousBalance,
+      newBalance: balanceResult.newBalance,
       alreadyProcessed: false,
     };
   } catch (error) {
@@ -478,6 +539,56 @@ export async function processSchoolPayment(
     const fallback = normalizeInput(payload);
     const fallbackInput = fallback.ok ? fallback.input : null;
 
+    if (
+      fallbackInput &&
+      message.includes("already been processed or is processing")
+    ) {
+      const admin = createAdminClient();
+      const [{ data: school }, { data: transaction }] = await Promise.all([
+        admin
+          .from("schools")
+          .select("shared_credits")
+          .eq("id", fallbackInput.schoolId)
+          .maybeSingle(),
+        admin
+          .from("school_payment_transactions")
+          .select("shared_credits_awarded, teacher_limit_awarded, result_snapshot")
+          .eq("reference", fallbackInput.reference)
+          .maybeSingle(),
+      ]);
+      const sharedCreditsAwarded = Number(
+        transaction?.shared_credits_awarded ??
+          getSchoolPlanSharedCredits(fallbackInput.plan)
+      );
+      const teacherLimitAwarded = Number(
+        transaction?.teacher_limit_awarded ??
+          getSchoolPlanTeacherLimit(fallbackInput.plan)
+      );
+      const currentBalance = Math.max(0, Number(school?.shared_credits ?? 0));
+      const snapshot = transaction?.result_snapshot as
+        | { previousBalance?: number; newBalance?: number }
+        | null
+        | undefined;
+
+      return {
+        ok: true,
+        reference: fallbackInput.reference,
+        schoolId: fallbackInput.schoolId,
+        plan: fallbackInput.plan,
+        sharedCreditsAwarded,
+        teacherLimitAwarded,
+        previousBalance:
+          typeof snapshot?.previousBalance === "number"
+            ? snapshot.previousBalance
+            : Math.max(0, currentBalance - sharedCreditsAwarded),
+        newBalance:
+          typeof snapshot?.newBalance === "number"
+            ? snapshot.newBalance
+            : currentBalance,
+        alreadyProcessed: true,
+      };
+    }
+
     return {
       ok: false,
       reference: fallbackInput?.reference ?? "",
@@ -485,6 +596,8 @@ export async function processSchoolPayment(
       plan: fallbackInput?.plan ?? "school_starter",
       sharedCreditsAwarded: 0,
       teacherLimitAwarded: 0,
+      previousBalance: 0,
+      newBalance: 0,
       alreadyProcessed: false,
       error: message,
     };
