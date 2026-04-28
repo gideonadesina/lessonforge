@@ -840,8 +840,11 @@ export default function LibraryPage() {
   }, []);
 
   const handleDownloadStructure = useCallback(() => {
-    handleDownloadLessonStructureFromRow(active);
-  }, [active]);
+    const row: LessonRow | null = activeWithPayload
+      ? { ...(activeWithPayload as any), type: active?.type ?? null }
+      : active;
+    handleDownloadLessonStructureFromRow(row);
+  }, [active, activeWithPayload]);
 
   const handleOpenLessonPlanForm = useCallback(() => {
     if (!canDownloadLessonPlan) return;

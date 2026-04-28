@@ -67,7 +67,7 @@ type PexelsResponse = {
 // ─────────────────────────────────────────────────────────────
 
 function compressPexelsQuery(input?: string | null, topic?: string, subject?: string) {
-  const raw = `${input || ""} ${topic || ""} ${subject || ""}`.toLowerCase();
+  const raw = (input || "").toLowerCase();
 
   const removeWords = new Set([
     "clear","colorful","beautiful","detailed","simple","clean",
@@ -83,7 +83,7 @@ function compressPexelsQuery(input?: string | null, topic?: string, subject?: st
     .filter(Boolean)
     .filter(w => !removeWords.has(w));
 
-  const words = cleanedWords.slice(0, 5);
+  const words = cleanedWords.slice(0, 3);
 
   return words.join(" ") || topic || subject || "classroom";
 }
