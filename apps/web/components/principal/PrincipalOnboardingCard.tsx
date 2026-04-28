@@ -46,7 +46,7 @@ export default function PrincipalOnboardingCard({ getToken, onCompleted, setPare
         },
         body: JSON.stringify({
           plan: planId,
-          callbackPath: "/billing/success?type=school",
+          callbackPath: "/payment/success?type=school",
           schoolName: schoolName.trim() || undefined,
         }),
       });

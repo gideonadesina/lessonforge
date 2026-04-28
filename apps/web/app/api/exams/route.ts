@@ -398,8 +398,8 @@ export async function POST(req: NextRequest) {
       });
 
       const examId =
-        typeof (saved as { id?: unknown }).id === "string"
-          ? (saved as { id: string }).id
+       typeof (saved as unknown as { id?: unknown }).id === "string"
+  ? (saved as unknown as { id: string }).id
           : null;
       if (examId) {
         await supabase

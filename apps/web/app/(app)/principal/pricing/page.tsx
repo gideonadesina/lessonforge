@@ -60,7 +60,7 @@ export default function PrincipalPricingPage() {
         throw new Error(json?.error || "Failed to verify school payment");
       }
 
-      window.location.href = `/billing/success?type=school&reference=${encodeURIComponent(reference)}`;
+      window.location.href = `/payment/success?type=school&reference=${encodeURIComponent(reference)}`;
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "School payment verification failed";

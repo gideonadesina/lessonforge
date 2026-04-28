@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
         email: context.user.email,
         amount: amountMinor,
         currency: "NGN",
-        callback_url: appUrl("/billing/success?type=school"),
+        callback_url: appUrl("/payment/success?type=school"),
         metadata: {
           payment_purpose: "school",
           user_id: context.user.id,

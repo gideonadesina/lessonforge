@@ -66,7 +66,7 @@ export async function POST(req: Request) {
         email: user.email,
         amount: amountMinor,
         currency,
-        callback_url: appUrl("/billing/success"),
+        callback_url: appUrl("/payment/success"),
         metadata: {
           purpose: "teacher_plan_purchase",
           user_id: user.id,
