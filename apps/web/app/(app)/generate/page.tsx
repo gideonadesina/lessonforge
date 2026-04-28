@@ -10,6 +10,7 @@ import { useNetworkStatus } from "@/components/network/NetworkProvider";
 import { LESSON_PACK_CREDIT_COST } from "@/lib/billing/pricing";
 import { getInvalidJsonMessage, readJsonResponse } from "@/lib/http/safe-json";
 import { track } from "@/lib/analytics";
+import { enrichGeneratedLessonImages } from "@/lib/generation/enrich-images-client";
 import { AlertCircle, CheckCircle2, Circle, Loader2, RotateCcw } from "lucide-react";
 
 type VocabularyItem = {
@@ -430,18 +431,6 @@ export default function GeneratePage() {
     return { res, json: parsedResponse.data ?? {} };
   }
 
-  async function enrichLessonImages(token: string, lessonId: string, fallbackData: Generated) {
-    try {
-      const enriched = await postGenerationStage("/api/generate/enrich-images", token, { lessonId });
-      if (enriched.res.ok) {
-        return (enriched.json.data as Generated) ?? fallbackData;
-      }
-    } catch (error) {
-      console.warn("[generate] Image enrichment skipped:", error);
-    }
-    return fallbackData;
-  }
-
   async function onGenerate() {
     if (generatingRef.current) return;
 
@@ -558,10 +547,11 @@ export default function GeneratePage() {
         throw new Error(getResponseMessage(stage3.json, "Stage 3 could not be completed."));
       }
 
-      const generated = await enrichLessonImages(
+      const generated = await enrichGeneratedLessonImages(
         session.access_token,
         lessonId,
-        stage3.json.data as Generated
+        stage3.json.data as Generated,
+        "generate"
       );
       setResult(generated);
       setStagedStepIndex(4);
@@ -623,7 +613,7 @@ export default function GeneratePage() {
       const nextData = retry.json.data as Generated;
       const enrichedData =
         failedStage === 3
-          ? await enrichLessonImages(session.access_token, stagedLessonId, nextData)
+          ? await enrichGeneratedLessonImages(session.access_token, stagedLessonId, nextData, "generate")
           : nextData;
       const nextMeta =
         (enrichedData?.meta?.generationMeta as GenerationMetadata | undefined) ??

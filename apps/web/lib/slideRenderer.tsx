@@ -86,6 +86,18 @@ export type DiscussionSlide = {
   image?: string | null;
 };
 
+export type RealWorldConnectionSlide = {
+  type: "real_world_connection";
+  title: string;
+  explanation?: string;
+  key_point?: string;
+  analogy?: string;
+  visual_suggestion: string;
+  visual_type: "support" | "diagram";
+  image_url?: string | null;
+  image?: string | null;
+};
+
 export type SummarySlide = {
   type: "summary";
   title: string;
@@ -113,6 +125,7 @@ export type Slide =
   | TitleSlide
   | LearningObjectivesSlide
   | ConceptSlide
+  | RealWorldConnectionSlide
   | VocabularySlide
   | WorkedExampleSlide
   | CheckForUnderstandingSlide
@@ -164,6 +177,8 @@ export function renderSlide(slide: Slide): React.ReactElement {
       return <WorkedExampleSlide slide={slide} />;
     case "check_for_understanding":
       return <CheckForUnderstandingSlide slide={slide} />;
+      case "real_world_connection":
+  return <ConceptSlide slide={slide as any} />;
     case "discussion":
       return <DiscussionSlide slide={slide} />;
     case "summary":
@@ -189,6 +204,8 @@ export function getSlideTypeLabel(slide: Slide): string {
       return "Worked Example";
     case "check_for_understanding":
       return "Check for Understanding";
+      case "real_world_connection":
+  return "Real-world connection";
     case "discussion":
       return "Discussion";
     case "summary":
@@ -214,6 +231,8 @@ export function getSlideHeadline(slide: Slide): string {
       return slide.question;
     case "discussion":
       return slide.prompt;
+    case "real_world_connection":
+      return slide.title;
     default:
       return "Slide";
   }

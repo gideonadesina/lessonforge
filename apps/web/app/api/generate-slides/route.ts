@@ -790,7 +790,7 @@ Make this immediately usable by a real teacher. Every slide must have teacher_no
     };
 
     // ── Save to library ───────────────────────────────────
-   const { error: saveErr } = await supabase.from("lessons").insert({
+   const { data: savedLesson, error: saveErr } = await supabase.from("lessons").insert({
       user_id: user.id,
       subject,
       topic,
@@ -798,13 +798,13 @@ Make this immediately usable by a real teacher. Every slide must have teacher_no
       curriculum: curriculum ?? null,
       result_json: finalDeck,
       type: "slides",
-    });
+    }).select("id").maybeSingle();
 
     if (saveErr) {
       console.error("[generate-slides] Failed to save to library:", saveErr.message);
     }
 
-    return NextResponse.json({ deck: finalDeck, saved: !saveErr });
+    return NextResponse.json({ deck: finalDeck, lessonId: savedLesson?.id ?? null, saved: !saveErr });
 
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown server error";

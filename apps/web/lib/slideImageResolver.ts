@@ -21,7 +21,7 @@ export function isValidPexelsImageUrl(value: unknown): value is string {
     const url = new URL(value);
     const hostname = url.hostname.toLowerCase();
     const isPexels = hostname === "images.pexels.com" || hostname.endsWith(".pexels.com");
-    return isPexels && !isGenericFallbackImageUrl(value);
+    return isPexels;
   } catch {
     return false;
   }

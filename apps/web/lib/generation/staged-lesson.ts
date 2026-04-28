@@ -353,6 +353,23 @@ function cleanPexelsQuery(query: unknown) {
   return cleaned;
 }
 
+function getSlideImageQuery(slide: JsonRecord) {
+  const candidates = [
+    slide.image_query,
+    slide.imageQuery,
+    slide.visual_suggestion,
+    slide.visualSuggestion,
+    slide.title,
+  ];
+
+  for (const candidate of candidates) {
+    const cleaned = cleanPexelsQuery(candidate);
+    if (cleaned) return cleaned;
+  }
+
+  return "";
+}
+
 async function fetchPexelsImage(query: string, apiKey: string, timeoutMs: number) {
   const cleanQuery = cleanPexelsQuery(query);
   if (!cleanQuery || !apiKey) return null;
@@ -393,25 +410,22 @@ export async function enrichSlidesWithPexelsImages(
 
   const work = Promise.allSettled(
     slides.map(async (slide) => {
-      const image = await fetchPexelsImage(slide.image_query ?? slide.imageQuery, pexelsKey, timeoutMs);
+      const image = await fetchPexelsImage(getSlideImageQuery(slide), pexelsKey, timeoutMs);
       return image
         ? {
             ...slide,
             ...image,
           }
-        : {
-            ...slide,
-            image_url: null,
-          };
+        : slide;
     })
   ).then((results) =>
     results.map((result, index) =>
-      result.status === "fulfilled" ? result.value : { ...slides[index], image_url: null }
+      result.status === "fulfilled" ? result.value : slides[index]
     )
   );
 
   const timeout = new Promise<JsonRecord[]>((resolve) => {
-    setTimeout(() => resolve(slides.map((slide) => ({ ...slide, image_url: null }))), overallTimeoutMs);
+    setTimeout(() => resolve(slides), overallTimeoutMs);
   });
 
   return Promise.race([work, timeout]);

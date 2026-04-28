@@ -37,7 +37,22 @@ export async function POST(req: NextRequest) {
     const slides = Array.isArray(existing.slides) ? existing.slides : [];
     const pexelsKey = process.env.PEXELS_API_KEY ?? "";
 
-    if (!pexelsKey || slides.length === 0) {
+    if (!pexelsKey) {
+      return NextResponse.json(
+        {
+          ok: true,
+          lessonId,
+          data: existing,
+          warning: {
+            code: "pexels_api_key_missing",
+            message: "PEXELS_API_KEY is not configured. Slides were generated without Pexels images.",
+          },
+        },
+        { status: 200 }
+      );
+    }
+
+    if (slides.length === 0) {
       return NextResponse.json({ ok: true, lessonId, data: existing }, { status: 200 });
     }
 

@@ -6,6 +6,7 @@ import SlideViewer from "@/components/slides/SlideViewer";
 import type { SlideDeck } from "@/lib/slideRenderer";
 import { getInvalidJsonMessage, readJsonResponse } from "@/lib/http/safe-json";
 import { track } from "@/lib/analytics";
+import { enrichGeneratedLessonImages } from "@/lib/generation/enrich-images-client";
 
 // ─────────────────────────────────────────────────────────────
 // OPTIONS — Nigerian curriculum aligned
@@ -164,6 +165,14 @@ export default function LessonSlidesPage() {
       : null;
   };
 
+  const getLessonIdFromResponse = (payload: unknown): string => {
+    if (!isRecord(payload)) return "";
+    if (typeof payload.lessonId === "string") return payload.lessonId;
+
+    const data = payload.data;
+    return isRecord(data) && typeof data.lessonId === "string" ? data.lessonId : "";
+  };
+
   const getResponseError = (payload: unknown): string | null => {
     if (!isRecord(payload)) return null;
     if (typeof payload.message === "string") return payload.message;
@@ -250,7 +259,14 @@ export default function LessonSlidesPage() {
         }
 
         try { sessionStorage.removeItem("lessonforge_library_cache"); } catch {}
-        setDeck(retryDeck);
+        const retryLessonId = getLessonIdFromResponse(retryJson);
+        const enrichedRetryDeck = await enrichGeneratedLessonImages(
+          session.access_token,
+          retryLessonId,
+          retryDeck,
+          "lesson-slides"
+        );
+        setDeck(enrichedRetryDeck);
         track("lesson_slides_generated", {
           user_role: "teacher",
           active_role: "teacher",
@@ -281,7 +297,14 @@ export default function LessonSlidesPage() {
       throw new Error("Slides generated but preview failed to load. Check your library.");
     }
 
-    setDeck(generatedDeck);
+    const lessonId = getLessonIdFromResponse(json);
+    const enrichedDeck = await enrichGeneratedLessonImages(
+      session.access_token,
+      lessonId,
+      generatedDeck,
+      "lesson-slides"
+    );
+    setDeck(enrichedDeck);
     track("lesson_slides_generated", {
       user_role: "teacher",
       active_role: "teacher",
