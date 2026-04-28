@@ -6,11 +6,14 @@ import {
   consumePersonalCreditsDirectly,
   getGenerationCreditAvailability,
 } from "@/lib/credits/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const maxDuration = 60;
+
+const LESSON_PACK_CREDIT_COST = 4;
 
 export type ExamAlignment = "None" | "WAEC" | "NECO";
 export type SchoolLevel = "EYFS" | "Primary" | "Secondary";
@@ -198,9 +201,6 @@ export type GeneratedLessonData = {
   };
   liveApplications: string[];
 };
-
-const FALLBACK_IMG =
-  "https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?w=1200";
 
 function clampNumber(value: number | undefined, min: number, max: number, fallback: number) {
   if (typeof value !== "number" || Number.isNaN(value)) return fallback;
@@ -1367,59 +1367,6 @@ Return VALID JSON only.
 `.trim();
 }
 
-async function generateSlideImage(
-  params: {
-    subject?: string;
-    topic?: string;
-    schoolLevel?: string;
-    curriculum?: string;
-    examAlignment?: string;
-    slideTitle?: string;
-    imageQuery?: string;
-  },
-  pexelsKey: string
-): Promise<string | null> {
-  try {
-    if (!pexelsKey) return null;
-
-    // Build a focused search query from the most specific info available
-    const raw = params.imageQuery || params.slideTitle || params.topic || "";
-
-    // Clean up instructional jargon that confuses stock photo search
-    const query = raw
-      .replace(/diagram|illustration|labeled|annotated|showing|depicting|with arrows|close-?up/gi, "")
-      .replace(/classroom-?safe|educational style|textbook/gi, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 80);
-
-    if (!query) return null;
-
-    const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=5&orientation=landscape&size=large`;
-
-    const res = await fetch(url, {
-      headers: { Authorization: pexelsKey },
-      signal: AbortSignal.timeout(8000),
-    });
-
-    if (!res.ok) return null;
-
-    const data = await res.json();
-    const photos = data?.photos;
-
-    if (!Array.isArray(photos) || photos.length === 0) return null;
-
-    // Pick from top 3 results with slight randomness for variety
-    const pick = photos[Math.floor(Math.random() * Math.min(3, photos.length))];
-    return pick?.src?.large2x ?? pick?.src?.large ?? pick?.src?.medium ?? null;
-
-  } catch {
-    return null;
-  }
-}
-
-
-
 function normalizeGeneratedData(
   rawData: unknown,
   body: GeneratePayload
@@ -1579,6 +1526,23 @@ function normalizeGeneratedData(
   return normalizedData;
 }
 
+function validateGeneratedData(data: GeneratedLessonData): string | null {
+  if (!data.lessonPlan.lessonTitle) return "Missing lesson title.";
+  if (data.lessonPlan.performanceObjectives.length < 3) {
+    return "Missing required performance objectives.";
+  }
+  if (data.lessonNotes.keyConcepts.length < 3) {
+    return "Missing required lesson notes.";
+  }
+  if (data.slides.length !== data.meta.numberOfSlides) {
+    return "Generated slide count does not match the requested slide count.";
+  }
+  if (data.quiz.mcq.length !== 10) return "Missing required MCQ set.";
+  if (data.quiz.theory.length !== 2) return "Missing required theory questions.";
+  if (data.references.length < 3) return "Missing required references.";
+  return null;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const auth = req.headers.get("authorization") ?? "";
@@ -1637,7 +1601,7 @@ export async function POST(req: NextRequest) {
 
     const usePersonalCredits = body.usePersonalCredits === true;
 
-   const creditAvailability = await getGenerationCreditAvailability(supabase, user.id);
+    const creditAvailability = await getGenerationCreditAvailability(supabase, user.id);
     if (!creditAvailability.ok) {
       return NextResponse.json(
         {
@@ -1651,27 +1615,48 @@ export async function POST(req: NextRequest) {
     }
 
     // ── 1. Check credits available ────────────────────────
-    if (!usePersonalCredits && creditAvailability.creditsRemaining <= 0) {
+    if (
+      !usePersonalCredits &&
+      creditAvailability.creditsRemaining < LESSON_PACK_CREDIT_COST
+    ) {
       if (creditAvailability.source === "school") {
-        const { data: profileData } = await supabase
+        const { data: profileData, error: profileReadError } = await supabase
           .from("profiles")
           .select("credits_balance")
           .eq("id", user.id)
           .maybeSingle();
+
+        if (profileReadError) {
+          console.error("[generate] Failed to read personal fallback credits:", {
+            userId: user.id,
+            cost: LESSON_PACK_CREDIT_COST,
+            schoolCreditsRemaining: creditAvailability.creditsRemaining,
+            error: profileReadError.message,
+          });
+          return NextResponse.json(
+            {
+              ok: false,
+              error: "credit_check_failed",
+              message: `Credit check failed: ${profileReadError.message}`,
+              upgrade_url: null,
+            },
+            { status: 500 }
+          );
+        }
 
         const personalBalance = Math.max(
           0,
           Number((profileData as any)?.credits_balance ?? 0)
         );
 
-        if (personalBalance >= 4) {
+        if (personalBalance >= LESSON_PACK_CREDIT_COST) {
           return NextResponse.json(
             {
               ok: false,
               errorCode: "needs_personal_confirmation",
               personalCreditsAvailable: personalBalance,
               message: "Your school has run out of credits.",
-              cost: 4,
+              cost: LESSON_PACK_CREDIT_COST,
             },
             { status: 402 }
           );
@@ -1681,8 +1666,9 @@ export async function POST(req: NextRequest) {
           {
             ok: false,
             error: "school_out_of_credits",
+            errorCode: "school_out_of_credits",
             message:
-              "Your school has used all its credits. Your principal has been notified and will add more credits soon.",
+              "Your school has run out of credits. Contact your principal to top up.",
             upgrade_url: null,
           },
           { status: 402 }
@@ -1693,6 +1679,7 @@ export async function POST(req: NextRequest) {
         {
           ok: false,
           error: "out_of_credits",
+          errorCode: "out_of_credits",
           message:
             "You have used all your credits. Purchase more to continue generating lessons.",
           upgrade_url: "/pricing",
@@ -1715,7 +1702,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const pexelsKey = process.env.PEXELS_API_KEY ?? "";
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
     console.log("🎯 Generating lesson for:", {
@@ -1763,13 +1749,78 @@ export async function POST(req: NextRequest) {
     }
 
     const data = normalizeGeneratedData(parsed, body);
+    const validationError = validateGeneratedData(data);
 
-    // ── 4. OpenAI succeeded → deduct credits ─────────────
+    if (validationError) {
+      return NextResponse.json(
+        {
+          error: "Generated lesson was incomplete - no credits deducted. Please try again.",
+          detail: validationError,
+        },
+        { status: 502 }
+      );
+    }
+
+    // Core generation succeeded; save before charging so failed saves never deduct credits.
+    // TODO: Add staged/background image enrichment using slide imageQuery/videoQuery strings after the core lesson is saved.
+    const { data: savedLesson, error: saveErr } = await supabase
+      .from("lessons")
+      .insert({
+        user_id: user.id,
+        subject: body.subject,
+        topic: body.topic,
+        grade: body.grade,
+        curriculum: body.curriculum ?? null,
+        result_json: data,
+        type: "lesson",
+      })
+      .select("id")
+      .maybeSingle();
+
+    if (saveErr || !savedLesson) {
+      console.error("[generate] Failed to save to library:", saveErr?.message);
+      return NextResponse.json(
+        {
+          error: "Failed to save generated lesson - no credits deducted. Please try again.",
+          message: saveErr?.message ?? "Lesson save returned no row.",
+        },
+        { status: 500 }
+      );
+    }
+
     const deductionResult = usePersonalCredits
-      ? await consumePersonalCreditsDirectly(supabase, user.id, 4)
-      : await consumeGenerationCredits(supabase, user.id, 4);
+      ? await consumePersonalCreditsDirectly(supabase, user.id, LESSON_PACK_CREDIT_COST)
+      : await consumeGenerationCredits(supabase, user.id, LESSON_PACK_CREDIT_COST);
 
     if (!deductionResult.ok) {
+      console.error("[generate] Credit deduction failed:", {
+        userId: user.id,
+        cost: LESSON_PACK_CREDIT_COST,
+        source: deductionResult.source,
+        errorCode: deductionResult.errorCode,
+        error: deductionResult.error,
+      });
+
+      const lessonId =
+        typeof (savedLesson as { id?: unknown }).id === "string"
+          ? (savedLesson as { id: string }).id
+          : null;
+
+      if (lessonId) {
+        const { error: cleanupErr } = await createAdminClient()
+          .from("lessons")
+          .delete()
+          .eq("id", lessonId)
+          .eq("user_id", user.id);
+
+        if (cleanupErr) {
+          console.error(
+            "[generate] Failed to clean up unpaid lesson:",
+            cleanupErr.message
+          );
+        }
+      }
+
       if (deductionResult.errorCode === "needs_personal_confirmation") {
         return NextResponse.json(
           {
@@ -1777,7 +1828,24 @@ export async function POST(req: NextRequest) {
             errorCode: "needs_personal_confirmation",
             personalCreditsAvailable: deductionResult.personalCreditsAvailable,
             message: "Your school has run out of credits.",
-            cost: 4,
+            cost: LESSON_PACK_CREDIT_COST,
+            saved: false,
+          },
+          { status: 402 }
+        );
+      }
+
+      if (
+        deductionResult.errorCode === "out_of_credits" ||
+        deductionResult.errorCode === "school_out_of_credits"
+      ) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: deductionResult.errorCode,
+            errorCode: deductionResult.errorCode,
+            message: deductionResult.error,
+            saved: false,
           },
           { status: 402 }
         );
@@ -1787,57 +1855,17 @@ export async function POST(req: NextRequest) {
         {
           ok: false,
           error: "credit_deduction_failed",
-          message: deductionResult.error,
+          errorCode: "credit_deduction_failed",
+          message:
+            "We generated the lesson but could not safely deduct credits, so it was not saved. Please retry. If this repeats, contact support.",
+          detail: deductionResult.error,
+          saved: false,
         },
-        { status: 402 }
+        { status: 500 }
       );
     }
 
-    // ── 5. Fetch Pexels images in parallel ────────────────
-    if (Array.isArray(data.slides) && data.slides.length > 0) {
-      const imageResults = await Promise.allSettled(
-        data.slides.map((slide) =>
-          generateSlideImage(
-            {
-              subject: body.subject,
-              topic: body.topic,
-              schoolLevel: body.schoolLevel,
-              curriculum: body.curriculum,
-              examAlignment: body.examAlignment,
-              slideTitle: slide.title,
-              imageQuery: slide.imageQuery || slide.title || body.topic,
-            },
-            pexelsKey
-          )
-        )
-      );
-
-      data.slides.forEach((slide, i) => {
-        const result = imageResults[i];
-        slide.image =
-          result.status === "fulfilled" && result.value
-            ? result.value
-            : FALLBACK_IMG;
-      });
-    }
-
-    // ── 6. Save to library ────────────────────────────────
-    const { error: saveErr } = await supabase.from("lessons").insert({
-      user_id: user.id,
-      subject: body.subject,
-      topic: body.topic,
-      grade: body.grade,
-      curriculum: body.curriculum ?? null,
-      result_json: data,
-      type: "lesson",
-    });
-
-    if (saveErr) {
-      console.error("[generate] Failed to save to library:", saveErr.message);
-    }
-
-    // ── 7. Return ─────────────────────────────────────────
-    return NextResponse.json({ data, saved: !saveErr }, { status: 200 });
+    return NextResponse.json({ data, saved: true }, { status: 200 });
 
   } catch (err: unknown) {
     const message =

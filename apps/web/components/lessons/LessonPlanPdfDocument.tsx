@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { Document, Font, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 
 export type LessonPlanPdfMeta = {
   teacherName: string;
@@ -46,6 +46,8 @@ type EvaluationRow = {
   question: string;
   markingGuide: string;
 };
+
+Font.registerHyphenationCallback((word) => [word]);
 
 function isRecord(value: unknown): value is UnknownRecord {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -263,7 +265,7 @@ export function LessonPlanPdfDocument({ lesson, meta }: Props) {
                   <Text style={styles.tableCell}>Meaning</Text>
                 </View>
                 {vocabulary.map((item, index) => (
-                  <View key={`${item.word}-${index}`} style={styles.tableRow} wrap={false}>
+                  <View key={`${item.word}-${index}`} style={styles.tableRow}>
                     <Text style={[styles.tableCell, styles.wordCell]}>{item.word}</Text>
                     <Text style={styles.tableCell}>{item.meaning}</Text>
                   </View>
@@ -277,7 +279,7 @@ export function LessonPlanPdfDocument({ lesson, meta }: Props) {
           <Section title="Lesson Delivery Steps">
             {steps.length ? (
               steps.map((step, index) => (
-                <View key={`${step.number}-${index}`} style={styles.stepCard} wrap={false}>
+                <View key={`${step.number}-${index}`} style={styles.stepCard}>
                   <Text style={styles.stepTitle}>
                     Step {step.number}: {step.title}
                   </Text>
@@ -320,7 +322,7 @@ export function LessonPlanPdfDocument({ lesson, meta }: Props) {
           <Section title="Evaluation Questions">
             {evaluation.length ? (
               evaluation.map((item, index) => (
-                <View key={`${item.question}-${index}`} style={styles.evalItem} wrap={false}>
+                <View key={`${item.question}-${index}`} style={styles.evalItem}>
                   <Text style={styles.evalQuestion}>
                     {index + 1}. {item.question || "Question not specified"}
                   </Text>
@@ -477,6 +479,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#000",
     borderBottomStyle: "solid",
+    alignItems: "stretch",
   },
   tableHeader: {
     backgroundColor: "#eee",
@@ -487,8 +490,8 @@ const styles = StyleSheet.create({
   borderRightWidth: 1,
   borderRightColor: "#000",
   borderRightStyle: "solid",
-  fontSize: 11,
-  lineHeight: 1.25,
+  fontSize: 10,
+  lineHeight: 1.35,
 },
   wordCell: {
     width: "38%",
@@ -511,14 +514,18 @@ const styles = StyleSheet.create({
   stepField: {
     flexDirection: "row",
     marginBottom: 3,
+    alignItems: "flex-start",
   },
   stepLabel: {
+    width: 104,
     fontSize: 11,
     fontFamily: "Times-Bold",
   },
   stepValue: {
     flex: 1,
+    flexShrink: 1,
     fontSize: 11,
+    lineHeight: 1.35,
   },
   guidedBlock: {
     marginTop: 3,

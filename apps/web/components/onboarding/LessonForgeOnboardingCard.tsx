@@ -5,9 +5,10 @@ import LessonForgeWordmark from "@/components/auth/LessonForgeWordmark";
 import AuthNotificationBanner from "@/components/auth/AuthNotificationBanner";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3 | 4 | 5;
 
 type OnboardingAnswers = {
+  fullName: string;
   role: string;
   subject: string;
   gradeLevels: string[];
@@ -73,10 +74,12 @@ export default function LessonForgeOnboardingCard({
   const seededRole =
     (typeof initialAnswers?.role === "string" ? initialAnswers.role : "") ||
     (initialRoleOverride ?? "");
-  const [step, setStep] = useState<Step>(seededRole ? 2 : 1);
+
+  const [step, setStep] = useState<Step>(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [answers, setAnswers] = useState<OnboardingAnswers>({
+    fullName: typeof initialAnswers?.fullName === "string" ? initialAnswers.fullName : "",
     role: seededRole,
     subject: typeof initialAnswers?.subject === "string" ? initialAnswers.subject : "",
     gradeLevels: Array.isArray(initialAnswers?.gradeLevels)
@@ -95,6 +98,7 @@ export default function LessonForgeOnboardingCard({
       const patch = {
         onboarding_answers: nextAnswers,
         onboarding_completed: markComplete,
+        full_name: nextAnswers.fullName.trim() || null,
         updated_at: new Date().toISOString(),
       };
       const { error: updateErr } = await supabase
@@ -103,9 +107,6 @@ export default function LessonForgeOnboardingCard({
         .eq("id", profileId);
 
       if (updateErr) throw updateErr;
-      if (!markComplete) {
-        setError(null);
-      }
       if (markComplete) onCompleted(nextAnswers);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Unable to save onboarding answers.";
@@ -116,13 +117,20 @@ export default function LessonForgeOnboardingCard({
   }
 
   function getNextStep(current: Step): Step | null {
-    if (current >= 4) return null;
+    if (current >= 5) return null;
     return (current + 1) as Step;
   }
 
   function getPreviousStep(current: Step): Step | null {
     if (current <= 1) return null;
     return (current - 1) as Step;
+  }
+
+  async function handleFullNameNext() {
+    const trimmed = answers.fullName.trim();
+    if (!trimmed || saving) return;
+    await persistAnswers(answers, false);
+    setStep(2);
   }
 
   async function handleSingleSelect(
@@ -149,8 +157,7 @@ export default function LessonForgeOnboardingCard({
   async function handleGradesNext() {
     if (!answers.gradeLevels.length) return;
     await persistAnswers(answers, false);
-    const nextStep = getNextStep(3);
-    if (nextStep) setStep(nextStep);
+    setStep(5);
   }
 
   function toggleGradeLevel(value: string) {
@@ -167,12 +174,14 @@ export default function LessonForgeOnboardingCard({
 
   const stepHeading =
     step === 1
-      ? "What's your role at school?"
+      ? "What's your full name?"
       : step === 2
+      ? "What's your role at school?"
+      : step === 3
       ? leadershipCopy
         ? "What does your school primarily focus on?"
         : "What do you primarily teach or oversee?"
-      : step === 3
+      : step === 4
       ? "Which grade levels do you work with?"
       : leadershipCopy
       ? "What would you most like LessonForge to manage for you?"
@@ -180,10 +189,12 @@ export default function LessonForgeOnboardingCard({
 
   const stepSubtext =
     step === 1
-      ? "We'll tailor your experience around how you work."
+      ? "Your name appears in school reports and helps your principal identify you."
       : step === 2
-      ? "Pick the closest match."
+      ? "We'll tailor your experience around how you work."
       : step === 3
+      ? "Pick the closest match."
+      : step === 4
       ? "Select all that apply."
       : "We'll put your best tools front and centre.";
 
@@ -192,7 +203,7 @@ export default function LessonForgeOnboardingCard({
       <AuthNotificationBanner
         type="celebration"
         icon="🎉"
-        message="Account created — let's personalise your LessonForge workspace in just 4 steps."
+        message="Account created — let's personalise your LessonForge workspace in just 5 steps."
       />
 
       <section className="rounded-[20px] border border-[#E2E8F0] bg-white p-6 shadow-[0_4px_24px_rgba(83,74,183,0.08)] sm:p-8">
@@ -200,8 +211,8 @@ export default function LessonForgeOnboardingCard({
           <LessonForgeWordmark href={null} />
         </div>
 
-        <div className="mb-6 grid grid-cols-4 gap-2">
-          {[1, 2, 3, 4].map((index) => (
+        <div className="mb-6 grid grid-cols-5 gap-2">
+          {[1, 2, 3, 4, 5].map((index) => (
             <div
               key={index}
               className={`h-[5px] rounded-full ${step >= index ? "bg-[#534AB7]" : "bg-[#EEEDFE]"}`}
@@ -213,7 +224,7 @@ export default function LessonForgeOnboardingCard({
           className="text-[11px] uppercase text-[#534AB7]"
           style={{ fontFamily: '"Trebuchet MS", sans-serif', letterSpacing: "2.5px" }}
         >
-          STEP {step} OF 4
+          STEP {step} OF 5
         </p>
         <h2
           className="mt-2 text-3xl font-bold text-[#1E1B4B]"
@@ -229,29 +240,49 @@ export default function LessonForgeOnboardingCard({
         </p>
 
         <div className="mt-6 space-y-3">
-          {step === 1
+          {step === 1 ? (
+            <input
+              type="text"
+              value={answers.fullName}
+              onChange={(e) =>
+                setAnswers((prev) => ({ ...prev, fullName: e.target.value }))
+              }
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void handleFullNameNext();
+              }}
+              placeholder="e.g. Amina Bello"
+              maxLength={80}
+              autoFocus
+              className="w-full rounded-[12px] border-[1.5px] border-[#E2E8F0] bg-white px-[18px] py-[14px] text-sm text-[#1E1B4B] outline-none focus:border-[#534AB7]"
+              style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+            />
+          ) : null}
+
+          {step === 2
             ? ROLE_OPTIONS.map((option) => (
                 <OptionButton
                   key={option}
                   selected={answers.role === option}
                   label={option}
                   type="radio"
-                  onClick={() => void handleSingleSelect("role", option, 1)}
+                  onClick={() => void handleSingleSelect("role", option, 2)}
                 />
               ))
             : null}
-          {step === 2
+
+          {step === 3
             ? SUBJECT_OPTIONS.map((option) => (
                 <OptionButton
                   key={option}
                   selected={answers.subject === option}
                   label={option}
                   type="radio"
-                  onClick={() => void handleSingleSelect("subject", option, 2)}
+                  onClick={() => void handleSingleSelect("subject", option, 3)}
                 />
               ))
             : null}
-          {step === 3
+
+          {step === 4
             ? GRADE_LEVEL_OPTIONS.map((option) => (
                 <OptionButton
                   key={option}
@@ -262,14 +293,15 @@ export default function LessonForgeOnboardingCard({
                 />
               ))
             : null}
-          {step === 4
+
+          {step === 5
             ? GOAL_OPTIONS.map((option) => (
                 <OptionButton
                   key={option}
                   selected={answers.primaryGoal === option}
                   label={option}
                   type="radio"
-                  onClick={() => void handleSingleSelect("primaryGoal", option, 4)}
+                  onClick={() => void handleSingleSelect("primaryGoal", option, 5)}
                 />
               ))
             : null}
@@ -298,7 +330,17 @@ export default function LessonForgeOnboardingCard({
             Back
           </button>
 
-          {step === 3 ? (
+          {step === 1 ? (
+            <button
+              type="button"
+              onClick={() => void handleFullNameNext()}
+              disabled={!answers.fullName.trim() || saving}
+              className="inline-flex items-center justify-center rounded-[12px] bg-gradient-to-br from-[#534AB7] to-[#3D35A0] px-5 py-[11px] text-sm font-bold text-white shadow-[0_4px_16px_rgba(83,74,183,0.35)] transition-all duration-200 hover:-translate-y-[1px] hover:shadow-[0_6px_18px_rgba(83,74,183,0.4)] disabled:opacity-60"
+              style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
+            >
+              {saving ? "Saving..." : "Next →"}
+            </button>
+          ) : step === 4 ? (
             <button
               type="button"
               onClick={() => void handleGradesNext()}

@@ -6,13 +6,11 @@ import { useRouter } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { useProfile } from "@/lib/useProfile";
 import TeacherPaywallModal from "@/components/billing/TeacherPaywallModal";
-import GenerationProgress from "@/components/generation/GenerationProgress";
-import { useGenerationProgress } from "@/components/generation/useGenerationProgress";
 import { useNetworkStatus } from "@/components/network/NetworkProvider";
-import { GenerationStage } from "@/components/generation/generationStages";
 import { LESSON_PACK_CREDIT_COST } from "@/lib/billing/pricing";
 import { getInvalidJsonMessage, readJsonResponse } from "@/lib/http/safe-json";
 import { track } from "@/lib/analytics";
+import { AlertCircle, CheckCircle2, Circle, Loader2, RotateCcw } from "lucide-react";
 
 type VocabularyItem = {
   word?: string;
@@ -129,6 +127,8 @@ type Generated = {
     durationMins?: number;
     lessonType?: string;
     academicDepth?: string;
+    stage?: number;
+    generationMeta?: GenerationMetadata;
   };
   lessonNotes?: LessonNotes | string;
   subjectEnrichment?: SubjectEnrichment;
@@ -141,8 +141,14 @@ type Generated = {
     teacherPrompt?: string;
     studentTask?: string;
     image?: string;
+    image_url?: string | null;
+    image_alt?: string;
+    image_credit?: string;
     imageQuery?: string;
+    image_query?: string;
+    visual_suggestion?: string;
     videoQuery?: string;
+    video_query?: string;
     interactivePrompt?: string;
   }>;
   quiz?: {
@@ -157,8 +163,30 @@ type Generated = {
   liveApplications?: string[];
 };
 
-const FALLBACK_IMG =
-  "https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?w=1200";
+type GenerationMetadata = {
+  subject: string;
+  topic: string;
+  grade: string;
+  curriculum: string;
+  examAlignment?: string;
+  examBoard?: string;
+  schoolLevel: string;
+  numberOfSlides: number;
+  durationMins: number;
+  age?: string;
+  usePersonalCredits?: boolean;
+};
+
+type FailedStage = 2 | 3;
+type GeneratedSlide = NonNullable<Generated["slides"]>[number];
+
+const STAGED_PROGRESS_STEPS = [
+  "Generating lesson plan",
+  "Writing lesson notes",
+  "Creating quiz and questions",
+  "Preparing slides",
+  "Saving to library",
+];
 
 const CURRICULUM_OPTIONS = [
   "Nigerian Curriculum",
@@ -178,6 +206,10 @@ const SCHOOL_LEVEL_OPTIONS = [
 function youtubeSearchUrl(query: string) {
   const q = (query || "").trim();
   return `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
+}
+
+function getSlideImageSrc(slide: GeneratedSlide | undefined) {
+  return slide?.image_url || slide?.image || null;
 }
 
 function shuffleArray<T>(arr: T[]) {
@@ -246,19 +278,14 @@ export default function GeneratePage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generationStage, setGenerationStage] = useState<GenerationStage>("queued");
   const [downloadingPack, setDownloadingPack] = useState(false); // ← NEW
   const { isOnline, isUnstable } = useNetworkStatus();
   const networkRef = useRef({ isOnline, isUnstable });
+  const generatingRef = useRef(false);
 
   useEffect(() => {
     networkRef.current = { isOnline, isUnstable };
   }, [isOnline, isUnstable]);
-
-  const { steps, currentStepIndex, progress, completeProgress, failProgress } = useGenerationProgress({
-    isGenerating,
-    stage: generationStage,
-  });
 
   const [error, setError] = useState<string | null>(null);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
@@ -267,6 +294,11 @@ export default function GeneratePage() {
   const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
   const [redirectingToUpgrade, setRedirectingToUpgrade] = useState(false);
+  const [stagedStepIndex, setStagedStepIndex] = useState(0);
+  const [stagedLessonId, setStagedLessonId] = useState<string | null>(null);
+  const [stagedGenerationMeta, setStagedGenerationMeta] = useState<GenerationMetadata | null>(null);
+  const [failedStage, setFailedStage] = useState<FailedStage | null>(null);
+  const [retryingStage, setRetryingStage] = useState(false);
 
   const hasInsufficientCredits = !profileLoading && creditsRemaining < LESSON_PACK_CREDIT_COST;
 
@@ -344,7 +376,75 @@ export default function GeneratePage() {
     result,
   ]);
 
+  function getResponseMessage(json: Record<string, unknown>, fallback: string) {
+    return typeof json.message === "string"
+      ? json.message
+      : typeof json.error === "string"
+      ? json.error
+      : fallback;
+  }
+
+  function getResponseCode(json: Record<string, unknown>) {
+    return typeof json.errorCode === "string"
+      ? json.errorCode
+      : typeof json.error === "string"
+      ? json.error
+      : "";
+  }
+
+  function buildRequestBody(usePersonalCredits = false): GenerationMetadata {
+    return {
+      curriculum: curriculum.trim(),
+      schoolLevel: schoolLevel.trim(),
+      subject: subject.trim(),
+      grade: grade.trim(),
+      age: age.trim(),
+      topic: topic.trim(),
+      numberOfSlides,
+      durationMins,
+      examAlignment: "None",
+      examBoard: "None",
+      usePersonalCredits,
+    };
+  }
+
+  async function postGenerationStage(
+    path: string,
+    token: string,
+    body: Record<string, unknown>
+  ) {
+    const res = await fetch(path, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const parsedResponse = await readJsonResponse<Record<string, unknown>>(res);
+    if (parsedResponse.parseError) {
+      throw new Error(getInvalidJsonMessage(res));
+    }
+
+    return { res, json: parsedResponse.data ?? {} };
+  }
+
+  async function enrichLessonImages(token: string, lessonId: string, fallbackData: Generated) {
+    try {
+      const enriched = await postGenerationStage("/api/generate/enrich-images", token, { lessonId });
+      if (enriched.res.ok) {
+        return (enriched.json.data as Generated) ?? fallbackData;
+      }
+    } catch (error) {
+      console.warn("[generate] Image enrichment skipped:", error);
+    }
+    return fallbackData;
+  }
+
   async function onGenerate() {
+    if (generatingRef.current) return;
+
     if (!isOnline) {
       setError("You're offline. Reconnect to generate your lesson pack.");
       setLoading(false);
@@ -352,13 +452,17 @@ export default function GeneratePage() {
       return;
     }
 
+    generatingRef.current = true;
     setLoading(true);
     setIsGenerating(true);
     setSaving(false);
     setError(null);
-    setSaveMsg(null);
+    setSaveMsg("Lesson generation may take about 30 to 60 seconds. Please do not close this page.");
     setResult(null);
-    setGenerationStage("planning");
+    setFailedStage(null);
+    setStagedLessonId(null);
+    setStagedGenerationMeta(null);
+    setStagedStepIndex(0);
 
     try {
       const {
@@ -369,51 +473,14 @@ export default function GeneratePage() {
         throw new Error("Session expired. Please login again.");
       }
 
-      const stageProgression = [
-        { stage: "planning" as GenerationStage, delay: 2000 },
-        { stage: "notes" as GenerationStage, delay: 5000 },
-        { stage: "assessments" as GenerationStage, delay: 5000 },
-        { stage: "slides_images" as GenerationStage, delay: 8000 },
-      ];
-
-      let stageIndex = 0;
-      const progressInterval = window.setInterval(() => {
-        if (!networkRef.current.isOnline || networkRef.current.isUnstable) return;
-        if (stageIndex < stageProgression.length - 1) {
-          stageIndex++;
-          setGenerationStage(stageProgression[stageIndex].stage);
-        }
-      }, 5000);
-
-      const requestBody = {
-        curriculum: curriculum.trim(),
-        schoolLevel: schoolLevel.trim(),
-        subject: subject.trim(),
-        grade: grade.trim(),
-        age: age.trim(),
-        topic: topic.trim(),
-        numberOfSlides,
-        durationMins,
-      };
+      let requestBody = buildRequestBody(false);
       let creditSource: "personal" | "school" | undefined;
 
-     let res = await fetch("/api/generate", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${session.access_token}`,
-  },
-  body: JSON.stringify(requestBody),
-});
-      clearInterval(progressInterval);
-
-      let parsedResponse = await readJsonResponse<Record<string, unknown>>(res);
-      if (parsedResponse.parseError) {
-        setGenerationStage("failed");
-        failProgress();
-        throw new Error(getInvalidJsonMessage(res));
-      }
-      let json = parsedResponse.data ?? {};
+      let { res, json } = await postGenerationStage(
+        "/api/generate/stage1",
+        session.access_token,
+        requestBody
+      );
 
       if (!res.ok && res.status === 402 && json?.errorCode === "needs_personal_confirmation") {
         setLoading(false);
@@ -428,90 +495,78 @@ export default function GeneratePage() {
         );
 
         if (!confirmed) {
-          setGenerationStage("failed");
-          failProgress();
           throw new Error("Generation cancelled.");
         }
 
         setLoading(true);
         setIsGenerating(true);
-        setGenerationStage("planning");
-        res = await fetch("/api/generate", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ ...requestBody, usePersonalCredits: true }),
-        });
+        requestBody = buildRequestBody(true);
+        const retryStage1 = await postGenerationStage(
+          "/api/generate/stage1",
+          session.access_token,
+          requestBody
+        );
+        res = retryStage1.res;
+        json = retryStage1.json;
         creditSource = "personal";
-        parsedResponse = await readJsonResponse<Record<string, unknown>>(res);
-        if (parsedResponse.parseError) {
-          setGenerationStage("failed");
-          failProgress();
-          throw new Error(getInvalidJsonMessage(res));
-        }
-        json = parsedResponse.data ?? {};
       }
 
       if (!res.ok) {
-        if (res.status === 402) {
+        const errorCode = getResponseCode(json);
+
+        if (
+          res.status === 402 &&
+          (errorCode === "out_of_credits" || errorCode === "school_out_of_credits")
+        ) {
           setShowPaywall(true);
         }
-        setGenerationStage("failed");
-        failProgress();
-        throw new Error(
-          typeof json.error === "string"
-            ? json.error
-            : typeof json.message === "string"
-            ? json.message
-            : "Generation failed"
-        );
+        throw new Error(getResponseMessage(json, "Generation failed"));
       }
 
-      const generated = json.data as Generated;
-      setResult(generated);
+      const lessonId = typeof json.lessonId === "string" ? json.lessonId : "";
+      const generationMeta = (json.generationMeta ?? requestBody) as GenerationMetadata;
+      const stage1Data = json.data as Generated;
+      if (!lessonId) throw new Error("Stage 1 completed but did not return a lessonId.");
 
-      setGenerationStage("saving");
-      setSaving(true);
+      setStagedLessonId(lessonId);
+      setStagedGenerationMeta(generationMeta);
+      setResult(stage1Data);
+      setStagedStepIndex(1);
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) throw new Error("User not authenticated");
-
-      const { error: insertError } = await supabase.from("lessons").insert({
-        user_id: user.id,
-        subject: generated?.meta?.subject ?? subject,
-        topic: generated?.meta?.topic ?? topic,
-        grade: generated?.meta?.grade ?? grade,
-        curriculum: generated?.meta?.curriculum ?? curriculum,
-        result_json: {
-          ...generated,
-          meta: {
-            ...(generated?.meta ?? {}),
-            subject: generated?.meta?.subject ?? subject,
-            topic: generated?.meta?.topic ?? topic,
-            grade: generated?.meta?.grade ?? grade,
-            curriculum: generated?.meta?.curriculum ?? curriculum,
-            schoolLevel: generated?.meta?.schoolLevel ?? schoolLevel,
-            numberOfSlides: generated?.meta?.numberOfSlides ?? numberOfSlides,
-            durationMins: generated?.meta?.durationMins ?? durationMins,
-            age: age.trim(),          // ← NEW
-          },
-        },
+      setStagedStepIndex(2);
+      const stage2 = await postGenerationStage("/api/generate/stage2", session.access_token, {
+        lessonId,
+        generationMeta,
       });
-
-      if (insertError) {
-        console.error("Save failed:", insertError.message);
-        setGenerationStage("failed");
-        failProgress();
-        throw insertError;
+      if (!stage2.res.ok) {
+        setFailedStage(2);
+        setSaveMsg("Lesson saved. Some content could not be completed. You can retry from your library.");
+        throw new Error(getResponseMessage(stage2.json, "Stage 2 could not be completed."));
       }
 
-      setGenerationStage("completed");
-      completeProgress();
+      const stage2Data = stage2.json.data as Generated;
+      setResult(stage2Data);
+      setStagedStepIndex(3);
+
+      const stage3 = await postGenerationStage("/api/generate/stage3", session.access_token, {
+        lessonId,
+        generationMeta,
+      });
+      if (!stage3.res.ok) {
+        setFailedStage(3);
+        setSaveMsg("Lesson saved. Some content could not be completed. You can retry from your library.");
+        throw new Error(getResponseMessage(stage3.json, "Stage 3 could not be completed."));
+      }
+
+      const generated = await enrichLessonImages(
+        session.access_token,
+        lessonId,
+        stage3.json.data as Generated
+      );
+      setResult(generated);
+      setStagedStepIndex(4);
+      setSaving(true);
+      setStagedStepIndex(5);
       track("lesson_pack_generated", {
         user_role: "teacher",
         active_role: "teacher",
@@ -522,15 +577,70 @@ export default function GeneratePage() {
         curriculum: generated?.meta?.curriculum ?? curriculum,
         generation_type: "lesson_pack",
       });
-      setSaveMsg("✅ Auto-saved to Library");
+      setSaveMsg("Complete. Auto-saved to Library.");
       setIsGenerating(false);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Something went wrong");
       setIsGenerating(false);
     } finally {
+      generatingRef.current = false;
       setLoading(false);
       setSaving(false);
       router.refresh();
+    }
+  }
+
+  async function retryFailedStage() {
+    if (!failedStage || !stagedLessonId || !stagedGenerationMeta || retryingStage) return;
+
+    setRetryingStage(true);
+    setError(null);
+    setSaveMsg("Retrying the failed stage without deducting credits again.");
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error("Session expired. Please login again.");
+      }
+
+      setStagedStepIndex(failedStage === 2 ? 2 : 3);
+      const retry = await postGenerationStage(
+        `/api/generate/stage${failedStage}`,
+        session.access_token,
+        {
+          lessonId: stagedLessonId,
+          generationMeta: stagedGenerationMeta,
+        }
+      );
+
+      if (!retry.res.ok) {
+        throw new Error(getResponseMessage(retry.json, `Stage ${failedStage} retry failed.`));
+      }
+
+      const nextData = retry.json.data as Generated;
+      const enrichedData =
+        failedStage === 3
+          ? await enrichLessonImages(session.access_token, stagedLessonId, nextData)
+          : nextData;
+      const nextMeta =
+        (enrichedData?.meta?.generationMeta as GenerationMetadata | undefined) ??
+        stagedGenerationMeta;
+      setResult(enrichedData);
+      setStagedGenerationMeta(nextMeta);
+      setFailedStage(null);
+      setSaveMsg(
+        failedStage === 2
+          ? "Lesson saved. Quiz and questions completed. Slides are still pending."
+          : "Complete. Auto-saved to Library."
+      );
+      router.refresh();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      setRetryingStage(false);
     }
   }
 
@@ -929,7 +1039,8 @@ export default function GeneratePage() {
     const imageCache: Record<string, string> = {};
     await Promise.all(
       slidesData.map(async (slide) => {
-        const src = slide.image || FALLBACK_IMG;
+        const src = getSlideImageSrc(slide);
+        if (!src) return;
         if (!imageCache[src]) {
           imageCache[src] = await fetchImageAsBase64(src);
         }
@@ -1153,8 +1264,10 @@ export default function GeneratePage() {
         const num = slide.slideNumber ?? i + 1;
         const title = slide.title || `Slide ${num}`;
         const bullets = Array.isArray(slide.bullets) ? slide.bullets : [];
-        const imgSrc = imageCache[slide.image || FALLBACK_IMG] || slide.image || FALLBACK_IMG;
+        const originalImgSrc = getSlideImageSrc(slide);
+        const imgSrc = originalImgSrc ? imageCache[originalImgSrc] || originalImgSrc : null;
         const videoLink = youtubeSearchUrl(slide.videoQuery || title);
+        const visualSuggestion = slide.visual_suggestion || slide.image_query || slide.imageQuery || "";
 
         slidesHTML += `
 <div class="slide-card">
@@ -1163,7 +1276,11 @@ export default function GeneratePage() {
     <span class="slide-title">${esc(title)}</span>
     ${slide.slideType ? `<span class="slide-type">${esc(slide.slideType.replace(/_/g, " "))}</span>` : ""}
   </div>
-  <img class="slide-image" src="${imgSrc}" alt="${esc(title)}" />
+  ${
+    imgSrc
+      ? `<img class="slide-image" src="${imgSrc}" alt="${esc(slide.image_alt || title)}" />`
+      : `<div class="slide-image placeholder"><strong>Visual Guide</strong><span>${esc(visualSuggestion || "No image available")}</span></div>`
+  }
   ${bullets.length ? `<ul class="slide-bullets">${bullets.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>` : ""}
   <div class="slide-prompts">
     ${slide.teacherPrompt ? `<div class="prompt-row"><strong>👩‍🏫 Teacher Prompt:</strong> ${esc(slide.teacherPrompt)}</div>` : ""}
@@ -1569,6 +1686,22 @@ export default function GeneratePage() {
       display: block;
       border-bottom: 1px solid #e0dff8;
     }
+    .slide-image.placeholder {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 8px;
+      padding: 28px;
+      background: #f8fafc;
+      color: #334155;
+      font-family: Arial, sans-serif;
+    }
+    .slide-image.placeholder strong {
+      color: #4338ca;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
     .slide-bullets {
       padding: 14px 14px 14px 32px;
       font-size: 14px;
@@ -1819,10 +1952,9 @@ export default function GeneratePage() {
 
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
         {isGenerating ? (
-          <GenerationProgress
-            steps={steps}
-            currentStepIndex={currentStepIndex}
-            progress={progress}
+          <StagedGenerationProgress
+            currentStepIndex={stagedStepIndex}
+            failedStage={failedStage}
           />
         ) : (
           <>
@@ -1909,6 +2041,7 @@ export default function GeneratePage() {
                 onClick={onGenerate}
                 disabled={
                   loading ||
+                  isGenerating ||
                   hasInsufficientCredits ||
                   !curriculum.trim() ||
                   !schoolLevel.trim() ||
@@ -1929,6 +2062,22 @@ export default function GeneratePage() {
               ) : null}
 
               {error ? <span className="text-sm text-red-600">{error}</span> : null}
+
+              {failedStage ? (
+                <button
+                  type="button"
+                  onClick={retryFailedStage}
+                  disabled={retryingStage || loading || isGenerating}
+                  className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] hover:bg-slate-100 disabled:opacity-60"
+                >
+                  {retryingStage ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RotateCcw className="h-4 w-4" />
+                  )}
+                  Retry stage {failedStage}
+                </button>
+              ) : null}
             </div>
           </>
         )}
@@ -2446,7 +2595,8 @@ export default function GeneratePage() {
                     s?.teacherPrompt || "No teacher prompt provided.";
                   const studentTask =
                     s?.studentTask || "No student task provided.";
-                  const imgSrc = s?.image || FALLBACK_IMG;
+                  const imgSrc = getSlideImageSrc(s);
+                  const visualSuggestion = s?.visual_suggestion || s?.image_query || s?.imageQuery || "";
 
                   return (
                     <div
@@ -2469,40 +2619,50 @@ export default function GeneratePage() {
                         </span>
                       </div>
 
-                      <div className="rounded-xl overflow-hidden border bg-slate-100">
-                        <button
-                          type="button"
-                          onClick={() => setPreviewImage({ src: imgSrc, title })}
-                          className="block w-full text-left"
-                        >
-                          <img
-                            src={imgSrc}
-                            alt={title}
-                            className="w-full h-52 object-cover transition hover:scale-[1.01]"
-                            onError={(e) => {
-                              e.currentTarget.src = FALLBACK_IMG;
-                            }}
-                          />
-                        </button>
-                      </div>
+                      {imgSrc ? (
+                        <>
+                          <div className="rounded-xl overflow-hidden border bg-slate-100">
+                            <button
+                              type="button"
+                              onClick={() => setPreviewImage({ src: imgSrc, title })}
+                              className="block w-full text-left"
+                            >
+                              <img
+                                src={imgSrc}
+                                alt={s?.image_alt || title}
+                                className="w-full h-52 object-cover transition hover:scale-[1.01]"
+                              />
+                            </button>
+                          </div>
 
-                      <div className="flex flex-wrap gap-3 text-sm">
-                        <button
-                          type="button"
-                          onClick={() => setPreviewImage({ src: imgSrc, title })}
-                          className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 font-semibold text-[var(--text-primary)] hover:bg-slate-100"
-                        >
-                          View full image
-                        </button>
+                          <div className="flex flex-wrap gap-3 text-sm">
+                            <button
+                              type="button"
+                              onClick={() => setPreviewImage({ src: imgSrc, title })}
+                              className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 font-semibold text-[var(--text-primary)] hover:bg-slate-100"
+                            >
+                              View full image
+                            </button>
 
-                        <button
-                          type="button"
-                          onClick={() => handleDownloadImage(imgSrc, title)}
-                          className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 font-semibold text-[var(--text-primary)] hover:bg-slate-100"
-                        >
-                          Download image
-                        </button>
-                      </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadImage(imgSrc, title)}
+                              className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 font-semibold text-[var(--text-primary)] hover:bg-slate-100"
+                            >
+                              Download image
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="rounded-xl border bg-slate-50 p-5 text-sm text-[var(--text-secondary)]">
+                          <div className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-700">
+                            Visual Guide
+                          </div>
+                          <p className="mt-2 font-medium text-[var(--text-primary)]">
+                            {visualSuggestion || "No image available for this slide."}
+                          </p>
+                        </div>
+                      )}
 
                       {bullets.length ? (
                         <ul className="list-disc pl-6 space-y-2 text-[var(--text-primary)] font-medium">
@@ -2696,6 +2856,55 @@ function Field({
     <div className={full ? "md:col-span-2" : ""}>
       <div className="mb-1 text-xs font-medium text-[var(--text-secondary)]">{label}</div>
       {children}
+    </div>
+  );
+}
+
+function StagedGenerationProgress({
+  currentStepIndex,
+  failedStage,
+}: {
+  currentStepIndex: number;
+  failedStage: FailedStage | null;
+}) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-sm font-semibold text-[var(--text-primary)]">
+          Lesson generation may take about 30 to 60 seconds. Please do not close this page.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        {STAGED_PROGRESS_STEPS.map((label, index) => {
+          const stepNumber = index + 1;
+          const complete = currentStepIndex > index;
+          const active = currentStepIndex === index;
+          const failed =
+            (failedStage === 2 && index === 2) ||
+            (failedStage === 3 && index === 3);
+
+          return (
+            <div
+              key={label}
+              className="flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--card-alt)] px-3 py-2"
+            >
+              {failed ? (
+                <AlertCircle className="h-4 w-4 text-red-600" />
+              ) : complete ? (
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              ) : active ? (
+                <Loader2 className="h-4 w-4 animate-spin text-violet-600" />
+              ) : (
+                <Circle className="h-4 w-4 text-[var(--text-tertiary)]" />
+              )}
+              <span className="text-sm font-medium text-[var(--text-primary)]">
+                [{stepNumber}/5] {complete && stepNumber === 5 ? "Complete" : label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

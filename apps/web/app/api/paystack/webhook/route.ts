@@ -83,8 +83,8 @@ export async function POST(req: Request) {
     if (!verifyPaystackSignature(rawBody, signature)) {
       console.warn("Webhook signature verification failed");
       return NextResponse.json(
-        { received: true, warning: "Invalid signature" },
-        { status: 200 }
+        { received: false, error: "Invalid signature" },
+        { status: 400 }
       );
     }
 

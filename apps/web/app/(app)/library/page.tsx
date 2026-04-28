@@ -10,6 +10,7 @@ import { useProgressiveRenderer, SectionSkeleton, ProgressiveContent } from "@/l
 import SlideViewer from "@/components/slides/SlideViewer";
 import { LessonPlanPdfDocument } from "@/components/lessons/LessonPlanPdfDocument";
 import { track } from "@/lib/analytics";
+import { resolveSlideImageUrl } from "@/lib/slideImageResolver";
 
 // ─────────────────────────────────────────────────────────────
 // TYPES
@@ -93,6 +94,24 @@ function handleDownloadImage(src: string, title: string) {
   document.body.appendChild(a);
   a.click();
   a.remove();
+}
+
+function SlideVisualPlaceholder({ suggestion }: { suggestion?: string }) {
+  return (
+    <div className="flex h-48 w-full items-center justify-center bg-[radial-gradient(circle_at_20%_20%,#ffffff_0,#f6f2ff_34%,#e8eefc_70%,#eefdf5_100%)] px-6 text-center">
+      <div className="max-w-md">
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl border border-white/80 bg-white text-lg font-black text-violet-700 shadow-sm">
+          L
+        </div>
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-violet-700">
+          Visual Guide
+        </p>
+        <p className="mt-2 text-sm font-semibold leading-snug text-slate-800">
+          {suggestion || "Clean supporting visual"}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function getLessonPayload(row: LessonRow | null) {
@@ -642,7 +661,8 @@ const LessonPreview = memo(function LessonPreview({
                 const bullets: string[] = Array.isArray(s?.bullets) ? s.bullets : [];
                 const videoQuery = s?.videoQuery || title || `${subject} ${topic}`;
                 const activity = s?.interactivePrompt || "No interactive activity provided.";
-                const img = s?.image || "https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?w=1200";
+                const img = resolveSlideImageUrl(s);
+                const visualSuggestion = s?.visual_suggestion || s?.visualSuggestion || s?.image_query || s?.imageQuery || "";
 
                 return (
                   <div key={i} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm space-y-4">
@@ -651,21 +671,26 @@ const LessonPreview = memo(function LessonPreview({
                       <span className="text-[11px] font-semibold px-2 py-1 rounded-full border bg-[var(--card-alt)] text-[var(--text-secondary)]">Slide {i + 1}</span>
                     </div>
                     <div className="rounded-xl overflow-hidden border bg-slate-100">
-                      <button type="button" onClick={() => onPreviewImage({ src: img, title })} className="block w-full text-left">
-                        <img src={img} alt={title} className="w-full h-48 object-cover transition hover:scale-[1.01]"
-                          onError={(e) => { e.currentTarget.src = "https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?w=1200"; }} />
-                      </button>
+                      {img ? (
+                        <button type="button" onClick={() => onPreviewImage({ src: img, title })} className="block w-full text-left">
+                          <img src={img} alt={title} className="w-full h-48 object-cover transition hover:scale-[1.01]" />
+                        </button>
+                      ) : (
+                        <SlideVisualPlaceholder suggestion={visualSuggestion} />
+                      )}
                     </div>
-                    <div className="flex flex-wrap gap-3 text-sm">
-                      <button type="button" onClick={() => onPreviewImage({ src: img, title })}
-                        className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 font-semibold text-[var(--text-primary)] hover:bg-slate-100">
-                        View full image
-                      </button>
-                      <button type="button" onClick={() => onDownloadImage(img, title)}
-                        className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 font-semibold text-[var(--text-primary)] hover:bg-slate-100">
-                        Download image
-                      </button>
-                    </div>
+                    {img && (
+                      <div className="flex flex-wrap gap-3 text-sm">
+                        <button type="button" onClick={() => onPreviewImage({ src: img, title })}
+                          className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 font-semibold text-[var(--text-primary)] hover:bg-slate-100">
+                          View full image
+                        </button>
+                        <button type="button" onClick={() => onDownloadImage(img, title)}
+                          className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 font-semibold text-[var(--text-primary)] hover:bg-slate-100">
+                          Download image
+                        </button>
+                      </div>
+                    )}
                     {bullets.length > 0 ? (
                       <ul className="list-disc pl-6 space-y-2 text-[var(--text-primary)] font-medium">
                         {bullets.map((b, j) => <li key={j}>{safeRender(b)}</li>)}

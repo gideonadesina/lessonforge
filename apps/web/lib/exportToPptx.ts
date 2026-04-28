@@ -1,6 +1,7 @@
 import PptxGenJS from "pptxgenjs";
 
 import type { SlideDeck, Slide } from "./slideRenderer";
+import { resolveSlideImageUrl } from "./slideImageResolver";
 
 // PptxGenJS v4 exposes ShapeType only as an instance getter, not a static property.
 // The enum values are identical to their string keys, so we use typed string literals.
@@ -136,14 +137,14 @@ function renderTitle(slide: PptxGenJS.Slide, content: LooseSlide, imageData: str
 
   const subtitle = getString(content, "subtitle");
   if (subtitle) {
-    addText(slide, subtitle, 0.68, 3.05, 6.5, 0.55, 17, "FFFFFF", false);
+    addText(slide, subtitle, 0.68, 3.05, 6.5, 0.62, 15, "FFFFFF", false, false, undefined, "top");
   }
 
   const hookQuestion = getString(content, "hook_question");
   if (hookQuestion) {
     addPanel(slide, 0.65, 3.82, 6.85, 0.9, "FFFFFF", "FFFFFF", 65);
     addText(slide, "Hook Question", 0.85, 3.98, 2, 0.18, 8, "F3E8FF", true);
-    addText(slide, `"${hookQuestion}"`, 0.85, 4.2, 6.35, 0.38, 15, "FFFFFF", true);
+    addText(slide, `"${hookQuestion}"`, 0.85, 4.18, 6.35, 0.46, 13, "FFFFFF", true, false, undefined, "top");
   }
 }
 
@@ -151,21 +152,23 @@ function renderConcept(slide: PptxGenJS.Slide, content: LooseSlide, imageData: s
   renderSplitBase(slide, imageData, getString(content, "visual_suggestion"), "Visual Guide");
   addBadge(slide, "Core Concept", 0.55, 0.65);
   addTitle(slide, getString(content, "title"), 0.55, 1.12, 4.55, 0.82, 28);
-  addText(slide, getString(content, "explanation"), 0.58, 2.08, 4.35, 1, 14, MUTED, false);
+  addText(slide, getString(content, "explanation"), 0.58, 2.08, 4.35, 1.0, 12.5, MUTED, false, false, undefined, "top");
 
   let y = 3.15;
   const keyPoint = getString(content, "key_point");
   if (keyPoint) {
-    addPanel(slide, 0.55, y, 4.35, 0.82, AMBER, "F0D38A");
+    const h = Math.min(0.94, Math.max(0.68, estimateTextHeight(keyPoint, 3.9, 11, 0.22) + 0.34));
+    addPanel(slide, 0.55, y, 4.35, h, AMBER, "F0D38A");
     addText(slide, "Key Point", 0.78, y + 0.13, 1.2, 0.16, 8, "9A6A00", true);
-    addText(slide, keyPoint, 0.78, y + 0.36, 3.9, 0.25, 12, DARK, true);
-    y += 0.98;
+    addText(slide, keyPoint, 0.78, y + 0.36, 3.9, h - 0.44, 11, DARK, true, false, undefined, "top");
+    y += h + 0.16;
   }
   const analogy = getString(content, "analogy");
   if (analogy) {
-    addPanel(slide, 0.55, y, 4.35, 0.72, SOFT, "E3D6F3");
+    const h = Math.min(0.82, Math.max(0.62, estimateTextHeight(analogy, 3.9, 10, 0.2) + 0.32));
+    addPanel(slide, 0.55, y, 4.35, h, SOFT, "E3D6F3");
     addText(slide, "Analogy", 0.78, y + 0.12, 1.2, 0.16, 8, ACCENT, true);
-    addText(slide, analogy, 0.78, y + 0.34, 3.9, 0.24, 11, MUTED, false, true);
+    addText(slide, analogy, 0.78, y + 0.34, 3.9, h - 0.42, 10, MUTED, false, true, undefined, "top");
   }
 }
 
@@ -176,7 +179,7 @@ function renderVocabulary(slide: PptxGenJS.Slide, content: LooseSlide, imageData
 
   const terms = getObjectArray(content, "terms").slice(0, 6);
   const cardW = 2.05;
-  const cardH = 0.95;
+  const cardH = 1.02;
   terms.forEach((term, idx) => {
     const col = idx % 2;
     const row = Math.floor(idx / 2);
@@ -184,8 +187,8 @@ function renderVocabulary(slide: PptxGenJS.Slide, content: LooseSlide, imageData
     const y = 1.8 + row * 1.1;
     addPanel(slide, x, y, cardW, cardH, "FFFFFF", "E5E7EB");
     addText(slide, String.fromCharCode(65 + idx), x + 0.13, y + 0.13, 0.32, 0.22, 9, "FFFFFF", true, false, ACCENT);
-    addText(slide, getFirstString(term, ["word", "term", "name"], "Term"), x + 0.52, y + 0.13, 1.35, 0.22, 11, DARK, true);
-    addText(slide, getString(term, "definition", "Definition unavailable."), x + 0.15, y + 0.45, 1.75, 0.34, 8.5, MUTED);
+    addText(slide, getFirstString(term, ["word", "term", "name"], "Term"), x + 0.52, y + 0.13, 1.35, 0.22, 10, DARK, true);
+    addText(slide, getString(term, "definition", "Definition unavailable."), x + 0.15, y + 0.43, 1.75, 0.45, 7.8, MUTED, false, false, undefined, "top");
   });
 }
 
@@ -195,15 +198,19 @@ function renderWorkedExample(slide: PptxGenJS.Slide, content: LooseSlide, imageD
   addTitle(slide, getString(content, "title"), 0.55, 0.98, 4.45, 0.72, 25);
 
   const steps = getObjectArray(content, "steps").slice(0, 5);
+  let y = 1.82;
   steps.forEach((step, idx) => {
-    const y = 1.9 + idx * 0.66;
-    addPanel(slide, 0.55, y, 4.35, 0.53, "FFFFFF", "E5E7EB");
-    addText(slide, getString(step, "step_num", String(idx + 1)), 0.72, y + 0.14, 0.28, 0.18, 8.5, "FFFFFF", true, false, DARK);
-    addText(slide, getString(step, "instruction", "Step unavailable."), 1.12, y + 0.11, 3.55, 0.22, 10, DARK);
+    const instruction = getString(step, "instruction", "Step unavailable.");
     const tip = getString(step, "tip");
+    const cardH = Math.min(0.76, Math.max(0.54, estimateTextHeight(instruction, 3.55, 9.2, 0.18) + (tip ? 0.2 : 0) + 0.22));
+    if (y + cardH > 5.1) return;
+    addPanel(slide, 0.55, y, 4.35, cardH, "FFFFFF", "E5E7EB");
+    addText(slide, getString(step, "step_num", String(idx + 1)), 0.72, y + 0.14, 0.28, 0.18, 8.5, "FFFFFF", true, false, DARK);
+    addText(slide, instruction, 1.12, y + 0.1, 3.55, tip ? cardH - 0.28 : cardH - 0.18, 9.2, DARK, false, false, undefined, "top");
     if (tip) {
       addText(slide, `Tip: ${tip}`, 1.12, y + 0.34, 3.55, 0.13, 7.5, "9A6A00");
     }
+    y += cardH + 0.12;
   });
 }
 
@@ -213,11 +220,15 @@ function renderCheck(slide: PptxGenJS.Slide, content: LooseSlide, imageData: str
   addTitle(slide, getString(content, "question"), 0.55, 0.98, 4.5, 0.92, 22);
 
   const choices = getObjectArray(content, "choices").slice(0, 5);
+  let y = 2.05;
   choices.forEach((choice, idx) => {
-    const y = 2.05 + idx * 0.58;
-    addPanel(slide, 0.55, y, 4.35, 0.46, "FFFFFF", getBool(choice, "is_correct") ? "A7F3D0" : "E5E7EB");
+    const text = getString(choice, "text", "Choice unavailable.");
+    const cardH = Math.min(0.62, Math.max(0.46, estimateTextHeight(text, 3.55, 9, 0.18) + 0.22));
+    if (y + cardH > 4.85) return;
+    addPanel(slide, 0.55, y, 4.35, cardH, "FFFFFF", getBool(choice, "is_correct") ? "A7F3D0" : "E5E7EB");
     addText(slide, getString(choice, "label", String.fromCharCode(65 + idx)), 0.72, y + 0.12, 0.28, 0.16, 8, DARK, true, false, "F3F4F6");
-    addText(slide, getString(choice, "text", "Choice unavailable."), 1.12, y + 0.11, 3.55, 0.2, 10, DARK);
+    addText(slide, text, 1.12, y + 0.1, 3.55, cardH - 0.18, 9, DARK, false, false, undefined, "top");
+    y += cardH + 0.12;
   });
   const explanation = getString(content, "explanation");
   if (explanation) {
@@ -235,14 +246,17 @@ function renderDiscussion(slide: PptxGenJS.Slide, content: LooseSlide, imageData
 
   addPanel(slide, 5.45, 1.25, 4.0, 1.65, DARK, DARK);
   addText(slide, "Prompt", 5.75, 1.48, 1.1, 0.18, 8, "DCC8F1", true);
-  addText(slide, `"${getString(content, "prompt")}"`, 5.75, 1.78, 3.45, 0.72, 20, "FFFFFF", true);
+  addText(slide, `"${getString(content, "prompt")}"`, 5.75, 1.78, 3.45, 0.86, 16, "FFFFFF", true, false, undefined, "top");
 
   const questions = getStringArray(content, "guiding_questions").slice(0, 3);
+  let y = 3.12;
   questions.forEach((question, idx) => {
-    const y = 3.16 + idx * 0.6;
-    addPanel(slide, 5.45, y, 4.0, 0.48, "FFFFFF", "E5E7EB");
+    const cardH = Math.min(0.62, Math.max(0.48, estimateTextHeight(question, 2.95, 8.8, 0.18) + 0.22));
+    if (y + cardH > 5.05) return;
+    addPanel(slide, 5.45, y, 4.0, cardH, "FFFFFF", "E5E7EB");
     addText(slide, `Q${idx + 1}`, 5.66, y + 0.14, 0.38, 0.15, 8, ACCENT, true, false, SOFT);
-    addText(slide, question, 6.18, y + 0.12, 2.95, 0.18, 9.5, DARK);
+    addText(slide, question, 6.18, y + 0.1, 2.95, cardH - 0.18, 8.8, DARK, false, false, undefined, "top");
+    y += cardH + 0.12;
   });
 }
 
@@ -253,13 +267,13 @@ function renderExitTicket(slide: PptxGenJS.Slide, content: LooseSlide, imageData
 
   addPanel(slide, 0.55, 2.05, 4.35, 1.15, DARK, DARK);
   addText(slide, "Reflection Prompt", 0.82, 2.27, 1.8, 0.16, 8, "DCC8F1", true);
-  addText(slide, getString(content, "prompt"), 0.82, 2.55, 3.75, 0.38, 15, "FFFFFF", true);
+  addText(slide, getString(content, "prompt"), 0.82, 2.55, 3.75, 0.5, 13, "FFFFFF", true, false, undefined, "top");
 
   const starters = getStringArray(content, "sentence_starters").slice(0, 3);
   starters.forEach((starter, idx) => {
     const y = 3.45 + idx * 0.42;
     addPanel(slide, 0.55, y, 4.35, 0.32, "FFFFFF", "D1D5DB");
-    addText(slide, `${starter} __________`, 0.72, y + 0.09, 3.8, 0.12, 9, MUTED, false, true);
+    addText(slide, `${starter} __________`, 0.72, y + 0.08, 3.8, 0.16, 8.2, MUTED, false, true);
   });
 
   if (getBool(content, "self_rating")) {
@@ -286,17 +300,20 @@ function renderListWithVisual(
   if (opts.eyebrow) addBadge(slide, opts.eyebrow, 3.45, 0.65, "9A6A00", AMBER);
   addTitle(slide, opts.title, 0.55, 1.12, 4.45, 0.82, 27);
 
+  let y = 2.08;
   opts.items.slice(0, 5).forEach((item, idx) => {
-    const y = 2.12 + idx * 0.58;
-    addPanel(slide, 0.55, y, 4.35, 0.46, "FFFFFF", "E5E7EB");
+    const cardH = Math.min(0.66, Math.max(0.46, estimateTextHeight(item, 3.55, 9.2, 0.18) + 0.22));
+    if (y + cardH > 4.85) return;
+    addPanel(slide, 0.55, y, 4.35, cardH, "FFFFFF", "E5E7EB");
     addText(slide, String(idx + 1), 0.72, y + 0.12, 0.28, 0.16, 8, "FFFFFF", true, false, ACCENT);
-    addText(slide, item, 1.12, y + 0.11, 3.55, 0.2, 10, DARK);
+    addText(slide, item, 1.12, y + 0.1, 3.55, cardH - 0.18, 9.2, DARK, false, false, undefined, "top");
+    y += cardH + 0.12;
   });
 
   if (opts.footerTitle && opts.footerText) {
     addPanel(slide, 0.55, 5.0, 4.35, 0.42, AMBER, "F0D38A");
     addText(slide, opts.footerTitle, 0.72, 5.11, 0.9, 0.12, 7.5, "9A6A00", true);
-    addText(slide, opts.footerText, 1.72, 5.1, 2.9, 0.14, 8.5, DARK);
+    addText(slide, opts.footerText, 1.72, 5.08, 2.9, 0.2, 7.8, DARK, false, false, undefined, "top");
   }
 }
 
@@ -332,7 +349,7 @@ function renderSplitBase(
   });
   addPanel(slide, visualX + 0.35, 4.58, 4.05, 0.62, "FFFFFF", "FFFFFF", 10);
   addText(slide, label, visualX + 0.55, 4.73, 1.5, 0.12, 7.5, MUTED, true);
-  addText(slide, suggestion || "Clean supporting visual", visualX + 0.55, 4.92, 3.45, 0.16, 8.5, DARK, true);
+  addText(slide, suggestion || "Clean supporting visual", visualX + 0.55, 4.9, 3.45, 0.24, 7.8, DARK, true, false, undefined, "top");
 }
 
 function addVisualPlaceholder(
@@ -361,7 +378,7 @@ function addVisualPlaceholder(
     line: { color: "FFFFFF", transparency: 50 },
   });
   addText(slide, label, x + 0.75, y + 1.85, w - 1.5, 0.18, 9, ACCENT, true);
-  addText(slide, suggestion || "Visual placeholder", x + 0.75, y + 2.14, w - 1.5, 0.28, 12, DARK, true);
+  addText(slide, suggestion || "Visual placeholder", x + 0.75, y + 2.14, w - 1.5, 0.38, 10.5, DARK, true, false, undefined, "top");
 }
 
 function addChrome(slide: PptxGenJS.Slide, slideNumber: number, totalSlides: number) {
@@ -419,7 +436,8 @@ function addText(
   color = DARK,
   bold = false,
   italic = false,
-  fill?: string
+  fill?: string,
+  valign: "top" | "middle" | "bottom" = "middle"
 ) {
   slide.addText(safeText(text), {
     x,
@@ -434,7 +452,7 @@ function addText(
     breakLine: false,
     fit: "shrink",
     margin: 0.03,
-    valign: "middle",
+    valign,
     ...(fill ? { fill: { color: fill }, line: { color: fill } } : {}),
   });
 }
@@ -474,7 +492,13 @@ async function getImageData(url?: string | null): Promise<string | null> {
 }
 
 function getSlideImageUrl(source: LooseSlide): string {
-  return getString(source, "image_url") || getString(source, "image");
+  return resolveSlideImageUrl(source) || "";
+}
+
+function estimateTextHeight(text: unknown, width: number, fontSize: number, lineHeight = 0.2): number {
+  const charsPerLine = Math.max(14, Math.floor((width * 13.5) / Math.max(fontSize, 1)));
+  const lineCount = Math.max(1, Math.ceil(safeText(text).length / charsPerLine));
+  return lineCount * lineHeight;
 }
 
 function downloadPptx(output: string | ArrayBuffer | Blob | Uint8Array, fileName: string) {

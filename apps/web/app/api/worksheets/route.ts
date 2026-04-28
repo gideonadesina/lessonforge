@@ -712,7 +712,7 @@ export async function POST(req: NextRequest) {
               ok: false,
               error: "school_out_of_credits",
               message:
-                "Your school has used all its credits. Your principal has been notified and will add more credits soon.",
+                "Your school has run out of credits. Contact your principal to top up.",
               upgrade_url: null,
             },
             { status: 402 }
@@ -986,14 +986,39 @@ if (primaryVisual?.imageDataUrl) {
     const deductionResult = usePersonalCredits
       ? await consumePersonalCreditsDirectly(supabase, user.id, 1)
       : await consumeGenerationCredits(supabase, user.id, 1);
+
     if (!deductionResult.ok) {
       console.error("[worksheets] Credit deduction failed after successful generation:", {
         userId: user.id,
         errorCode: deductionResult.errorCode,
         error: deductionResult.error,
       });
+
+      const worksheetId =
+        typeof (saved as { id?: unknown }).id === "string"
+          ? (saved as { id: string }).id
+          : null;
+      if (worksheetId) {
+        await supabase
+          .from("worksheets")
+          .delete()
+          .eq("id", worksheetId)
+          .eq("user_id", user.id);
+      }
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error: deductionResult.errorCode ?? "credit_deduction_failed",
+          message:
+            deductionResult.error ??
+            "Could not deduct credits. Please retry.",
+          saved: false,
+        },
+        { status: 402 }
+      );
     }
- 
+
     return jsonOk(
       {
         saved,

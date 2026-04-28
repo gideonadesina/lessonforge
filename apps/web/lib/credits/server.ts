@@ -1,6 +1,7 @@
 "use server";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export type CreditSource = "school" | "personal";
 
@@ -8,12 +9,13 @@ export type CreditAvailabilityResult =
   | { ok: true; source: CreditSource; schoolId: string | null; creditsRemaining: number }
   | { ok: false; error: string; errorCode: "profile_not_found" | "credit_check_failed" };
 
-  export async function consumePersonalCreditsDirectly(
-  supabase: SupabaseClient,
+export async function consumePersonalCreditsDirectly(
+  _supabase: SupabaseClient,
   userId: string,
   cost: number
 ): Promise<ConsumeGenerationCreditResult> {
-  const availability = await readCreditAvailability(supabase, userId);
+  const creditClient = createAdminClient();
+  const availability = await readCreditAvailability(creditClient, userId);
   if (!availability.ok) {
     return {
       ok: false,
@@ -23,16 +25,26 @@ export type CreditAvailabilityResult =
     };
   }
 
-  if (availability.source === "school" && availability.creditsRemaining >= cost) {
-    return consumeGenerationCredits(supabase, userId, cost);
-  }
-
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const { data: profile } = await supabase
+    const { data: profile, error: profileReadError } = await creditClient
       .from("profiles")
       .select("credits_balance")
       .eq("id", userId)
       .maybeSingle();
+
+    if (profileReadError || !profile) {
+      console.error("[credits] Personal credit read failed", {
+        userId,
+        cost,
+        error: profileReadError?.message ?? "User profile not found",
+      });
+      return {
+        ok: false,
+        source: "personal",
+        errorCode: "deduction_failed",
+        error: `Credit deduction failed: ${profileReadError?.message ?? "User profile not found"}`,
+      };
+    }
 
     const currentBalance = Math.max(
       0,
@@ -49,7 +61,7 @@ export type CreditAvailabilityResult =
     }
 
     const nextBalance = currentBalance - cost;
-    const { data: updated } = await supabase
+    const { data: updated, error: profileUpdateError } = await creditClient
       .from("profiles")
       .update({
         credits_balance: nextBalance,
@@ -59,6 +71,21 @@ export type CreditAvailabilityResult =
       .eq("credits_balance", currentBalance)
       .select("id")
       .maybeSingle();
+
+    if (profileUpdateError) {
+      console.error("[credits] Personal credit update failed", {
+        userId,
+        cost,
+        currentBalance,
+        error: profileUpdateError.message,
+      });
+      return {
+        ok: false,
+        source: "personal",
+        errorCode: "deduction_failed",
+        error: `Credit deduction failed: ${profileUpdateError.message}`,
+      };
+    }
 
     if (updated) {
       return {
@@ -74,7 +101,7 @@ export type CreditAvailabilityResult =
     ok: false,
     source: "personal",
     errorCode: "deduction_failed",
-    error: "Credit deduction failed. Please retry.",
+    error: "Credit deduction failed: personal balance changed. Please retry.",
   };
 }
 
@@ -209,14 +236,14 @@ async function readCreditAvailability(
 }
 
 export async function getGenerationCreditAvailability(
-  supabase: SupabaseClient,
+  _supabase: SupabaseClient,
   userId: string
 ): Promise<CreditAvailabilityResult> {
-  return readCreditAvailability(supabase, userId);
+  return readCreditAvailability(createAdminClient(), userId);
 }
 
 export async function consumeGenerationCredits(
-  supabase: SupabaseClient,
+  _supabase: SupabaseClient,
   userId: string,
   cost: number
 ): Promise<ConsumeGenerationCreditResult> {
@@ -224,7 +251,8 @@ export async function consumeGenerationCredits(
     return { ok: true, source: "personal", schoolId: null, creditsRemaining: 0 };
   }
 
-  const availability = await readCreditAvailability(supabase, userId);
+  const creditClient = createAdminClient();
+  const availability = await readCreditAvailability(creditClient, userId);
   if (!availability.ok) {
     return {
       ok: false,
@@ -237,11 +265,25 @@ export async function consumeGenerationCredits(
  if (availability.source === "school") {
     if (availability.creditsRemaining < cost) {
       // School credits exhausted — check personal credits
-      const { data: profileData } = await supabase
+      const { data: profileData, error: profileReadError } = await creditClient
         .from("profiles")
         .select("credits_balance")
         .eq("id", userId)
         .maybeSingle();
+
+      if (profileReadError) {
+        console.error("[credits] Personal fallback read failed", {
+          userId,
+          cost,
+          error: profileReadError.message,
+        });
+        return {
+          ok: false,
+          source: "school",
+          errorCode: "deduction_failed",
+          error: `Credit deduction failed: ${profileReadError.message}`,
+        };
+      }
 
       const personalBalance = Math.max(
         0,
@@ -268,13 +310,19 @@ export async function consumeGenerationCredits(
     }
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      const { data: school, error: schoolReadError } = await supabase
+      const { data: school, error: schoolReadError } = await creditClient
         .from("schools")
         .select("shared_credits, credits_used")
         .eq("id", availability.schoolId)
         .maybeSingle();
 
       if (schoolReadError || !school) {
+        console.error("[credits] School credit read failed", {
+          userId,
+          schoolId: availability.schoolId,
+          cost,
+          error: schoolReadError?.message ?? "School not found",
+        });
         return {
           ok: false,
           source: "school",
@@ -296,7 +344,7 @@ export async function consumeGenerationCredits(
       }
 
       const nextSchoolCredits = currentSchoolCredits - cost;
-      const { data: updatedSchool, error: schoolUpdateError } = await supabase
+      const { data: updatedSchool, error: schoolUpdateError } = await creditClient
         .from("schools")
         .update({
           shared_credits: nextSchoolCredits,
@@ -309,6 +357,13 @@ export async function consumeGenerationCredits(
         .maybeSingle();
 
       if (schoolUpdateError) {
+        console.error("[credits] School credit update failed", {
+          userId,
+          schoolId: availability.schoolId,
+          cost,
+          currentSchoolCredits,
+          error: schoolUpdateError.message,
+        });
         return {
           ok: false,
           source: "school",
@@ -345,13 +400,18 @@ export async function consumeGenerationCredits(
   }
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const { data: profile, error: profileReadError } = await supabase
+    const { data: profile, error: profileReadError } = await creditClient
       .from("profiles")
       .select("credits_balance")
       .eq("id", userId)
       .maybeSingle();
 
     if (profileReadError || !profile) {
+      console.error("[credits] Personal credit read failed", {
+        userId,
+        cost,
+        error: profileReadError?.message ?? "User profile not found",
+      });
       return {
         ok: false,
         source: "personal",
@@ -371,7 +431,7 @@ export async function consumeGenerationCredits(
     }
 
     const nextBalance = currentBalance - cost;
-    const { data: updatedProfile, error: profileUpdateError } = await supabase
+    const { data: updatedProfile, error: profileUpdateError } = await creditClient
       .from("profiles")
       .update({
         credits_balance: nextBalance,
@@ -383,6 +443,12 @@ export async function consumeGenerationCredits(
       .maybeSingle();
 
     if (profileUpdateError) {
+      console.error("[credits] Personal credit update failed", {
+        userId,
+        cost,
+        currentBalance,
+        error: profileUpdateError.message,
+      });
       return {
         ok: false,
         source: "personal",

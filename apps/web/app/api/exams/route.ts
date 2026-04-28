@@ -309,7 +309,7 @@ export async function POST(req: NextRequest) {
             ok: false,
             error: "school_out_of_credits",
             message:
-              "Your school has used all its credits. Your principal has been notified and will add more credits soon.",
+              "Your school has run out of credits. Contact your principal to top up.",
             upgrade_url: null,
           },
           { status: 402 }
@@ -389,13 +389,39 @@ export async function POST(req: NextRequest) {
     const deductionResult = usePersonalCredits
       ? await consumePersonalCreditsDirectly(supabase, user.id, 1)
       : await consumeGenerationCredits(supabase, user.id, 1);
+
     if (!deductionResult.ok) {
       console.error("[exams] Credit deduction failed after successful generation:", {
         userId: user.id,
         errorCode: deductionResult.errorCode,
         error: deductionResult.error,
       });
+
+      const examId =
+        typeof (saved as { id?: unknown }).id === "string"
+          ? (saved as { id: string }).id
+          : null;
+      if (examId) {
+        await supabase
+          .from("exams")
+          .delete()
+          .eq("id", examId)
+          .eq("user_id", user.id);
+      }
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error: deductionResult.errorCode ?? "credit_deduction_failed",
+          message:
+            deductionResult.error ??
+            "Could not deduct credits. Please retry.",
+          saved: false,
+        },
+        { status: 402 }
+      );
     }
+
     return jsonOk(saved, 201);
   } catch (e: unknown) {
     return jsonErr(getErrorMessage(e, "Exam generation failed"), 500);

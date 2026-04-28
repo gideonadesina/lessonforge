@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,6 +51,13 @@ export async function POST(req: NextRequest) {
     if (delErr) {
       return NextResponse.json({ ok: false, error: delErr.message }, { status: 500 });
     }
+
+    // clear school_id from profile so credit system stops routing to school pool
+    const admin = createAdminClient();
+    await admin
+      .from("profiles")
+      .update({ school_id: null, updated_at: new Date().toISOString() })
+      .eq("id", user.id);
 
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (e: any) {

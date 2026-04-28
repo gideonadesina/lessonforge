@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { resolveSlideImageUrl } from "@/lib/slideImageResolver";
 
 type SlideVisualPanelProps = {
   imageUrl?: string | null;
@@ -10,12 +11,7 @@ type SlideVisualPanelProps = {
   className?: string;
 };
 
-export function resolveSlideImageUrl(slide: {
-  image_url?: string | null;
-  image?: string | null;
-}) {
-  return slide.image_url || slide.image || null;
-}
+export { resolveSlideImageUrl };
 
 export default function SlideVisualPanel({
   imageUrl,

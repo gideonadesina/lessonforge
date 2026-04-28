@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 
 import type { SlideDeck, Slide } from "./slideRenderer";
+import { resolveSlideImageUrl } from "./slideImageResolver";
 
 const ACCENT = [83, 74, 183] as const;   // brand #534AB7
 const DARK = [23, 23, 33] as const;
@@ -27,12 +28,7 @@ export async function exportToPdf(deck: SlideDeck): Promise<void> {
     if (i > 0) pdf.addPage();
 
     let imgData: string | null = null;
-    const imageUrl =
-      typeof slide.image_url === "string" && slide.image_url
-        ? slide.image_url
-        : typeof slide.image === "string" && slide.image
-        ? slide.image
-        : null;
+    const imageUrl = resolveSlideImageUrl(slide);
     if (imageUrl) {
       try {
         imgData = await fetchImageAsBase64(imageUrl);
@@ -66,6 +62,30 @@ async function fetchImageAsBase64(url: string): Promise<string | null> {
   }
 }
 
+function wrapText(pdf: jsPDF, text: unknown, width: number, fontSize: number, bold = false): string[] {
+  const value = String(text ?? "").replace(/\s+/g, " ").trim();
+  if (!value) return [""];
+
+  pdf.setFontSize(fontSize);
+  pdf.setFont("helvetica", bold ? "bold" : "normal");
+
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of value.split(" ")) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (!current || pdf.getTextWidth(candidate) <= width) {
+      current = candidate;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+
+  if (current) lines.push(current);
+  return lines;
+}
+
 function renderSlideToPdf(
   pdf: jsPDF,
   slide: Slide,
@@ -78,7 +98,7 @@ function renderSlideToPdf(
   // Text lives in the left panel; image fills the right panel full-bleed
   const splitX = hasImage ? Math.round(pageWidth * 0.52) : pageWidth;
   const textWidth = splitX - margin * 2;
-  const lineHeight = 15;
+  const contentBottom = pageHeight - 38;
 
   // ── Backgrounds ───────────────────────────────────────────────
   pdf.setFillColor(255, 255, 255);
@@ -119,7 +139,7 @@ function renderSlideToPdf(
     pdf.setFontSize(fontSize);
     pdf.setFont("helvetica", "bold");
     pdf.setTextColor(...DARK);
-    const lines = pdf.splitTextToSize(text, textWidth);
+    const lines = wrapText(pdf, text, textWidth, fontSize, true);
     pdf.text(lines, margin, yPos);
     yPos += lines.length * (fontSize * 1.35) + 8;
   };
@@ -128,7 +148,7 @@ function renderSlideToPdf(
     pdf.setFontSize(fontSize);
     pdf.setFont("helvetica", bold ? "bold" : "normal");
     pdf.setTextColor(...color);
-    const lines = pdf.splitTextToSize(text, textWidth);
+    const lines = wrapText(pdf, text, textWidth, fontSize, bold);
     pdf.text(lines, margin, yPos);
     yPos += lines.length * (fontSize * 1.4) + 6;
   };
@@ -177,7 +197,9 @@ function renderSlideToPdf(
       addTitle(slide.title, 26);
       yPos += 4;
       (slide.objectives as string[]).forEach((obj, idx) => {
-        const rowH = 28;
+        const lines = wrapText(pdf, obj, textWidth - 40, 11);
+        const rowH = Math.max(30, lines.length * 14 + 14);
+        if (yPos + rowH > contentBottom) return;
         addPanel(yPos - 4, rowH, [250, 250, 252], [230, 230, 235]);
         pdf.setFillColor(...ACCENT);
         pdf.roundedRect(margin + 6, yPos - 2, 20, 20, 2, 2, "F");
@@ -185,7 +207,6 @@ function renderSlideToPdf(
         pdf.setFont("helvetica", "bold");
         pdf.setTextColor(255, 255, 255);
         pdf.text(String(idx + 1), margin + 16 - pdf.getTextWidth(String(idx + 1)) / 2, yPos + 12);
-        const lines = pdf.splitTextToSize(obj, textWidth - 34);
         pdf.setFontSize(11);
         pdf.setFont("helvetica", "normal");
         pdf.setTextColor(...DARK);
@@ -221,7 +242,9 @@ function renderSlideToPdf(
       addTitle(slide.title, 24);
       (slide.terms as any[]).slice(0, 6).forEach((term, idx) => {
         const word = term.word || term.term || term.name || "Term";
-        const th = 50;
+        const defLines = wrapText(pdf, term.definition || "", textWidth - 44, 9.5);
+        const th = Math.max(52, defLines.length * 12 + 32);
+        if (yPos + th > contentBottom) return;
         addPanel(yPos - 4, th, [250, 250, 252], [230, 230, 235]);
         pdf.setFillColor(...ACCENT);
         pdf.roundedRect(margin + 6, yPos - 2, 20, 20, 2, 2, "F");
@@ -234,7 +257,6 @@ function renderSlideToPdf(
         pdf.setFont("helvetica", "bold");
         pdf.setTextColor(...DARK);
         pdf.text(word, margin + 32, yPos + 10);
-        const defLines = pdf.splitTextToSize(term.definition || "", textWidth - 34);
         pdf.setFontSize(9.5);
         pdf.setFont("helvetica", "normal");
         pdf.setTextColor(...MUTED);
@@ -248,7 +270,10 @@ function renderSlideToPdf(
       addLabel("Worked Example");
       addTitle(slide.title, 26);
       (slide.steps as any[]).forEach((step, idx) => {
-        const stepH = step.tip ? 56 : 36;
+        const instLines = wrapText(pdf, step.instruction || "", textWidth - 46, 11);
+        const tipLines = step.tip ? wrapText(pdf, `Tip: ${step.tip}`, textWidth - 46, 9) : [];
+        const stepH = Math.max(step.tip ? 58 : 38, instLines.length * 14 + tipLines.length * 11 + 18);
+        if (yPos + stepH > contentBottom) return;
         addPanel(yPos - 4, stepH, [250, 250, 252], [230, 230, 235]);
         pdf.setFillColor(...DARK);
         pdf.roundedRect(margin + 6, yPos - 2, 22, 22, 3, 3, "F");
@@ -257,13 +282,11 @@ function renderSlideToPdf(
         pdf.setTextColor(255, 255, 255);
         const num = String(step.step_num ?? idx + 1);
         pdf.text(num, margin + 17 - pdf.getTextWidth(num) / 2, yPos + 12);
-        const instLines = pdf.splitTextToSize(step.instruction || "", textWidth - 36);
         pdf.setFontSize(11);
         pdf.setFont("helvetica", "normal");
         pdf.setTextColor(...DARK);
         pdf.text(instLines, margin + 34, yPos + 11);
         if (step.tip) {
-          const tipLines = pdf.splitTextToSize(`Tip: ${step.tip}`, textWidth - 36);
           pdf.setFontSize(9);
           pdf.setTextColor(154, 106, 0);
           pdf.text(tipLines, margin + 34, yPos + 26);
@@ -279,7 +302,9 @@ function renderSlideToPdf(
       yPos += 6;
       (slide.choices as any[]).forEach((choice) => {
         const correct = choice.is_correct === true;
-        const ch = 34;
+        const choiceLines = wrapText(pdf, choice.text || "", textWidth - 34, 11);
+        const ch = Math.max(34, choiceLines.length * 14 + 14);
+        if (yPos + ch > contentBottom) return;
         const fillRgb: readonly [number, number, number] = correct ? [167, 243, 208] : [250, 250, 252];
         const strokeRgb: readonly [number, number, number] = correct ? [110, 231, 183] : [230, 230, 235];
         addPanel(yPos - 4, ch, fillRgb, strokeRgb);
@@ -287,7 +312,6 @@ function renderSlideToPdf(
         pdf.setFont("helvetica", "bold");
         pdf.setTextColor(...DARK);
         pdf.text(choice.label || "•", margin + 10, yPos + 10);
-        const choiceLines = pdf.splitTextToSize(choice.text || "", textWidth - 28);
         pdf.setFontSize(11);
         pdf.setFont("helvetica", "normal");
         pdf.text(choiceLines, margin + 26, yPos + 10);
@@ -310,7 +334,7 @@ function renderSlideToPdf(
       pdf.setFont("helvetica", "bold");
       pdf.setTextColor(220, 200, 241);
       pdf.text("PROMPT", margin + 12, yPos + 14);
-      const promptLines = pdf.splitTextToSize(`"${slide.prompt}"`, textWidth - 24);
+      const promptLines = wrapText(pdf, `"${slide.prompt}"`, textWidth - 24, 16, true).slice(0, 3);
       pdf.setFontSize(16);
       pdf.setFont("helvetica", "bold");
       pdf.setTextColor(255, 255, 255);
@@ -320,13 +344,14 @@ function renderSlideToPdf(
         addBody("Think · Pair · Share", 9, ACCENT as unknown as readonly [number, number, number], true);
       }
       (slide.guiding_questions as string[] | undefined)?.slice(0, 4).forEach((q, idx) => {
-        const qh = 32;
+        const qLines = wrapText(pdf, q, textWidth - 34, 10.5);
+        const qh = Math.max(32, qLines.length * 13 + 13);
+        if (yPos + qh > contentBottom) return;
         addPanel(yPos - 4, qh, [250, 250, 252], [230, 230, 235]);
         pdf.setFontSize(8.5);
         pdf.setFont("helvetica", "bold");
         pdf.setTextColor(...ACCENT);
         pdf.text(`Q${idx + 1}`, margin + 10, yPos + 11);
-        const qLines = pdf.splitTextToSize(q, textWidth - 28);
         pdf.setFontSize(10.5);
         pdf.setFont("helvetica", "normal");
         pdf.setTextColor(...DARK);
@@ -341,11 +366,12 @@ function renderSlideToPdf(
       addTitle(slide.title, 26);
       yPos += 4;
       (slide.takeaways as string[]).forEach((t) => {
-        const th = 32;
+        const lines = wrapText(pdf, t, textWidth - 34, 11);
+        const th = Math.max(32, lines.length * 14 + 12);
+        if (yPos + th > contentBottom) return;
         addPanel(yPos - 4, th, [250, 250, 252], [230, 230, 235]);
         pdf.setFillColor(...ACCENT);
         pdf.circle(margin + 14, yPos + 10, 4, "F");
-        const lines = pdf.splitTextToSize(t, textWidth - 28);
         pdf.setFontSize(11);
         pdf.setFont("helvetica", "normal");
         pdf.setTextColor(...DARK);
@@ -376,7 +402,8 @@ function renderSlideToPdf(
         pdf.setFontSize(10);
         pdf.setFont("helvetica", "normal");
         pdf.setTextColor(...MUTED);
-        pdf.text(`${s} ___________________`, margin + 10, yPos + 10);
+        const starter = wrapText(pdf, `${s} ___________________`, textWidth - 20, 10).slice(0, 2);
+        pdf.text(starter, margin + 10, yPos + 10);
         yPos += sh + 5;
       });
       if (slide.self_rating) {

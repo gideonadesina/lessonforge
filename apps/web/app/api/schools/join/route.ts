@@ -358,7 +358,12 @@ export async function POST(req: NextRequest) {
     }
  
     await normalizeTeacherMembershipRows(admin, school.id, user.id);
- 
+
+    await admin
+      .from("profiles")
+      .update({ school_id: school.id, updated_at: new Date().toISOString() })
+      .eq("id", user.id);
+
     const membershipRes = await admin
       .from("school_members")
       .select("school_id, user_id, role, created_at")

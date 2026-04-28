@@ -52,10 +52,7 @@ async function updateProfileMetadata(
     .update({
       plan,
       is_pro: plan !== "basic",
-      pro_expires_at:
-        plan !== "basic"
-          ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-          : null,
+      pro_expires_at: null,
       paystack_subscription_code:
         paystackData?.subscription?.subscription_code ?? null,
       paystack_customer_code: paystackData?.customer?.customer_code ?? null,

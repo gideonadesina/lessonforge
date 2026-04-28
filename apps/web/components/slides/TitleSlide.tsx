@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { resolveSlideImageUrl } from "./SlideVisualPanel";
 
 type TitleSlideProps = {
   slide: {
@@ -16,7 +17,7 @@ type TitleSlideProps = {
 };
 
 export default function TitleSlide({ slide }: TitleSlideProps) {
-  const imageUrl = slide.image_url || slide.image || null;
+  const imageUrl = resolveSlideImageUrl(slide);
 
   return (
     <div className="relative h-full w-full overflow-hidden">

@@ -185,7 +185,7 @@ export default function PrincipalTeachersPage() {
                         <>
                           <tr key={teacher.userId} className="border-b border-[var(--border)]">
                             <td className="py-3">
-                              <div className="font-semibold text-[var(--text-primary)]">{teacher.name}</div>
+                              <div className="font-semibold text-[var(--text-primary)]">{teacher.name || teacher.email}</div>
                               <div className="text-xs text-[var(--text-tertiary)]">{teacher.email || teacher.userId}</div>
                             </td>
                             <td className="py-3">
