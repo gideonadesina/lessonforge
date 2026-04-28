@@ -12,6 +12,7 @@ import {
   validateRequiredGenerationMeta,
   validateStage1,
 } from "@/lib/generation/staged-lesson";
+import { ROLE_COOKIE_KEY } from "@/lib/auth/roles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,7 +33,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "invalid_generation_metadata", message: metaError }, { status: 400 });
     }
 
-    const creditResponse = await checkCreditsOrResponse(auth.supabase, auth.userId, meta);
+    const activeRole = req.cookies.get(ROLE_COOKIE_KEY)?.value ?? null;
+    const creditResponse = await checkCreditsOrResponse(auth.supabase, auth.userId, meta, activeRole);
     if (creditResponse) return creditResponse;
 
     const client = openAiClient();
@@ -98,7 +100,8 @@ export async function POST(req: NextRequest) {
       auth.supabase,
       lessonId,
       auth.userId,
-      meta.usePersonalCredits === true
+      meta.usePersonalCredits === true,
+      activeRole
     );
     if (deductionResponse) return deductionResponse;
 
@@ -109,4 +112,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "stage1_failed", message }, { status: 500 });
   }
 }
-

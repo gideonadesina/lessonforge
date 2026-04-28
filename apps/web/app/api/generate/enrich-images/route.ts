@@ -87,8 +87,8 @@ export async function POST(req: NextRequest) {
     }
 
     const enrichedSlides = await enrichSlidesWithPexelsImages(slides, pexelsKey, {
-      timeoutMs: 5000,
-      overallTimeoutMs: 10000,
+      timeoutMs: 7000,
+      overallTimeoutMs: 15000,
       topic,
       subject,
     });

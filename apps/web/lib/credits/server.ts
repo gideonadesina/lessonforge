@@ -2,6 +2,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { normalizeRole, type AppRole } from "@/lib/auth/roles";
 
 export type CreditSource = "school" | "personal";
 
@@ -147,6 +148,39 @@ function isInactiveSchoolMember(row: SchoolMemberCreditsRow) {
   );
 }
 
+function isPrincipalRole(role: string | null | undefined) {
+  return ["principal", "admin", "owner", "school_admin", "headteacher"].includes(
+    String(role ?? "").toLowerCase()
+  );
+}
+
+function isActiveTeacherSchoolMember(row: SchoolMemberCreditsRow) {
+  return (
+    typeof row.school_id === "string" &&
+    !isInactiveSchoolMember(row) &&
+    !isPrincipalRole(row.role)
+  );
+}
+
+async function readActiveTeacherSchoolId(supabase: SupabaseClient, userId: string) {
+  const { data: memberships, error: membershipError } = await supabase
+    .from("school_members")
+    .select("school_id, role, status, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  if (membershipError) {
+    return { error: membershipError.message, schoolId: null };
+  }
+
+  const activeMembership = ((memberships ?? []) as SchoolMemberCreditsRow[]).find(
+    isActiveTeacherSchoolMember
+  );
+
+  return activeMembership?.school_id ?? null;
+}
+
 async function readEffectiveSchoolId(
   supabase: SupabaseClient,
   userId: string,
@@ -191,8 +225,10 @@ async function readEffectiveSchoolId(
 
 async function readCreditAvailability(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
+  activeRoleInput?: AppRole | string | null
 ): Promise<CreditAvailabilityResult> {
+  const activeRole = normalizeRole(activeRoleInput ?? null);
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("school_id, credits_balance")
@@ -209,12 +245,28 @@ async function readCreditAvailability(
   }
 
   const profileSchoolId = typeof profileRow.school_id === "string" ? profileRow.school_id : null;
-  const effectiveSchoolId = await readEffectiveSchoolId(supabase, userId, profileSchoolId);
+  const personalCredits = Math.max(0, Number(profileRow.credits_balance ?? 0));
+  const teacherSchoolId =
+    activeRole === "teacher"
+      ? await readActiveTeacherSchoolId(supabase, userId)
+      : null;
+  if (typeof teacherSchoolId === "object" && teacherSchoolId?.error) {
+    return { ok: false, error: `Credit check failed: ${teacherSchoolId.error}`, errorCode: "credit_check_failed" };
+  }
+
+  const effectiveSchoolId =
+    activeRole === "teacher"
+      ? teacherSchoolId
+      : await readEffectiveSchoolId(supabase, userId, profileSchoolId);
   if (typeof effectiveSchoolId === "object" && effectiveSchoolId?.error) {
     return { ok: false, error: `Credit check failed: ${effectiveSchoolId.error}`, errorCode: "credit_check_failed" };
   }
 
   const schoolId = typeof effectiveSchoolId === "string" ? effectiveSchoolId : null;
+  const schoolMembership = Boolean(schoolId);
+  const source: CreditSource = schoolId ? "school" : "personal";
+  let schoolCredits = 0;
+
   if (schoolId) {
     const { data: school, error: schoolError } = await supabase
       .from("schools")
@@ -227,32 +279,43 @@ async function readCreditAvailability(
     }
 
     const schoolRow = (school ?? null) as SchoolCreditsRow;
-    const schoolCredits = Math.max(0, Number(schoolRow?.shared_credits ?? 0));
+    schoolCredits = Math.max(0, Number(schoolRow?.shared_credits ?? 0));
+    console.log("[credits] activeRole:", activeRole);
+    console.log("[credits] schoolMembership:", Boolean(schoolMembership));
+    console.log("[credits] source selected:", source);
+    console.log("[credits] schoolCredits:", schoolCredits);
+    console.log("[credits] personalCredits:", personalCredits);
     return { ok: true, source: "school", schoolId, creditsRemaining: schoolCredits };
   }
 
-  const personalCredits = Math.max(0, Number(profileRow.credits_balance ?? 0));
+  console.log("[credits] activeRole:", activeRole);
+  console.log("[credits] schoolMembership:", Boolean(schoolMembership));
+  console.log("[credits] source selected:", source);
+  console.log("[credits] schoolCredits:", schoolCredits);
+  console.log("[credits] personalCredits:", personalCredits);
   return { ok: true, source: "personal", schoolId: null, creditsRemaining: personalCredits };
 }
 
 export async function getGenerationCreditAvailability(
   _supabase: SupabaseClient,
-  userId: string
+  userId: string,
+  activeRole?: AppRole | string | null
 ): Promise<CreditAvailabilityResult> {
-  return readCreditAvailability(createAdminClient(), userId);
+  return readCreditAvailability(createAdminClient(), userId, activeRole);
 }
 
 export async function consumeGenerationCredits(
   _supabase: SupabaseClient,
   userId: string,
-  cost: number
+  cost: number,
+  activeRole?: AppRole | string | null
 ): Promise<ConsumeGenerationCreditResult> {
   if (!Number.isFinite(cost) || cost <= 0) {
     return { ok: true, source: "personal", schoolId: null, creditsRemaining: 0 };
   }
 
   const creditClient = createAdminClient();
-  const availability = await readCreditAvailability(creditClient, userId);
+  const availability = await readCreditAvailability(creditClient, userId, activeRole);
   if (!availability.ok) {
     return {
       ok: false,
@@ -295,7 +358,7 @@ export async function consumeGenerationCredits(
           ok: false,
           source: "school",
           errorCode: "school_out_of_credits",
-          error: "Your school has used all its credits and you have no personal credits.",
+          error: "Your school has run out of credits. Please contact your principal.",
         };
       }
 
@@ -339,7 +402,7 @@ export async function consumeGenerationCredits(
           ok: false,
           source: "school",
           errorCode: "school_out_of_credits",
-          error: "Your school has used all its credits.",
+          error: "Your school has run out of credits. Please contact your principal.",
         };
       }
 

@@ -332,7 +332,7 @@ function hasGenericVisualText(value: string) {
   );
 }
 
-function isPexelsImageUrl(value: unknown) {
+function isPexelsImageUrl(value: unknown): value is string {
   if (typeof value !== "string") return false;
   try {
     const hostname = new URL(value).hostname.toLowerCase();
@@ -400,14 +400,15 @@ async function fetchPexelsImage(
   query: string,
   apiKey: string,
   timeoutMs: number,
-  options: { allowGeneric?: boolean } = {}
+  options: { allowGeneric?: boolean; page?: number } = {}
 ) {
   const cleanQuery = cleanPexelsQuery(query, options);
   if (!cleanQuery || !apiKey) return null;
+  const page = clampNumber(options.page, 1, 20, 1);
 
   try {
-    console.log("[Pexels] searching:", cleanQuery);
-    const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(cleanQuery)}&per_page=1&orientation=landscape&size=large`;
+    console.log("[Pexels] searching:", cleanQuery, "page:", page);
+    const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(cleanQuery)}&per_page=1&page=${page}&orientation=landscape&size=large`;
     const res = await fetch(url, {
       headers: { Authorization: apiKey },
       signal: AbortSignal.timeout(timeoutMs),
@@ -424,9 +425,10 @@ async function fetchPexelsImage(
     const pick = Array.isArray(data.photos) ? data.photos[0] : null;
     const imageUrl = pick?.src?.large2x ?? pick?.src?.large ?? pick?.src?.medium ?? null;
     if (!isPexelsImageUrl(imageUrl)) return null;
+    const validImageUrl = imageUrl;
 
     return {
-      image_url: imageUrl,
+      image_url: validImageUrl,
       image_credit: pick?.photographer ?? "Pexels",
       image_alt: pick?.alt ?? cleanQuery,
     };
@@ -439,27 +441,53 @@ async function fetchPexelsImage(
 
 async function fetchPexelsImageWithFallbacks(
   slide: JsonRecord,
+  slideIndex: number,
   apiKey: string,
   timeoutMs: number,
+  usedImageUrls: Set<string>,
   options: { topic?: string; subject?: string } = {}
 ) {
   const compressedQuery = getSlideImageQuery(slide, options.topic, options.subject);
+  const slideType = cleanString(slide.slideType ?? slide.slide_type, "slide");
+  const titleQuery = compressPexelsQuery(cleanString(slide.title), options.topic, options.subject);
+  const topicTypeQuery = compressPexelsQuery(
+    [options.topic, slideType].filter(Boolean).join(" "),
+    options.topic,
+    options.subject
+  );
+  const subjectSlideQuery = compressPexelsQuery(
+    [options.subject, `slide ${slideIndex + 1}`].filter(Boolean).join(" "),
+    options.topic,
+    options.subject
+  );
   const queries = [
     { query: compressedQuery, allowGeneric: false },
-    { query: options.topic ?? "", allowGeneric: false },
+    { query: titleQuery, allowGeneric: false },
+    { query: topicTypeQuery, allowGeneric: false },
+    { query: subjectSlideQuery, allowGeneric: false },
     { query: "students learning", allowGeneric: true },
   ];
   const seen = new Set<string>();
+  const basePage = (slideIndex % 5) + 1;
 
   for (const item of queries) {
     const key = `${item.query.trim().toLowerCase()}|${item.allowGeneric}`;
     if (!item.query.trim() || seen.has(key)) continue;
     seen.add(key);
 
-    const image = await fetchPexelsImage(item.query, apiKey, timeoutMs, {
-      allowGeneric: item.allowGeneric,
-    });
-    if (image) return image;
+    for (let offset = 0; offset < 3; offset += 1) {
+      const image = await fetchPexelsImage(item.query, apiKey, timeoutMs, {
+        allowGeneric: item.allowGeneric,
+        page: ((basePage + offset - 1) % 5) + 1,
+      });
+      if (!image) continue;
+      if (usedImageUrls.has(image.image_url)) {
+        console.log("[Pexels] duplicate image skipped:", image.image_url);
+        continue;
+      }
+      usedImageUrls.add(image.image_url);
+      return image;
+    }
   }
 
   return null;
@@ -472,24 +500,33 @@ export async function enrichSlidesWithPexelsImages(
 ) {
   if (!pexelsKey || !Array.isArray(slides) || slides.length === 0) return slides;
 
-  const timeoutMs = Math.max(500, options.timeoutMs ?? 5000);
-  const overallTimeoutMs = Math.max(timeoutMs, options.overallTimeoutMs ?? 10000);
+  const timeoutMs = Math.max(500, options.timeoutMs ?? 7000);
+  const overallTimeoutMs = Math.max(timeoutMs, options.overallTimeoutMs ?? 15000);
+  const usedImageUrls = new Set<string>();
 
-  const work = Promise.allSettled(
-    slides.map(async (slide) => {
-      const image = await fetchPexelsImageWithFallbacks(slide, pexelsKey, timeoutMs, options);
-      return image
-        ? {
-            ...slide,
-            ...image,
-          }
-        : slide;
-    })
-  ).then((results) =>
-    results.map((result, index) =>
-      result.status === "fulfilled" ? result.value : slides[index]
-    )
-  );
+  const work = (async () => {
+    const enriched: JsonRecord[] = [];
+    for (let index = 0; index < slides.length; index += 1) {
+      const slide = slides[index];
+      const image = await fetchPexelsImageWithFallbacks(
+        slide,
+        index,
+        pexelsKey,
+        timeoutMs,
+        usedImageUrls,
+        options
+      );
+      enriched.push(
+        image
+          ? {
+              ...slide,
+              ...image,
+            }
+          : slide
+      );
+    }
+    return enriched;
+  })();
 
   const timeout = new Promise<JsonRecord[]>((resolve) => {
     setTimeout(() => {
@@ -740,9 +777,10 @@ export async function updateLessonResult(
 export async function checkCreditsOrResponse(
   supabase: SupabaseClient,
   userId: string,
-  meta: GenerationMetadata
+  meta: GenerationMetadata,
+  activeRole?: string | null
 ): Promise<NextResponse | null> {
-  const availability = await getGenerationCreditAvailability(supabase, userId);
+  const availability = await getGenerationCreditAvailability(supabase, userId, activeRole);
   if (!availability.ok) {
     return NextResponse.json(
       { ok: false, error: "credit_check_failed", message: availability.error },
@@ -782,7 +820,7 @@ export async function checkCreditsOrResponse(
           ok: false,
           error: "school_out_of_credits",
           errorCode: "school_out_of_credits",
-          message: "Your school has used all its credits. Your principal has been notified and will add more credits soon.",
+          message: "Your school has run out of credits. Please contact your principal.",
         },
         { status: 402 }
       );
@@ -806,11 +844,12 @@ export async function deductStage1CreditsOrCleanup(
   supabase: SupabaseClient,
   lessonId: string,
   userId: string,
-  usePersonalCredits: boolean
+  usePersonalCredits: boolean,
+  activeRole?: string | null
 ): Promise<NextResponse | null> {
   const deductionResult = usePersonalCredits
     ? await consumePersonalCreditsDirectly(supabase, userId, LESSON_PACK_CREDIT_COST)
-    : await consumeGenerationCredits(supabase, userId, LESSON_PACK_CREDIT_COST);
+    : await consumeGenerationCredits(supabase, userId, LESSON_PACK_CREDIT_COST, activeRole);
 
   if (deductionResult.ok) return null;
 

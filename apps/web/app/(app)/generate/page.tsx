@@ -24,6 +24,18 @@ type LessonVocabularyItem = {
   meaning?: string;
 };
 
+type SchoolMeResponse = {
+  ok?: boolean;
+  data?: {
+    school?: {
+      id?: string;
+      shared_credits?: number | null;
+      credits_remaining?: number | null;
+      remaining_credits?: number | null;
+    } | null;
+  };
+};
+
 type LessonStep = {
   stepNumber?: number;
   stepTitle?: string;
@@ -278,6 +290,7 @@ export default function GeneratePage() {
   const [result, setResult] = useState<Generated | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
+  const [schoolCreditsRemaining, setSchoolCreditsRemaining] = useState<number | null>(null);
   const [redirectingToUpgrade, setRedirectingToUpgrade] = useState(false);
   const [stagedStepIndex, setStagedStepIndex] = useState(0);
   const [stagedLessonId, setStagedLessonId] = useState<string | null>(null);
@@ -285,7 +298,45 @@ export default function GeneratePage() {
   const [failedStage, setFailedStage] = useState<FailedStage | null>(null);
   const [retryingStage, setRetryingStage] = useState(false);
 
-  const hasInsufficientCredits = !profileLoading && creditsRemaining < LESSON_PACK_CREDIT_COST;
+  const hasSchoolCreditsAvailable =
+    typeof schoolCreditsRemaining === "number" &&
+    schoolCreditsRemaining >= LESSON_PACK_CREDIT_COST;
+  const hasInsufficientCredits =
+    !profileLoading &&
+    !hasSchoolCreditsAvailable &&
+    creditsRemaining < LESSON_PACK_CREDIT_COST;
+
+  useEffect(() => {
+    (async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token ?? "";
+      if (!token) return;
+
+      const res = await fetch("/api/schools/me", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+
+      const json = (await res.json()) as SchoolMeResponse;
+      const school = json.data?.school ?? null;
+      if (!json.ok || !school?.id) {
+        setSchoolCreditsRemaining(null);
+        return;
+      }
+
+      const remaining =
+        typeof school.remaining_credits === "number"
+          ? school.remaining_credits
+          : typeof school.credits_remaining === "number"
+            ? school.credits_remaining
+            : typeof school.shared_credits === "number"
+              ? school.shared_credits
+              : null;
+      setSchoolCreditsRemaining(typeof remaining === "number" ? Math.max(0, remaining) : null);
+    })();
+  }, [supabase]);
 
   useEffect(() => {
     if (
@@ -294,6 +345,7 @@ export default function GeneratePage() {
       isGenerating ||
       !result ||
       creditsRemaining > 0 ||
+      hasSchoolCreditsAvailable ||
       redirectingToUpgrade
     ) {
       return;
@@ -305,7 +357,16 @@ export default function GeneratePage() {
     }, 1800);
 
     return () => window.clearTimeout(timer);
-  }, [creditsRemaining, isGenerating, loading, profileLoading, redirectingToUpgrade, result, router]);
+  }, [
+    creditsRemaining,
+    hasSchoolCreditsAvailable,
+    isGenerating,
+    loading,
+    profileLoading,
+    redirectingToUpgrade,
+    result,
+    router,
+  ]);
 
   useEffect(() => {
     const forgeWindow = window as Window & {
@@ -489,7 +550,7 @@ export default function GeneratePage() {
 
         if (
           res.status === 402 &&
-          (errorCode === "out_of_credits" || errorCode === "school_out_of_credits")
+          errorCode === "out_of_credits"
         ) {
           setShowPaywall(true);
         }

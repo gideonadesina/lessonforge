@@ -6,6 +6,7 @@ import {
   consumePersonalCreditsDirectly,
   getGenerationCreditAvailability,
 } from "@/lib/credits/server";
+import { ROLE_COOKIE_KEY } from "@/lib/auth/roles";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -1600,8 +1601,9 @@ export async function POST(req: NextRequest) {
     }
 
     const usePersonalCredits = body.usePersonalCredits === true;
+    const activeRole = req.cookies.get(ROLE_COOKIE_KEY)?.value ?? null;
 
-    const creditAvailability = await getGenerationCreditAvailability(supabase, user.id);
+    const creditAvailability = await getGenerationCreditAvailability(supabase, user.id, activeRole);
     if (!creditAvailability.ok) {
       return NextResponse.json(
         {
@@ -1668,7 +1670,7 @@ export async function POST(req: NextRequest) {
             error: "school_out_of_credits",
             errorCode: "school_out_of_credits",
             message:
-              "Your school has run out of credits. Contact your principal to top up.",
+              "Your school has run out of credits. Please contact your principal.",
             upgrade_url: null,
           },
           { status: 402 }
@@ -1790,7 +1792,7 @@ export async function POST(req: NextRequest) {
 
     const deductionResult = usePersonalCredits
       ? await consumePersonalCreditsDirectly(supabase, user.id, LESSON_PACK_CREDIT_COST)
-      : await consumeGenerationCredits(supabase, user.id, LESSON_PACK_CREDIT_COST);
+      : await consumeGenerationCredits(supabase, user.id, LESSON_PACK_CREDIT_COST, activeRole);
 
     if (!deductionResult.ok) {
       console.error("[generate] Credit deduction failed:", {
