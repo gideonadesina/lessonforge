@@ -21,6 +21,8 @@ import {
   type AppRole,
   ROLE_COOKIE_KEY,
   getRoleHomePath,
+  rolesFromUserMetadata,
+  normalizeRole,
 } from "@/lib/auth/roles";
 import {
   resolveAuthRoleContext,
@@ -162,6 +164,7 @@ const userEmail: string | null = typeof user.email === "string" ? user.email : n
   metadataRole: isAppRole(userMetadata.app_role)
     ? userMetadata.app_role
     : null,
+  metadataRoles: rolesFromUserMetadata(userMetadata),
 });
     });
 
@@ -331,6 +334,13 @@ async function claimInitialRole(
   const metadata: Record<string, unknown> = {
     ...(info.userMetadata ?? {}),
     app_role: role,
+    app_roles: Array.from(
+      new Set([
+        ...rolesFromUserMetadata(info.userMetadata),
+        normalizeRole(info.userMetadata?.app_role),
+        role,
+      ].filter(Boolean))
+    ),
   };
 
   if (info.fullName) {
@@ -350,7 +360,7 @@ async function claimInitialRole(
  * Determines the role that should become active after OAuth.
  *
  * Priority:
- * 1. Preferred role if available
+ * 1. Preferred role when requested, so it can be claimed during onboarding
  * 2. First available role
  * 3. Bootstrap teacher for first-time users with no roles
  */
@@ -358,7 +368,7 @@ function determineTargetRole(
   context: AuthRoleContext,
   preferredRole: AppRole | null
 ): AppRole | null {
-  if (preferredRole && context.availableRoles.includes(preferredRole)) {
+  if (preferredRole) {
     return preferredRole;
   }
 

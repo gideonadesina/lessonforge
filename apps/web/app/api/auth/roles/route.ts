@@ -8,9 +8,11 @@ import {
 } from "@/lib/auth/role-context";
 import {
   ROLE_COOKIE_KEY,
+  type AppRole,
   getRoleHomePath,
   normalizeRole,
   resolvePreferredRole,
+  rolesFromUserMetadata,
 } from "@/lib/auth/roles";
 
 export const runtime = "nodejs";
@@ -21,6 +23,10 @@ type RoleSwitchPayload = {
   role?: string;
   claimIfUnprovisioned?: boolean;
 };
+
+function readMetadataRoles(metadata: Record<string, unknown>): AppRole[] {
+  return rolesFromUserMetadata(metadata);
+}
 
 function getBearerTokenFromHeaders(headers: Headers) {
   const auth = headers.get("authorization") ?? "";
@@ -111,6 +117,13 @@ async function bootstrapInitialRole(input: {
   const metadataPatch: Record<string, unknown> = {
     ...(metadata ?? {}),
     app_role: input.nextRole,
+    app_roles: Array.from(
+      new Set([
+        ...readMetadataRoles(metadata),
+        normalizeRole(metadata.app_role) ?? null,
+        input.nextRole,
+      ].filter(Boolean))
+    ),
   };
   if (fullName) {
     metadataPatch.full_name = fullName;
@@ -166,6 +179,10 @@ export async function POST(req: NextRequest) {
 
     const body = (await req.json().catch(() => null)) as RoleSwitchPayload | null;
     const nextRole = normalizeRole(body?.role ?? null);
+    const claimIfUnprovisioned = Boolean(body?.claimIfUnprovisioned);
+    console.log("[roles] requested role:", nextRole ?? body?.role ?? null);
+    console.log("[roles] claimIfUnprovisioned:", claimIfUnprovisioned);
+    console.log("[roles] user roles before:", result.context.availableRoles);
     if (!nextRole) {
       return NextResponse.json(
         { ok: false, error: "A valid role is required." },
@@ -175,8 +192,8 @@ export async function POST(req: NextRequest) {
 
     if (!result.context.availableRoles.includes(nextRole)) {
       if (
-        Boolean(body?.claimIfUnprovisioned) &&
-        result.context.availableRoles.length === 0
+        claimIfUnprovisioned &&
+        (result.context.availableRoles.length === 0 || nextRole === "principal")
       ) {
         await bootstrapInitialRole({
           userId: result.user.id,
@@ -186,17 +203,19 @@ export async function POST(req: NextRequest) {
           nextRole,
         });
 
+        const activeRole = nextRole;
+        console.log("[roles] active role after:", activeRole);
         const response = NextResponse.json(
           {
             ok: true,
             data: {
-              activeRole: nextRole,
-              homePath: getRoleHomePath(nextRole),
+              activeRole,
+              homePath: getRoleHomePath(activeRole),
             },
           },
           { status: 200 }
         );
-        response.cookies.set(ROLE_COOKIE_KEY, nextRole, {
+        response.cookies.set(ROLE_COOKIE_KEY, activeRole, {
           path: "/",
           maxAge: 60 * 60 * 24 * 365,
           sameSite: "lax",
@@ -210,17 +229,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const activeRole = nextRole;
+    console.log("[roles] active role after:", activeRole);
     const response = NextResponse.json(
       {
         ok: true,
         data: {
-          activeRole: nextRole,
-          homePath: getRoleHomePath(nextRole),
+          activeRole,
+          homePath: getRoleHomePath(activeRole),
         },
       },
       { status: 200 }
     );
-    response.cookies.set(ROLE_COOKIE_KEY, nextRole, {
+    response.cookies.set(ROLE_COOKIE_KEY, activeRole, {
       path: "/",
       maxAge: 60 * 60 * 24 * 365,
       sameSite: "lax",

@@ -365,14 +365,14 @@ function compressPexelsQuery(input?: string | null, topic?: string, subject?: st
   return words.join(" ") || topic || subject || "learning";
 }
 
-function cleanPexelsQuery(query: unknown) {
+function cleanPexelsQuery(query: unknown, options: { allowGeneric?: boolean } = {}) {
   const cleaned = cleanString(query)
     .replace(/classroom-?safe|classroom-?friendly|educational style/gi, "")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 100);
 
-  if (!cleaned || hasGenericVisualText(cleaned)) return "";
+  if (!cleaned || (!options.allowGeneric && hasGenericVisualText(cleaned))) return "";
   return cleaned;
 }
 
@@ -396,18 +396,29 @@ function getSlideImageQuery(slide: JsonRecord, topic?: string, subject?: string)
   return pexelsQuery;
 }
 
-async function fetchPexelsImage(query: string, apiKey: string, timeoutMs: number) {
-  const cleanQuery = cleanPexelsQuery(query);
+async function fetchPexelsImage(
+  query: string,
+  apiKey: string,
+  timeoutMs: number,
+  options: { allowGeneric?: boolean } = {}
+) {
+  const cleanQuery = cleanPexelsQuery(query, options);
   if (!cleanQuery || !apiKey) return null;
 
   try {
+    console.log("[Pexels] searching:", cleanQuery);
     const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(cleanQuery)}&per_page=1&orientation=landscape&size=large`;
     const res = await fetch(url, {
       headers: { Authorization: apiKey },
       signal: AbortSignal.timeout(timeoutMs),
     });
+    console.log("[Pexels] status:", res.status);
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => "");
+      console.log("[Pexels] error text:", errorText.slice(0, 300));
+      return null;
+    }
 
     const data = (await res.json()) as PexelsResponse;
     const pick = Array.isArray(data.photos) ? data.photos[0] : null;
@@ -419,9 +430,39 @@ async function fetchPexelsImage(query: string, apiKey: string, timeoutMs: number
       image_credit: pick?.photographer ?? "Pexels",
       image_alt: pick?.alt ?? cleanQuery,
     };
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.log("[Pexels] error text:", message.slice(0, 300));
     return null;
   }
+}
+
+async function fetchPexelsImageWithFallbacks(
+  slide: JsonRecord,
+  apiKey: string,
+  timeoutMs: number,
+  options: { topic?: string; subject?: string } = {}
+) {
+  const compressedQuery = getSlideImageQuery(slide, options.topic, options.subject);
+  const queries = [
+    { query: compressedQuery, allowGeneric: false },
+    { query: options.topic ?? "", allowGeneric: false },
+    { query: "students learning", allowGeneric: true },
+  ];
+  const seen = new Set<string>();
+
+  for (const item of queries) {
+    const key = `${item.query.trim().toLowerCase()}|${item.allowGeneric}`;
+    if (!item.query.trim() || seen.has(key)) continue;
+    seen.add(key);
+
+    const image = await fetchPexelsImage(item.query, apiKey, timeoutMs, {
+      allowGeneric: item.allowGeneric,
+    });
+    if (image) return image;
+  }
+
+  return null;
 }
 
 export async function enrichSlidesWithPexelsImages(
@@ -431,16 +472,12 @@ export async function enrichSlidesWithPexelsImages(
 ) {
   if (!pexelsKey || !Array.isArray(slides) || slides.length === 0) return slides;
 
-  const timeoutMs = Math.max(500, options.timeoutMs ?? 2500);
-  const overallTimeoutMs = Math.max(timeoutMs, options.overallTimeoutMs ?? 4500);
+  const timeoutMs = Math.max(500, options.timeoutMs ?? 5000);
+  const overallTimeoutMs = Math.max(timeoutMs, options.overallTimeoutMs ?? 10000);
 
   const work = Promise.allSettled(
     slides.map(async (slide) => {
-      const image = await fetchPexelsImage(
-        getSlideImageQuery(slide, options.topic, options.subject),
-        pexelsKey,
-        timeoutMs
-      );
+      const image = await fetchPexelsImageWithFallbacks(slide, pexelsKey, timeoutMs, options);
       return image
         ? {
             ...slide,
@@ -455,7 +492,10 @@ export async function enrichSlidesWithPexelsImages(
   );
 
   const timeout = new Promise<JsonRecord[]>((resolve) => {
-    setTimeout(() => resolve(slides), overallTimeoutMs);
+    setTimeout(() => {
+      console.log("[Pexels] overall timeout reached:", overallTimeoutMs);
+      resolve(slides);
+    }, overallTimeoutMs);
   });
 
   return Promise.race([work, timeout]);

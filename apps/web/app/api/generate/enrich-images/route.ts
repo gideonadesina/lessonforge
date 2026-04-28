@@ -12,8 +12,30 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const maxDuration = 15;
 
+type JsonRecord = Record<string, unknown>;
+type LessonWithResult = {
+  topic?: string | null;
+  subject?: string | null;
+  result_json?: JsonRecord | null;
+};
+
+function readMetaString(data: JsonRecord, key: "topic" | "subject") {
+  const meta = data.meta;
+  if (!meta || typeof meta !== "object") return "";
+  const value = (meta as JsonRecord)[key];
+  return typeof value === "string" ? value : "";
+}
+
+function readMetaStage(data: JsonRecord) {
+  const meta = data.meta;
+  if (!meta || typeof meta !== "object") return 3;
+  const value = (meta as JsonRecord).stage;
+  return Number(value ?? 3);
+}
+
 export async function POST(req: NextRequest) {
   try {
+    console.log("[enrich-images] called");
     const auth = await getAuthedContext(req);
     if (!auth.ok) return auth.response;
 
@@ -33,9 +55,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const existing = ((lesson as any).result_json ?? {}) as Record<string, any>;
-    const slides = Array.isArray(existing.slides) ? existing.slides : [];
+    const lessonRecord = lesson as LessonWithResult;
+    const existing = (lessonRecord.result_json ?? {}) as JsonRecord;
+    const slides = Array.isArray(existing.slides) ? (existing.slides as JsonRecord[]) : [];
     const pexelsKey = process.env.PEXELS_API_KEY ?? "";
+    const topic = readMetaString(existing, "topic") || lessonRecord.topic || "";
+    const subject = readMetaString(existing, "subject") || lessonRecord.subject || "";
+
+    console.log("[enrich-images] has PEXELS_API_KEY:", Boolean(process.env.PEXELS_API_KEY));
+    console.log("[enrich-images] slides count:", slides?.length);
+    console.log("[enrich-images] topic:", topic);
+    console.log("[enrich-images] subject:", subject);
 
     if (!pexelsKey) {
       return NextResponse.json(
@@ -57,19 +87,20 @@ export async function POST(req: NextRequest) {
     }
 
     const enrichedSlides = await enrichSlidesWithPexelsImages(slides, pexelsKey, {
-      timeoutMs: 2500,
-      overallTimeoutMs: 5000,
-      topic: typeof existing.meta?.topic === "string" ? existing.meta.topic : lesson.topic,
-      subject: typeof existing.meta?.subject === "string" ? existing.meta.subject : lesson.subject,
+      timeoutMs: 5000,
+      overallTimeoutMs: 10000,
+      topic,
+      subject,
     });
+    console.log("[enrich-images] images found:", enrichedSlides.filter((s) => s.image_url).length);
 
     const nextData = {
       ...existing,
       slides: enrichedSlides,
       meta: {
         ...(existing.meta ?? {}),
-        stage: Math.max(3, Number(existing.meta?.stage ?? 3)),
-        imagesEnriched: enrichedSlides.some((slide) => !!slide?.image_url),
+        stage: Math.max(3, readMetaStage(existing)),
+        imagesEnriched: enrichedSlides.some((slide) => Boolean(slide?.image_url)),
       },
     };
 

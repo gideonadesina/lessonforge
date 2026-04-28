@@ -103,3 +103,10 @@ export function roleFromUserMetadata(
   const metadata = userMetadata as Record<string, unknown>;
   return normalizeRole(metadata.app_role) ?? fallback;
 }
+
+export function rolesFromUserMetadata(userMetadata: unknown): AppRole[] {
+  if (!userMetadata || typeof userMetadata !== "object") return [];
+  const metadata = userMetadata as Record<string, unknown>;
+  const rawRoles = Array.isArray(metadata.app_roles) ? metadata.app_roles : [];
+  return Array.from(new Set(rawRoles.map((role) => normalizeRole(role)).filter(Boolean))) as AppRole[];
+}

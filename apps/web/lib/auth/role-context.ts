@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 import type { AppRole } from "@/lib/auth/roles";
-import { normalizeRole } from "@/lib/auth/roles";
+import { normalizeRole, rolesFromUserMetadata } from "@/lib/auth/roles";
 import { isMissingTableOrColumnError, isPrincipalRole, normalizeTeacherStatus } from "@/lib/principal/utils";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -156,6 +156,7 @@ export async function resolveAuthRoleContext(input: {
   userId: string;
   email: string | null;
   metadataRole: AppRole | null;
+  metadataRoles?: AppRole[];
 }): Promise<AuthRoleContext> {
   const [memberships, ownedSchool, profileClaims] = await Promise.all([
     readMembershipRows(input.userId),
@@ -177,11 +178,14 @@ export async function resolveAuthRoleContext(input: {
   });
 
   const principalRoleClaim =
-    profileClaims.profileRole === "principal" || profileClaims.profileAppRole === "principal";
+    profileClaims.profileRole === "principal" ||
+    profileClaims.profileAppRole === "principal" ||
+    Boolean(input.metadataRoles?.includes("principal"));
   const teacherRoleClaim =
     profileClaims.profileRole === "teacher" ||
     profileClaims.profileAppRole === "teacher" ||
-    input.metadataRole === "teacher";
+    input.metadataRole === "teacher" ||
+    Boolean(input.metadataRoles?.includes("teacher"));
 
   const hasPrincipalAccess = hasPrincipalMembership || Boolean(ownedSchool?.id) || principalRoleClaim;
   const hasTeacherAccess = hasTeacherMembership || teacherRoleClaim;
@@ -243,6 +247,7 @@ export async function resolveAuthRoleContextFromToken(token: string) {
     userId: user.id,
     email: user.email ?? null,
     metadataRole,
+    metadataRoles: rolesFromUserMetadata(user.user_metadata),
   });
 
   return {

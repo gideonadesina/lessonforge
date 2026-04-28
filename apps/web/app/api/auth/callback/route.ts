@@ -16,7 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isAppRole, normalizeRole, type AppRole, ROLE_COOKIE_KEY } from "@/lib/auth/roles";
+import { isAppRole, normalizeRole, rolesFromUserMetadata, type AppRole, ROLE_COOKIE_KEY } from "@/lib/auth/roles";
 import { resolveAuthRoleContext } from "@/lib/auth/role-context";
 
 export const runtime = "nodejs";
@@ -29,6 +29,10 @@ interface CallbackResponse {
   error?: string;
   stage?: string;
   code?: "account_not_registered";
+}
+
+function readMetadataRoles(metadata: Record<string, unknown> | null | undefined): AppRole[] {
+  return rolesFromUserMetadata(metadata);
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse<CallbackResponse>> {
@@ -113,6 +117,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<CallbackRespo
       metadataRole: isAppRole(user.user_metadata?.app_role)
         ? user.user_metadata.app_role
         : null,
+      metadataRoles: readMetadataRoles(user.user_metadata as Record<string, unknown> | null),
     });
 
     console.log("[API /auth/callback] Roles resolved", {
@@ -168,9 +173,9 @@ export async function POST(req: NextRequest): Promise<NextResponse<CallbackRespo
     // ==================== Stage 5: Claim Role if First Time ====================
     stages.push("claiming_role");
 
-    const isFirstRole = roleContext.availableRoles.length === 0;
+    const hasTargetRole = roleContext.availableRoles.includes(targetRole);
 
-    if (isFirstRole) {
+    if (!hasTargetRole) {
       await claimInitialRole(user.id, targetRole, {
         email: user.email,
         fullName:
@@ -184,10 +189,6 @@ export async function POST(req: NextRequest): Promise<NextResponse<CallbackRespo
         userId: user.id,
         targetRole,
       });
-
-      if (targetRole === "principal") {
-        await ensurePrincipalMembership(user.id);
-      }
     } else {
       console.log("[API /auth/callback] Role already available", {
         userId: user.id,
@@ -252,10 +253,13 @@ export async function POST(req: NextRequest): Promise<NextResponse<CallbackRespo
 }
 
 function getPostAuthRedirect(input: { role: AppRole; onboardingCompleted: boolean }) {
+  if (input.role === "principal") {
+    return "/principal";
+  }
   if (!input.onboardingCompleted) {
     return "/onboarding";
   }
-  return input.role === "principal" ? "/principal" : "/dashboard";
+  return "/dashboard";
 }
 
 /**
@@ -317,6 +321,13 @@ async function claimInitialRole(
   const metadata: Record<string, unknown> = {
     ...(info.userMetadata ?? {}),
     app_role: role,
+    app_roles: Array.from(
+      new Set([
+        ...readMetadataRoles(info.userMetadata),
+        normalizeRole(info.userMetadata?.app_role) ?? null,
+        role,
+      ].filter(Boolean))
+    ),
   };
 
   if (info.fullName) {
@@ -348,35 +359,6 @@ async function claimInitialRole(
       return;
     }
     throw profileError;
-  }
-}
-
-async function ensurePrincipalMembership(userId: string) {
-  const admin = createAdminClient();
-  const { data: existingMembership, error: existingMembershipError } = await admin
-    .from("school_members")
-    .select("user_id")
-    .eq("user_id", userId)
-    .eq("role", "principal")
-    .limit(1)
-    .maybeSingle();
-
-  if (existingMembershipError) {
-    throw existingMembershipError;
-  }
-
-  if (existingMembership?.user_id) {
-    return;
-  }
-
-  const { error: insertError } = await admin.from("school_members").insert({
-    user_id: userId,
-    role: "principal",
-    status: "active",
-  });
-
-  if (insertError && (insertError as { code?: string }).code !== "23505") {
-    throw insertError;
   }
 }
 
@@ -419,10 +401,7 @@ function determineTargetRole(roleContext: {
     return roleContext.preferredRole ?? "teacher";
   }
 
-  if (
-    roleContext.preferredRole &&
-    roleContext.availableRoles.includes(roleContext.preferredRole)
-  ) {
+  if (roleContext.preferredRole) {
     return roleContext.preferredRole;
   }
 

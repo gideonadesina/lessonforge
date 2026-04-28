@@ -13,6 +13,7 @@
 
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AuthLoadingOverlay } from "@/components/auth/AuthLoadingOverlay";
 
@@ -48,11 +49,12 @@ export default function OAuthCallbackPage() {
         // Call server-side setup endpoint
        // Read the stored intent so signup vs login is handled correctly
         const storedIntent = window.localStorage.getItem("lessonforge:oauth-intent") ?? "login";
+        const selectedRole = window.localStorage.getItem("lessonforge:selected-role");
 
         const response = await fetch("/api/auth/callback", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ intent: storedIntent }),
+          body: JSON.stringify({ intent: storedIntent, selectedRole }),
         });
 
         const result = await response.json();
@@ -103,18 +105,18 @@ export default function OAuthCallbackPage() {
 
           {showFallback && (
             <div className="mt-4 flex w-full max-w-xs flex-col gap-3">
-              <a
+              <Link
                 href="/auth/teacher"
                 className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:from-indigo-500 hover:to-violet-500"
               >
                 Try Again
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/select-role"
                 className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               >
                 Select Role
-              </a>
+              </Link>
             </div>
           )}
         </div>

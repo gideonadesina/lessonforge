@@ -403,7 +403,7 @@ const resolveRoleAfterAuth = useCallback(
           await ensureSignupProfile(data.user, cleanName);
           const roleContext = await resolveRoleAfterAuth(role);
 
-          if (!roleContext.availableRoles.length) {
+          if (!roleContext.availableRoles.length || (role === "principal" && !roleContext.availableRoles.includes(role))) {
             const { homePath } = await switchRoleApi(role, {
               claimIfUnprovisioned: true,
             });
@@ -470,7 +470,7 @@ const resolveRoleAfterAuth = useCallback(
       clearSocialIntent();
       const roleContext = await resolveRoleAfterAuth(role);
 
-      if (!roleContext.availableRoles.length) {
+      if (!roleContext.availableRoles.length || (role === "principal" && !roleContext.availableRoles.includes(role))) {
         const { homePath } = await switchRoleApi(role, {
           claimIfUnprovisioned: true,
         });

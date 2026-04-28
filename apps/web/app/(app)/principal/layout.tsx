@@ -8,6 +8,7 @@ import {
   getRoleHomePath,
   normalizeRole,
   resolvePreferredRole,
+  rolesFromUserMetadata,
 } from "@/lib/auth/roles";
 import { isPrincipalRole, isMissingTableOrColumnError } from "@/lib/principal/utils";
 import PrincipalLayout from "@/components/principal/PrincipalLayout";
@@ -33,6 +34,7 @@ export default async function PrincipalRouteLayout({ children }: { children: Rea
     userId: user.id,
     email: user.email ?? null,
     metadataRole,
+    metadataRoles: rolesFromUserMetadata(user.user_metadata),
   });
   if (!roleContext.availableRoles.length) {
     redirect("/select-role");
@@ -108,7 +110,8 @@ export default async function PrincipalRouteLayout({ children }: { children: Rea
   // 1. principals/admins/owners/headteachers
   // 2. users who already created a school
   // 3. users with no school yet, so they can start onboarding
-  const shouldBlockPrincipalArea = hasAnyMembership && !hasPrincipalMembership && !createdSchool;
+  const shouldBlockPrincipalArea =
+    hasAnyMembership && !hasPrincipalMembership && !createdSchool && !roleContext.hasPrincipalAccess;
   if (shouldBlockPrincipalArea) {
     redirect("/dashboard");
   }

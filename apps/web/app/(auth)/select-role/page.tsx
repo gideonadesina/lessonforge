@@ -54,7 +54,7 @@ export default function SelectRolePage() {
           return;
         }
 
-        if (!roleContext.availableRoles.length) {
+        if (!roleContext.availableRoles.length || role === "principal") {
           const result = await switchRoleApi(role, { claimIfUnprovisioned: true });
           window.location.href = result.homePath;
           return;

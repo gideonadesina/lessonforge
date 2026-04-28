@@ -10,6 +10,7 @@ import {
   ROLE_COOKIE_KEY,
   normalizeRole,
   resolvePreferredRole,
+  rolesFromUserMetadata,
 } from "@/lib/auth/roles";
 import "../globals.css";
 
@@ -68,6 +69,7 @@ export default async function AppLayout({
     userId: user.id,
     email: user.email ?? null,
     metadataRole,
+    metadataRoles: rolesFromUserMetadata(user.user_metadata),
   });
 
   if (!roleContext.availableRoles.length) {

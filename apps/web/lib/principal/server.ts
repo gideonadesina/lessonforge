@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { normalizeRole } from "@/lib/auth/roles";
+import { normalizeRole, rolesFromUserMetadata } from "@/lib/auth/roles";
 import { resolveAuthRoleContext } from "@/lib/auth/role-context";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -97,6 +97,7 @@ export async function resolvePrincipalContext(
     userId: user.id,
     email: user.email ?? null,
     metadataRole: appRole,
+    metadataRoles: rolesFromUserMetadata(user.user_metadata),
   });
   const hasPrincipalAppRole = roleContext.hasPrincipalAccess;
 
