@@ -342,6 +342,28 @@ function isPexelsImageUrl(value: unknown) {
   }
 }
 
+function compressPexelsQuery(input?: string | null, topic?: string, subject?: string) {
+  const raw = `${input || ""} ${topic || ""} ${subject || ""}`.toLowerCase();
+
+  const removeWords = new Set([
+    "clear","colorful","beautiful","detailed","simple","clean",
+    "showing","including","with","that","all","main",
+    "visual","guide","picture","image","photo","diagram",
+    "labeled","labelled","illustration","educational","real","life","of","the","a","an",
+    "organs"
+  ]);
+
+  const cleanedWords = raw
+    .replace(/[.,;:!?()[\]{}]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter(w => !removeWords.has(w));
+
+  const words = cleanedWords.slice(0, 5);
+
+  return words.join(" ") || topic || subject || "classroom";
+}
+
 function cleanPexelsQuery(query: unknown) {
   const cleaned = cleanString(query)
     .replace(/classroom-?safe|classroom-?friendly|educational style/gi, "")
@@ -353,21 +375,22 @@ function cleanPexelsQuery(query: unknown) {
   return cleaned;
 }
 
-function getSlideImageQuery(slide: JsonRecord) {
-  const candidates = [
-    slide.image_query,
-    slide.imageQuery,
-    slide.visual_suggestion,
-    slide.visualSuggestion,
-    slide.title,
-  ];
+function getSlideImageQuery(slide: JsonRecord, topic?: string, subject?: string) {
+  const prompt = cleanString(
+    slide.visual_suggestion ??
+      slide.imagePrompt ??
+      slide.visualPrompt ??
+      slide.image_query ??
+      slide.imageQuery ??
+      slide.visualSuggestion ??
+      slide.title
+  );
+  const pexelsQuery = compressPexelsQuery(prompt, topic, subject);
 
-  for (const candidate of candidates) {
-    const cleaned = cleanPexelsQuery(candidate);
-    if (cleaned) return cleaned;
-  }
+  console.log("Original Pexels prompt:", slide.visual_suggestion);
+  console.log("Pexels query:", pexelsQuery);
 
-  return "";
+  return pexelsQuery;
 }
 
 async function fetchPexelsImage(query: string, apiKey: string, timeoutMs: number) {
@@ -401,7 +424,7 @@ async function fetchPexelsImage(query: string, apiKey: string, timeoutMs: number
 export async function enrichSlidesWithPexelsImages(
   slides: JsonRecord[],
   pexelsKey: string,
-  options: { timeoutMs?: number; overallTimeoutMs?: number } = {}
+  options: { timeoutMs?: number; overallTimeoutMs?: number; topic?: string; subject?: string } = {}
 ) {
   if (!pexelsKey || !Array.isArray(slides) || slides.length === 0) return slides;
 
@@ -410,7 +433,11 @@ export async function enrichSlidesWithPexelsImages(
 
   const work = Promise.allSettled(
     slides.map(async (slide) => {
-      const image = await fetchPexelsImage(getSlideImageQuery(slide), pexelsKey, timeoutMs);
+      const image = await fetchPexelsImage(
+        getSlideImageQuery(slide, options.topic, options.subject),
+        pexelsKey,
+        timeoutMs
+      );
       return image
         ? {
             ...slide,

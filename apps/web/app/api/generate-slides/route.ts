@@ -66,6 +66,28 @@ type PexelsResponse = {
 // No purchase needed. Generous free tier.
 // ─────────────────────────────────────────────────────────────
 
+function compressPexelsQuery(input?: string | null, topic?: string, subject?: string) {
+  const raw = `${input || ""} ${topic || ""} ${subject || ""}`.toLowerCase();
+
+  const removeWords = new Set([
+    "clear","colorful","beautiful","detailed","simple","clean",
+    "showing","including","with","that","all","main",
+    "visual","guide","picture","image","photo","diagram",
+    "labeled","labelled","illustration","educational","real","life","of","the","a","an",
+    "organs"
+  ]);
+
+  const cleanedWords = raw
+    .replace(/[.,;:!?()[\]{}]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter(w => !removeWords.has(w));
+
+  const words = cleanedWords.slice(0, 5);
+
+  return words.join(" ") || topic || subject || "classroom";
+}
+
 async function fetchPexelsImage(
   query: string,
   apiKey: string
@@ -116,35 +138,20 @@ async function enrichSlidesWithImages(
 ): Promise<any[]> {
   const results = await Promise.allSettled(
     slides.map(async (slide) => {
-      const visualType = slide?.visual_type ?? "support";
       const baseQuery = slide?.visual_suggestion ?? slide?.title ?? topic;
 
       if (!baseQuery) return slide;
 
-      const s = subject.toLowerCase();
+      const pexelsQuery = compressPexelsQuery(
+        slide.visual_suggestion || slide.imagePrompt || slide.visualPrompt || baseQuery,
+        topic,
+        subject
+      );
 
-      let context = "classroom education";
+      console.log("Original Pexels prompt:", slide.visual_suggestion);
+      console.log("Pexels query:", pexelsQuery);
 
-      if (s.includes("biology")) context = "biology science diagram";
-      else if (s.includes("physics")) context = "physics science experiment";
-      else if (s.includes("chemistry")) context = "chemistry laboratory science";
-      else if (s.includes("geography")) context = "geography map landscape";
-      else if (s.includes("economics")) context = "economics chart graph market";
-      else if (s.includes("commerce") || s.includes("business")) context = "business market finance";
-      else if (s.includes("math")) context = "mathematics graph equation";
-      else if (s.includes("computer") || s.includes("ict")) context = "computer technology coding";
-      else if (s.includes("agric")) context = "agriculture farming crops";
-      else if (s.includes("literature") || s.includes("english")) context = "books reading literature";
-      else if (s.includes("music")) context = "music instruments classroom";
-      else if (s.includes("art")) context = "art drawing painting classroom";
-      else if (s.includes("civic") || s.includes("government")) context = "community leadership citizenship";
-
-      const query =
-        visualType === "diagram"
-          ? `${topic} ${baseQuery} ${context}`
-          : `${baseQuery} ${context}`;
-
-      const image = await fetchPexelsImage(query, pexelsKey);
+      const image = await fetchPexelsImage(pexelsQuery, pexelsKey);
       if (!image) return slide;
 
       return {

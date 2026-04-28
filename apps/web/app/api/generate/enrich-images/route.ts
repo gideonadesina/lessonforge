@@ -59,6 +59,8 @@ export async function POST(req: NextRequest) {
     const enrichedSlides = await enrichSlidesWithPexelsImages(slides, pexelsKey, {
       timeoutMs: 2500,
       overallTimeoutMs: 5000,
+      topic: typeof existing.meta?.topic === "string" ? existing.meta.topic : lesson.topic,
+      subject: typeof existing.meta?.subject === "string" ? existing.meta.subject : lesson.subject,
     });
 
     const nextData = {
