@@ -11,6 +11,7 @@ import SlideViewer from "@/components/slides/SlideViewer";
 import { LessonPlanPdfDocument } from "@/components/lessons/LessonPlanPdfDocument";
 import { track } from "@/lib/analytics";
 import { resolveSlideImageUrl } from "@/lib/slideImageResolver";
+import { renderLessonPackHTML } from "@/lib/export/renderLessonPack";
 
 // ─────────────────────────────────────────────────────────────
 // TYPES
@@ -185,173 +186,41 @@ function safeRender(value: any): React.ReactNode {
 // buildLessonStructureText — pure, file-level
 // ─────────────────────────────────────────────────────────────
 
-function buildLessonStructureTextFromRow(row: LessonRow | null): string {
-  const gen = resolveLessonContent(row);
-  if (!gen || !row) return "";
-
-  const meta = gen?.meta ?? {};
-  const lessonPlan = gen?.lessonPlan ?? {};
-  const slides = Array.isArray(gen?.slides) ? gen.slides : [];
-  const mcq = Array.isArray(gen?.quiz?.mcq) ? gen.quiz.mcq : [];
-  const theory = Array.isArray(gen?.quiz?.theory) ? gen.quiz.theory : [];
-  const liveApps = Array.isArray(gen?.liveApplications) ? gen.liveApplications : [];
-
-   const lines: string[] = [];
-  lines.push("LESSONFORGE LESSON / CURRICULUM STRUCTURE REPORT");
-  lines.push("=".repeat(55));
-  lines.push("");
-  lines.push(`Subject: ${meta?.subject ?? row.subject ?? ""}`);
-  lines.push(`Topic: ${meta?.topic ?? row.topic ?? ""}`);
-  lines.push(`Class: ${meta?.grade ?? row.grade ?? ""}`);
-  lines.push(`Curriculum: ${meta?.curriculum ?? row.curriculum ?? ""}`);
-  lines.push(`School Level: ${meta?.schoolLevel ?? ""}`);
-  lines.push(`Number of Slides: ${meta?.numberOfSlides ?? slides.length ?? 0}`);
-  lines.push(`Duration: ${meta?.durationMins ?? ""} minutes`);
-  lines.push("");
-
-  if (lessonPlan?.title) {
-    lines.push("LESSON PLAN TITLE"); lines.push("-".repeat(20));
-    lines.push(String(lessonPlan.title)); lines.push("");
-  }
-  if (Array.isArray(lessonPlan?.performanceObjectives) && lessonPlan.performanceObjectives.length) {
-    lines.push("PERFORMANCE OBJECTIVES"); lines.push("-".repeat(24));
-    lessonPlan.performanceObjectives.forEach((item: string, i: number) => lines.push(`${i + 1}. ${item}`));
-    lines.push("");
-  }
-  if (Array.isArray(lessonPlan?.instructionalMaterials) && lessonPlan.instructionalMaterials.length) {
-    lines.push("INSTRUCTIONAL MATERIALS"); lines.push("-".repeat(23));
-    lessonPlan.instructionalMaterials.forEach((item: string, i: number) => lines.push(`${i + 1}. ${item}`));
-    lines.push("");
-  }
-  if (lessonPlan?.previousKnowledge) {
-    lines.push("PREVIOUS KNOWLEDGE"); lines.push("-".repeat(18));
-    lines.push(String(lessonPlan.previousKnowledge)); lines.push("");
-  }
-  if (lessonPlan?.introduction) {
-    lines.push("INTRODUCTION"); lines.push("-".repeat(12));
-    lines.push(String(lessonPlan.introduction)); lines.push("");
-  }
-  if (Array.isArray(lessonPlan?.steps) && lessonPlan.steps.length) {
-    lines.push("LESSON DELIVERY STEPS"); lines.push("-".repeat(21));
-    lessonPlan.steps.forEach((step: any, i: number) => {
-      lines.push(`Step ${step?.step ?? i + 1}: ${step?.title ?? "Lesson Step"}`);
-      if (step?.teacherActivity) lines.push(`Teacher Activity: ${step.teacherActivity}`);
-      if (step?.learnerActivity) lines.push(`Learner Activity: ${step.learnerActivity}`);
-      if (step?.concretisedLearningPoint) lines.push(`Learning Point: ${step.concretisedLearningPoint}`);
-      lines.push("");
-    });
-  }
-  if (Array.isArray(lessonPlan?.evaluation) && lessonPlan.evaluation.length) {
-    lines.push("EVALUATION"); lines.push("-".repeat(10));
-    lessonPlan.evaluation.forEach((item: string, i: number) => lines.push(`${i + 1}. ${item}`));
-    lines.push("");
-  }
-  if (Array.isArray(lessonPlan?.assignment) && lessonPlan.assignment.length) {
-    lines.push("ASSIGNMENT"); lines.push("-".repeat(10));
-    lessonPlan.assignment.forEach((item: string, i: number) => lines.push(`${i + 1}. ${item}`));
-    lines.push("");
-  }
-  if (Array.isArray(lessonPlan?.realLifeConnection) && lessonPlan.realLifeConnection.length) {
-    lines.push("REAL-LIFE CONNECTION"); lines.push("-".repeat(20));
-    lessonPlan.realLifeConnection.forEach((item: string, i: number) => lines.push(`${i + 1}. ${item}`));
-    lines.push("");
-  }
-  if (gen?.lessonNotes) {
-    if (typeof gen.lessonNotes === "string") {
-      lines.push("LESSON NOTES"); lines.push("-".repeat(12));
-      lines.push(String(gen.lessonNotes)); lines.push("");
-    } else {
-      if (gen.lessonNotes.introduction) { lines.push("LESSON NOTES INTRODUCTION"); lines.push("-".repeat(25)); lines.push(gen.lessonNotes.introduction); lines.push(""); }
-      if (gen.lessonNotes.keyConcepts?.length) {
-        lines.push("KEY CONCEPTS"); lines.push("-".repeat(13));
-        gen.lessonNotes.keyConcepts.forEach((c: any, i: number) => { lines.push(`${i + 1}. ${c.subheading || "Concept"}`); if (c.content) lines.push(`   ${c.content}`); lines.push(""); });
-      }
-      if (gen.lessonNotes.workedExamples?.length) {
-        lines.push("WORKED EXAMPLES"); lines.push("-".repeat(15));
-        gen.lessonNotes.workedExamples.forEach((ex: any, i: number) => {
-          lines.push(`${i + 1}. ${ex.title || "Example"}`);
-          if (ex.problem) lines.push(`   Problem: ${ex.problem}`);
-          if (ex.steps?.length) { lines.push("   Steps:"); ex.steps.forEach((s: any, j: number) => lines.push(`     ${j + 1}. ${s}`)); }
-          if (ex.finalAnswer) lines.push(`   Final Answer: ${ex.finalAnswer}`);
-          lines.push("");
-        });
-      }
-      if (gen.lessonNotes.summaryPoints?.length) {
-        lines.push("SUMMARY POINTS"); lines.push("-".repeat(14));
-        gen.lessonNotes.summaryPoints.forEach((p: any, i: number) => lines.push(`${i + 1}. ${p}`));
-        lines.push("");
-      }
-      if (gen.lessonNotes.keyVocabulary?.length) {
-        lines.push("KEY VOCABULARY"); lines.push("-".repeat(14));
-        gen.lessonNotes.keyVocabulary.forEach((item: any, i: number) => lines.push(`${i + 1}. ${item.word || ""}: ${item.meaning || ""}`));
-        lines.push("");
-      }
-    }
-  }
-  if (slides.length) {
-    lines.push("SLIDE STRUCTURE"); lines.push("-".repeat(15));
-    slides.forEach((slide: any, i: number) => {
-      lines.push(`${i + 1}. ${slide?.title ?? `Slide ${i + 1}`}`);
-      (Array.isArray(slide?.bullets) ? slide.bullets : []).forEach((b: string) => lines.push(`- ${b}`));
-      if (slide?.interactivePrompt) lines.push(`Activity: ${slide.interactivePrompt}`);
-      if (slide?.imageQuery) lines.push(`Image Focus: ${slide.imageQuery}`);
-      if (slide?.videoQuery) lines.push(`Video Search: ${slide.videoQuery}`);
-      lines.push("");
-    });
-  }
-  if (mcq.length) {
-    lines.push("MULTIPLE CHOICE QUESTIONS"); lines.push("-".repeat(25));
-    mcq.forEach((item: any, i: number) => {
-      lines.push(`${i + 1}. ${item?.q ?? "Question"}`);
-      (Array.isArray(item?.options) ? item.options : []).forEach((opt: string, j: number) => lines.push(`   ${String.fromCharCode(65 + j)}. ${opt}`));
-      if (typeof item?.answerIndex === "number") lines.push(`   Answer: ${String.fromCharCode(65 + item.answerIndex)}`);
-      lines.push("");
-    });
-  }
-  if (theory.length) {
-    lines.push("THEORY QUESTIONS"); lines.push("-".repeat(16));
-    theory.forEach((item: any, i: number) => {
-      lines.push(`${i + 1}. ${item?.q ?? "Question"}`);
-      if (item?.markingGuide) lines.push(`Marking Guide: ${item.markingGuide}`);
-      lines.push("");
-    });
-  }
-  if (liveApps.length) {
-    lines.push("LIVE / REAL-WORLD APPLICATIONS"); lines.push("-".repeat(30));
-    liveApps.forEach((item: string, i: number) => lines.push(`${i + 1}. ${item}`));
-    lines.push("");
-  }
-  lines.push("Generated with LessonForge");
-  return lines.join("\n");
-}
-
-function handleDownloadLessonStructureFromRow(row: LessonRow | null) {
+async function handleDownloadLessonStructureFromRow(row: LessonRow | null) {
   if (!row) return;
 
   const raw = row.result_json ?? row.content ?? null;
   if (!raw) return;
 
-  // Detect slide deck vs lesson pack
-  const isSlides = row.type === "slides" || raw?.slides?.length > 0 && raw?.deck_title;
+  const payload = getLessonPayload(row);
+  const isSlides = row.type === "slides" || (!!payload?.slides?.length && !!payload?.deck_title);
 
   if (isSlides) {
-    handleDownloadSlideDeck(row, raw);
+    handleDownloadSlideDeck(row, payload ?? raw);
     return;
   }
 
-  // Original lesson pack download
   const gen = resolveLessonContent(row);
+  if (!gen) return;
+
   const meta = gen?.meta ?? {};
-  const safeSubject = String(meta?.subject ?? row.subject ?? "subject")
-    .replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_");
-  const safeTopic = String(meta?.topic ?? row.topic ?? "topic")
-    .replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_");
+  const safeSubject = safeFilenamePart(meta?.subject ?? row.subject, "subject");
+  const safeTopic = safeFilenamePart(meta?.topic ?? row.topic, "topic");
+  const html = await renderLessonPackHTML(gen, {
+    subject: row.subject ?? "",
+    topic: row.topic ?? "",
+    grade: row.grade ?? "",
+    curriculum: row.curriculum ?? "",
+    schoolLevel: meta?.schoolLevel ?? "",
+    numberOfSlides: Array.isArray(gen?.slides) ? gen.slides.length : 0,
+  });
+
   downloadFile(
-    `LessonForge_${safeSubject}_${safeTopic}_Structure.txt`,
-    buildLessonStructureTextFromRow(row)
+    `LessonForge_${safeSubject}_${safeTopic}_Complete_Pack.html`,
+    html,
+    "text/html;charset=utf-8"
   );
 }
-
 function handleDownloadSlideDeck(row: LessonRow, raw: any) {
   const deck = raw?.deck ?? raw;
   const slides = deck?.slides ?? [];
@@ -839,11 +708,11 @@ export default function LibraryPage() {
     });
   }, []);
 
-  const handleDownloadStructure = useCallback(() => {
+  const handleDownloadStructure = useCallback(async () => {
     const row: LessonRow | null = activeWithPayload
       ? { ...(activeWithPayload as any), type: active?.type ?? null }
       : active;
-    handleDownloadLessonStructureFromRow(row);
+    await handleDownloadLessonStructureFromRow(row);
   }, [active, activeWithPayload]);
 
   const handleOpenLessonPlanForm = useCallback(() => {
@@ -1183,7 +1052,7 @@ export default function LibraryPage() {
                 )}
                 <button onClick={handleDownloadStructure}
                   className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-slate-100">
-                  Download Structure
+                  Download Complete Pack
                 </button>
                 <button onClick={() => setActive(null)}
                   className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-slate-100">

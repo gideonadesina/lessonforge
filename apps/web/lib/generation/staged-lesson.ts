@@ -343,25 +343,26 @@ function isPexelsImageUrl(value: unknown) {
 }
 
 function compressPexelsQuery(input?: string | null, topic?: string, subject?: string) {
-  const raw = (input || "").toLowerCase();
+  const raw = `${input || topic || subject || "classroom"}`.toLowerCase();
 
   const removeWords = new Set([
     "clear","colorful","beautiful","detailed","simple","clean",
     "showing","including","with","that","all","main",
     "visual","guide","picture","image","photo","diagram",
-    "labeled","labelled","illustration","educational","real","life","of","the","a","an",
-    "organs"
+    "labeled","labelled","illustration","educational","real","life",
+    "of","the","a","an","and","for","to","in","on",
+    "lesson","slide","example","activity","students","teacher","classroom",
+    "organs","system"
   ]);
 
-  const cleanedWords = raw
+  const words = raw
     .replace(/[.,;:!?()[\]{}]/g, " ")
     .split(/\s+/)
     .filter(Boolean)
-    .filter(w => !removeWords.has(w));
+    .filter(w => !removeWords.has(w))
+    .slice(0, 3);
 
-  const words = cleanedWords.slice(0, 3);
-
-  return words.join(" ") || topic || subject || "classroom";
+  return words.join(" ") || topic || subject || "learning";
 }
 
 function cleanPexelsQuery(query: unknown) {
@@ -377,13 +378,15 @@ function cleanPexelsQuery(query: unknown) {
 
 function getSlideImageQuery(slide: JsonRecord, topic?: string, subject?: string) {
   const prompt = cleanString(
-    slide.visual_suggestion ??
+    slide.imageQuery ??
+      slide.image_query ??
+      slide.visual_suggestion ??
+      slide.visualSuggestion ??
       slide.imagePrompt ??
       slide.visualPrompt ??
-      slide.image_query ??
-      slide.imageQuery ??
-      slide.visualSuggestion ??
-      slide.title
+      slide.title ??
+      topic ??
+      subject
   );
   const pexelsQuery = compressPexelsQuery(prompt, topic, subject);
 
