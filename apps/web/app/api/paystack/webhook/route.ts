@@ -8,7 +8,11 @@ import {
   processTeacherPayment,
   type ProcessPaymentInput,
 } from "@/lib/billing/server-payment";
-import { processSchoolPayment } from "@/lib/billing/server-school-payment";
+import {
+  getSchoolPlanSharedCredits,
+  isValidSchoolPlanId,
+  type SchoolPlanId,
+} from "@/lib/billing/server-school-pricing";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -24,6 +28,21 @@ function verifyPaystackSignature(rawBody: string, signature: string | null) {
 function normalizeTeacherPlanId(rawPlan: unknown): TeacherPlanId | null {
   if (!isValidTeacherPlanId(rawPlan)) return null;
   return rawPlan as TeacherPlanId;
+}
+
+function normalizeSchoolPlanId(rawPlan: unknown): SchoolPlanId | null {
+  if (!isValidSchoolPlanId(rawPlan)) return null;
+  return rawPlan as SchoolPlanId;
+}
+
+function normalizeMetadataSchoolPlan(
+  metadata: Record<string, unknown>
+): SchoolPlanId | null {
+  const directPlan = normalizeSchoolPlanId(metadata?.plan_id ?? metadata?.plan);
+  if (directPlan) return directPlan;
+
+  const planName = String(metadata?.plan_name ?? "").trim().toLowerCase();
+  return normalizeSchoolPlanId(planName ? `school_${planName}` : null);
 }
 
 async function resolvePlanForUser(userId: string, data: any): Promise<TeacherPlanId> {
@@ -74,6 +93,175 @@ async function updateProfileMetadata(
     .eq("id", userId);
 }
 
+async function getActiveSchoolCode(schoolId: string): Promise<string | null> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("school_codes")
+    .select("code")
+    .eq("school_id", schoolId)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  return data?.code ? String(data.code) : null;
+}
+
+function isUniqueViolation(error: unknown) {
+  const err = error as { code?: string; message?: string } | null;
+  return (
+    String(err?.code ?? "") === "23505" ||
+    String(err?.message ?? "").toLowerCase().includes("duplicate key")
+  );
+}
+
+function generateSchoolLicenseCode() {
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let prefix = "";
+  for (let i = 0; i < 4; i += 1) {
+    prefix += letters[crypto.randomInt(0, letters.length)];
+  }
+
+  return `${prefix}-${crypto.randomInt(0, 10000).toString().padStart(4, "0")}`;
+}
+
+function getPlanName(metadata: Record<string, unknown>, planId: SchoolPlanId) {
+  const explicit = String(metadata?.plan_name ?? "").trim();
+  if (explicit) return explicit;
+
+  const rawPlan = String(metadata?.plan ?? metadata?.plan_id ?? planId).trim();
+  return rawPlan.startsWith("school_") ? rawPlan.slice("school_".length) : rawPlan;
+}
+
+function getCredits(metadata: Record<string, unknown>, planId: SchoolPlanId) {
+  const rawCredits =
+    metadata?.credits ?? metadata?.shared_credits_allowance ?? metadata?.shared_credits;
+  const credits = Number(rawCredits);
+  return Number.isFinite(credits) && credits >= 0
+    ? credits
+    : getSchoolPlanSharedCredits(planId);
+}
+
+async function generateUniqueSchoolCode(
+  admin: ReturnType<typeof createAdminClient>
+) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const code = generateSchoolLicenseCode();
+    const [{ data: schoolCode }, { data: school }] = await Promise.all([
+      admin.from("school_codes").select("code").eq("code", code).maybeSingle(),
+      admin
+        .from("schools")
+        .select("id")
+        .or(`code.eq.${code},license_code.eq.${code}`)
+        .maybeSingle(),
+    ]);
+
+    if (!schoolCode?.code && !school?.id) return code;
+  }
+
+  throw new Error("Failed to generate a unique school code");
+}
+
+async function createOrResolveSchoolWorkspace(input: {
+  principalId: string;
+  planName: string;
+  credits: number;
+}) {
+  const admin = createAdminClient();
+
+  const { data: profile, error: profileError } = await admin
+    .from("profiles")
+    .select("full_name, school_id")
+    .eq("id", input.principalId)
+    .maybeSingle();
+
+  if (profileError) {
+    throw new Error(`Failed to load principal profile: ${profileError.message}`);
+  }
+
+  const existingSchoolId = String(profile?.school_id ?? "").trim();
+  if (existingSchoolId) {
+    const existingCode = await getActiveSchoolCode(existingSchoolId);
+    if (existingCode) {
+      await admin
+        .from("profiles")
+        .update({ app_role: "principal", plan: input.planName })
+        .eq("id", input.principalId);
+
+      return { schoolId: existingSchoolId, schoolCode: existingCode };
+    }
+  }
+
+  const principalName = String(profile?.full_name ?? "").trim();
+  const schoolName = principalName
+    ? `${principalName}'s School`
+    : "Principal's School";
+  const now = new Date();
+  const expiresAt = new Date(now);
+  expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const schoolId = crypto.randomUUID();
+    const code = await generateUniqueSchoolCode(admin);
+    const timestamp = now.toISOString();
+
+    const { error: schoolError } = await admin.from("schools").insert({
+      id: schoolId,
+      name: schoolName,
+      license_code: code,
+      max_seats: 999999,
+      used_seats: 0,
+      is_active: true,
+      plan: input.planName,
+      created_at: timestamp,
+      code,
+      updated_at: timestamp,
+      shared_credits: input.credits,
+      credits_used: 0,
+      plan_type: input.planName,
+      subscription_active: true,
+      created_by: input.principalId,
+      expires_at: expiresAt.toISOString(),
+    });
+
+    if (schoolError) {
+      lastError = schoolError;
+      if (isUniqueViolation(schoolError)) continue;
+      throw new Error(`Failed to create school: ${schoolError.message}`);
+    }
+
+    const { error: profileUpdateError } = await admin
+      .from("profiles")
+      .update({
+        school_id: schoolId,
+        app_role: "principal",
+        plan: input.planName,
+      })
+      .eq("id", input.principalId);
+
+    if (profileUpdateError) {
+      throw new Error(`Failed to update principal profile: ${profileUpdateError.message}`);
+    }
+
+    const { error: codeError } = await admin.from("school_codes").insert({
+      school_id: schoolId,
+      code,
+    });
+
+    if (codeError) {
+      if (isUniqueViolation(codeError)) {
+        lastError = codeError;
+        continue;
+      }
+      throw new Error(`Failed to create school code: ${codeError.message}`);
+    }
+
+    return { schoolId, schoolCode: code };
+  }
+
+  const message = lastError instanceof Error ? lastError.message : "unknown error";
+  throw new Error(`Failed to create school workspace: ${message}`);
+}
+
 export async function POST(req: Request) {
   try {
     const rawBody = await req.text();
@@ -96,31 +284,44 @@ export async function POST(req: Request) {
     }
 
     const paystackData = event?.data ?? {};
-    const purpose = paystackData?.metadata?.payment_purpose;
+    const metadata = (paystackData?.metadata ?? {}) as Record<string, unknown>;
+    const metadataType = String(metadata?.type ?? "").trim();
+    const purpose = metadata?.payment_purpose;
 
-    if (purpose === "school") {
-      const schoolPaymentResult = await processSchoolPayment(paystackData);
-      if (!schoolPaymentResult.ok) {
-        console.error(
-          `Webhook: school payment processing failed for reference ${String(
-            paystackData?.reference ?? ""
-          ).trim()}:`,
-          schoolPaymentResult.error
-        );
+    if (metadataType === "school_plan" || purpose === "school") {
+      const principalId = String(
+        metadata?.principal_id ?? metadata?.user_id ?? ""
+      ).trim();
+      const planId = normalizeMetadataSchoolPlan(metadata);
+
+      if (!principalId || !planId) {
         return NextResponse.json(
-          { received: true, error: schoolPaymentResult.error },
+          { received: true, error: "Missing required school payment metadata" },
           { status: 200 }
         );
       }
 
+      if (paystackData?.status !== "success") {
+        return NextResponse.json(
+          { received: true, warning: "Payment not successful" },
+          { status: 200 }
+        );
+      }
+
+      const planName = getPlanName(metadata, planId);
+      const credits = getCredits(metadata, planId);
+      const { schoolCode } = await createOrResolveSchoolWorkspace({
+        principalId,
+        planName,
+        credits,
+      });
+
       return NextResponse.json({
-        received: true,
-        reference: schoolPaymentResult.reference,
-        schoolId: schoolPaymentResult.schoolId,
-        sharedCreditsAwarded: schoolPaymentResult.sharedCreditsAwarded,
-        previousBalance: schoolPaymentResult.previousBalance,
-        newBalance: schoolPaymentResult.newBalance,
-        alreadyProcessed: schoolPaymentResult.alreadyProcessed,
+        success: true,
+        type: "school_plan",
+        school_code: schoolCode,
+        plan: planName,
+        credits,
       });
     }
 

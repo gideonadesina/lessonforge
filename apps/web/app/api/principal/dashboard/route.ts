@@ -101,38 +101,6 @@ async function getSlotLimit(
   schoolId: string,
   fallback: number
 ) {
-  const slotRes = await admin
-    .from("teacher_slots")
-    .select("slot_limit")
-    .eq("school_id", schoolId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
- 
-  if (!slotRes.error && Number(slotRes.data?.slot_limit) > 0) {
-    return Number(slotRes.data?.slot_limit);
-  }
- 
-  if (slotRes.error && !isMissingTableOrColumnError(slotRes.error)) {
-    throw new Error(slotRes.error.message);
-  }
- 
-  const licenseRes = await admin
-    .from("school_licenses")
-    .select("seats")
-    .eq("school_id", schoolId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
- 
-  if (!licenseRes.error && Number(licenseRes.data?.seats) > 0) {
-    return Number(licenseRes.data?.seats);
-  }
- 
-  if (licenseRes.error && !isMissingTableOrColumnError(licenseRes.error)) {
-    throw new Error(licenseRes.error.message);
-  }
- 
   return Math.max(fallback, 1);
 }
  

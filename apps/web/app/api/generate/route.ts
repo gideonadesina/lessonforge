@@ -8,6 +8,11 @@ import {
 } from "@/lib/credits/server";
 import { ROLE_COOKIE_KEY } from "@/lib/auth/roles";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendEmail } from "@/lib/emails/send";
+import {
+  creditsFinishedEmail,
+  creditsLowEmail,
+} from "@/lib/emails/templates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -537,6 +542,12 @@ function normalizeSubjectEnrichment(
 
 function normalizeString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value.trim() : fallback;
+}
+
+function getFirstName(value: unknown, fallback = "there") {
+  const name = String(value ?? "").trim();
+  if (!name) return fallback;
+  return name.split(/\s+/)[0] || fallback;
 }
 
 function normalizeStringArray(value: unknown, fallback: string[] = []): string[] {
@@ -1877,6 +1888,33 @@ export async function POST(req: NextRequest) {
         },
         { status: 500 }
       );
+    }
+
+    const newBalance = deductionResult.creditsRemaining;
+    // TODO: Use an email notification log to avoid repeated low-credit emails across requests.
+    if (deductionResult.source === "personal" && user.email) {
+      const firstName = getFirstName(
+        user.user_metadata?.full_name ?? user.user_metadata?.name
+      );
+
+      if (newBalance <= 5 && newBalance > 0) {
+        await sendEmail({
+          to: user.email,
+          subject: "Your LessonForge credits are running low",
+          html: creditsLowEmail({
+            firstName,
+            creditsLeft: newBalance,
+          }),
+        });
+      }
+
+      if (newBalance === 0) {
+        await sendEmail({
+          to: user.email,
+          subject: "You have used all your LessonForge credits",
+          html: creditsFinishedEmail({ firstName }),
+        });
+      }
     }
 
     return NextResponse.json({ data, saved: true }, { status: 200 });

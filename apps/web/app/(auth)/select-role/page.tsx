@@ -29,7 +29,9 @@ export default function SelectRolePage() {
       try {
         const { data } = await supabase.auth.getSession();
         if (!alive) return;
-        setIsAuthenticated(Boolean(data.session));
+        const user = data.session?.user ?? null;
+        setIsAuthenticated(Boolean(user));
+
       } finally {
         if (alive) setLoadingRoleContext(false);
       }
@@ -104,17 +106,23 @@ export default function SelectRolePage() {
 
           <div className="mt-10 grid gap-5 md:grid-cols-2">
             <RoleSelectionCard
-              title={ROLE_CONTENT.teacher.selectionTitle}
-              description={ROLE_CONTENT.teacher.selectionDescription}
+              title="Teacher"
+              badge="Free to start"
+              badgeTone="teacher"
+              description="Generate lesson plans, notes, slides and exams for your own classes. No payment needed to get started."
               icon={<GraduationCap className="h-6 w-6" aria-hidden="true" />}
               busy={switchingRole === "teacher"}
+              tone="teacher"
               onClick={() => chooseRole("teacher")}
             />
             <RoleSelectionCard
-              title={ROLE_CONTENT.principal.selectionTitle}
-              description={ROLE_CONTENT.principal.selectionDescription}
+              title="Principal / School Admin"
+              badge="School Plan Required"
+              badgeTone="purple"
+              description="Buy credits once for your entire school. All your teachers generate lessons from your school credit pool. You get a school code to invite unlimited teachers - no individual teacher payments needed."
               icon={<Building2 className="h-6 w-6" aria-hidden="true" />}
               busy={switchingRole === "principal"}
+              tone="principal"
               onClick={() => chooseRole("principal")}
             />
           </div>

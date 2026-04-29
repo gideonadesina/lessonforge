@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { consumeGenerationCredits, getGenerationCreditAvailability } from "@/lib/credits/server";
 import { consumePersonalCreditsDirectly } from "@/lib/credits/server";
+import { sendEmail } from "@/lib/emails/send";
+import {
+  creditsFinishedEmail,
+  creditsLowEmail,
+} from "@/lib/emails/templates";
+import { normalizeSlides } from "@/lib/slideSchema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +21,12 @@ export const maxDuration = 60;
 const SLIDES_CREDIT_COST = 2;
 const OPENAI_MAX_TOKENS = 7000; // raised from 4000 — prevents truncation on long decks
 const OPENAI_MODEL = "gpt-4o";
+
+function getFirstName(value: unknown, fallback = "there") {
+  const name = String(value ?? "").trim();
+  if (!name) return fallback;
+  return name.split(/\s+/)[0] || fallback;
+}
 
 // ─────────────────────────────────────────────────────────────
 // TYPES
@@ -776,22 +788,52 @@ Make this immediately usable by a real teacher. Every slide must have teacher_no
       );
     }
 
+    const newBalance = deductionResult.creditsRemaining;
+    // TODO: Use an email notification log to avoid repeated low-credit emails across requests.
+    if (deductionResult.source === "personal" && user.email) {
+      const firstName = getFirstName(
+        user.user_metadata?.full_name ?? user.user_metadata?.name
+      );
+
+      if (newBalance <= 5 && newBalance > 0) {
+        await sendEmail({
+          to: user.email,
+          subject: "Your LessonForge credits are running low",
+          html: creditsLowEmail({
+            firstName,
+            creditsLeft: newBalance,
+          }),
+        });
+      }
+
+      if (newBalance === 0) {
+        await sendEmail({
+          to: user.email,
+          subject: "You have used all your LessonForge credits",
+          html: creditsFinishedEmail({ firstName }),
+        });
+      }
+    }
+
     // ── 4. Fetch Pexels images ────────────────────────────
     const enrichedSlides = pexelsKey
       ? await enrichSlidesWithImages(rawSlides, pexelsKey, subject, topic)
       : rawSlides;
 
+    // ── 4b. Normalize: fill missing titles, categoryLabels, map type-specific fields
+    const normalizedSlides = normalizeSlides(enrichedSlides, topic);
+
     // ── 5. Build final deck ───────────────────────────────
     const finalDeck = {
       ...deckObj,
-      slides: enrichedSlides,
+      slides: normalizedSlides,
       meta: {
         topic, subject, grade, duration, bloom,
         curriculum: curriculum ?? null,
         schoolLevel: schoolLevel ?? null,
-        total_slides: enrichedSlides.length,
-        total_time_minutes: enrichedSlides.reduce((sum: number, s: any) => sum + (s?.time_minutes ?? 0), 0),
-        has_images: enrichedSlides.some((s: any) => !!s?.image_url),
+        total_slides: normalizedSlides.length,
+        total_time_minutes: normalizedSlides.reduce((sum: number, s: any) => sum + (s?.time_minutes ?? 0), 0),
+        has_images: normalizedSlides.some((s: any) => !!s?.image_url),
         generated_at: new Date().toISOString(),
       },
     };

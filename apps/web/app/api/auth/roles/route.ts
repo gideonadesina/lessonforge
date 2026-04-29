@@ -14,6 +14,8 @@ import {
   resolvePreferredRole,
   rolesFromUserMetadata,
 } from "@/lib/auth/roles";
+import { sendEmail } from "@/lib/emails/send";
+import { welcomeEmail } from "@/lib/emails/templates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +28,12 @@ type RoleSwitchPayload = {
 
 function readMetadataRoles(metadata: Record<string, unknown>): AppRole[] {
   return rolesFromUserMetadata(metadata);
+}
+
+function getFirstName(value: unknown, fallback = "there") {
+  const name = String(value ?? "").trim();
+  if (!name) return fallback;
+  return name.split(/\s+/)[0] || fallback;
 }
 
 function getBearerTokenFromHeaders(headers: Headers) {
@@ -76,12 +84,25 @@ async function bootstrapInitialRole(input: {
 
   // Step 1: Create or update the profile without role first
   console.log(`Bootstrapping role ${input.nextRole} for user ${input.userId}`);
+  const { data: existingProfile } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("id", input.userId)
+    .maybeSingle();
   const profileUpsert = await admin.from("profiles").upsert(profileBase);
   if (profileUpsert.error) {
     console.error("Failed to upsert profile during bootstrap:", profileUpsert.error.message);
     throw new Error(`Profile creation failed: ${profileUpsert.error.message}`);
   }
   console.log("Profile upsert successful");
+
+  if (!existingProfile?.id && input.email) {
+    await sendEmail({
+      to: input.email,
+      subject: "Welcome to LessonForge",
+      html: welcomeEmail({ firstName: getFirstName(fullName) }),
+    });
+  }
 
   // Step 2: Try to update the role column if it exists
   const roleUpdate = await admin

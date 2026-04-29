@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { appUrl, paystackHeaders } from "@/lib/paystack";
 import { getBearerTokenFromHeaders, resolvePrincipalContext } from "@/lib/principal/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import {
   getSchoolPlanPaystackAmount,
   isValidSchoolPlanId,
@@ -37,61 +36,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "User email is required for payment checkout." }, { status: 400 });
     }
 
-    if (context.school?.id) {
-      return NextResponse.json(
-        {
-          ok: true,
-          data: {
-            alreadyActivated: true,
-            schoolId: context.school.id,
-          },
-        },
-        { status: 200 }
-      );
-    }
-
-    const admin = createAdminClient();
-    let schoolId = context.school?.id ?? null;
-
-    if (!schoolId) {
-      const { data: membership } = await admin
-        .from("school_members")
-        .select("school_id")
-        .eq("user_id", context.user.id)
-        .eq("role", "principal")
-        .maybeSingle();
-
-      schoolId = membership?.school_id ?? null;
-    }
-
-    if (!schoolId) {
-      const { data: newSchool, error: schoolError } = await admin
-        .from("schools")
-        .insert({
-          name: `School - ${context.user.email}`,
-          principal_id: context.user.id,
-          shared_credits: 0,
-          teacher_limit: 0,
-        })
-        .select("id")
-        .maybeSingle();
-
-      if (schoolError || !newSchool?.id) {
-        return NextResponse.json(
-          { ok: false, error: "Failed to create school workspace." },
-          { status: 500 }
-        );
-      }
-
-      schoolId = newSchool.id;
-
-      await admin.from("school_members").insert({
-        school_id: schoolId,
-        user_id: context.user.id,
-        role: "principal",
-      });
-    }
-
     const amountMinor = getSchoolPlanPaystackAmount(plan, "NGN");
     if (!Number.isFinite(amountMinor) || amountMinor <= 0) {
       return NextResponse.json({ ok: false, error: "Invalid pricing for selected plan." }, { status: 500 });
@@ -108,7 +52,8 @@ export async function POST(req: NextRequest) {
         metadata: {
           payment_purpose: "school",
           user_id: context.user.id,
-          school_id: schoolId,
+          school_id: context.school?.id ?? null,
+          school_name: context.school?.name ?? `School - ${context.user.email}`,
           plan_id: plan,
         },
       }),

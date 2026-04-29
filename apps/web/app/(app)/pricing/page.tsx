@@ -104,7 +104,7 @@ export default function PricingPage() {
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid w-full grid-cols-1 items-stretch gap-4 md:grid-cols-2 xl:grid-cols-4">
         {TEACHER_PRICING_PLANS.map((plan) => (
           <TeacherPricingPlanCard
             key={plan.id}

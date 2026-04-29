@@ -204,16 +204,18 @@ export function getSlideTypeLabel(slide: Slide): string {
       return "Worked Example";
     case "check_for_understanding":
       return "Check for Understanding";
-      case "real_world_connection":
-  return "Real-world connection";
+    case "real_world_connection":
+      return "Real-world Connection";
     case "discussion":
       return "Discussion";
     case "summary":
       return "Summary";
     case "exit_ticket":
       return "Exit Ticket";
-    default:
-      return "Slide";
+    default: {
+      const anySlide = slide as { type?: unknown };
+      return anySlide.type ? String(anySlide.type).replace(/_/g, " ") : "Lesson Slide";
+    }
   }
 }
 
@@ -226,14 +228,19 @@ export function getSlideHeadline(slide: Slide): string {
     case "worked_example":
     case "summary":
     case "exit_ticket":
+    case "real_world_connection":
       return slide.title;
     case "check_for_understanding":
       return slide.question;
     case "discussion":
       return slide.prompt;
-    case "real_world_connection":
-      return slide.title;
-    default:
-      return "Slide";
+    default: {
+      const anySlide = slide as { title?: unknown; question?: unknown; prompt?: unknown };
+      const candidate =
+        anySlide.title ?? anySlide.question ?? anySlide.prompt;
+      return typeof candidate === "string" && candidate.trim()
+        ? candidate.trim()
+        : getSlideTypeLabel(slide);
+    }
   }
 }

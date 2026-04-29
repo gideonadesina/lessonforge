@@ -21,8 +21,6 @@ export default function PrincipalTeachersPage() {
     usePrincipalDashboard();
   const [busyTeacherId, setBusyTeacherId] = useState<string | null>(null);
   const [busyTeacherAction, setBusyTeacherAction] = useState<TeacherAction | null>(null);
-  const [slotUpgradeBusy, setSlotUpgradeBusy] = useState(false);
-  const [addSlots, setAddSlots] = useState(1);
   const [confirmRemoveTeacherId, setConfirmRemoveTeacherId] = useState<string | null>(null);
   const [optimisticRemovedTeacherIds, setOptimisticRemovedTeacherIds] = useState<string[]>([]);
 
@@ -92,31 +90,6 @@ export default function PrincipalTeachersPage() {
     }
   }
 
-  async function upgradeSlots() {
-    setSlotUpgradeBusy(true);
-    setError(null);
-    try {
-      const token = await getToken();
-      if (!token) throw new Error("Session expired.");
-
-      const res = await fetch("/api/principal/slots", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ addSlots }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json?.ok) throw new Error(json?.error || "Failed to add slots.");
-      await loadDashboard();
-    } catch (err: unknown) {
-      setError(getErrorMessage(err, "Failed to add slots."));
-    } finally {
-      setSlotUpgradeBusy(false);
-    }
-  }
-
   if (loading) return <PrincipalLoadingState />;
   if (forbidden) return <PrincipalForbiddenState />;
   if (onboardingRequired) return <PrincipalOnboardingRequiredState />;
@@ -126,7 +99,7 @@ export default function PrincipalTeachersPage() {
       <PrincipalPageHeader
         eyebrow="Principal Operations"
         title="Teacher Management"
-        description="Manage teacher access, monitor activity, and keep seat capacity in sync with staffing."
+        description="Manage teacher access, monitor activity, and keep school credit usage visible."
       />
 
       {error ? (
@@ -135,34 +108,15 @@ export default function PrincipalTeachersPage() {
 
       {dashboard ? (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <MetricCard title="Teachers" value={visibleTeachers.length} subtitle="Current members in school workspace" />
             <MetricCard title="Active" value={dashboard.overview.activeTeachers} subtitle="Enabled teacher accounts" />
-            <MetricCard title="Slots" value={dashboard.subscription.slotLimit} subtitle="Provisioned teacher capacity" />
             <MetricCard title="Weekly activity" value={dashboard.overview.weeklyActivityCount} subtitle="Lessons + worksheets events" />
           </div>
 
           <SectionCard
             title="Teacher roster"
             subtitle="Track teacher health and control account access."
-            action={
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min={1}
-                  value={addSlots}
-                  onChange={(e) => setAddSlots(Math.max(1, Number(e.target.value || 1)))}
-                  className="w-20 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-violet-500"
-                />
-                <button
-                  onClick={upgradeSlots}
-                  disabled={slotUpgradeBusy}
-                  className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-60"
-                >
-                  {slotUpgradeBusy ? "Updating..." : "Add slots"}
-                </button>
-              </div>
-            }
           >
             <div className="overflow-x-auto">
               <table className="w-full min-w-[760px] text-sm">

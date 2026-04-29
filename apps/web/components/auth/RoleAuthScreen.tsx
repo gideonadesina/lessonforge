@@ -27,6 +27,7 @@ import { createBrowserSupabase } from "@/lib/supabase/browser";
 type SocialProvider = "google" | "microsoft";
 type Mode = "login" | "signup";
 type AuthBanner = "none" | "no-account";
+type MessageTone = "info" | "error";
 
 type RoleAuthScreenProps = {
   role: AppRole;
@@ -49,6 +50,24 @@ function isProfilePermissionError(message: string) {
 
 function normalizeAuthErrorMessage(error: unknown, fallback: string) {
   return getAuthErrorMessage(error, fallback);
+}
+
+function getEmailLoginErrorMessage(error: unknown) {
+  const message =
+    typeof error === "object" && error && "message" in error
+      ? String((error as { message?: unknown }).message ?? "")
+      : String(error ?? "");
+  const normalizedMessage = message.toLowerCase();
+
+  if (normalizedMessage.includes("invalid login credentials")) {
+    return "Incorrect email or password. Please try again.";
+  }
+
+  if (normalizedMessage.includes("email not confirmed")) {
+    return "Please verify your email before logging in.";
+  }
+
+  return "Login failed. Please try again.";
 }
 
 function getNoAccountWarmMessage() {
@@ -117,6 +136,7 @@ export default function RoleAuthScreen({ role }: RoleAuthScreenProps) {
   const [showPassword, setShowPassword] = useState(false);
 
   const [message, setMessage] = useState<string | null>(null);
+  const [messageTone, setMessageTone] = useState<MessageTone>("info");
   const [authBanner, setAuthBanner] = useState<AuthBanner>("none");
   const [emailLoading, setEmailLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState<SocialProvider | null>(null);
@@ -358,11 +378,13 @@ const resolveRoleAfterAuth = useCallback(
     const cleanEmail = email.trim().toLowerCase();
 
     if (!cleanEmail || !password || (mode === "signup" && !cleanName)) {
+      setMessageTone("error");
       setMessage("Please complete all required fields.");
       return;
     }
 
     if (password.length < 6) {
+      setMessageTone("error");
       setMessage("Password must be at least 6 characters.");
       return;
     }
@@ -395,6 +417,7 @@ const resolveRoleAfterAuth = useCallback(
         });
 
         if (error) {
+          setMessageTone("error");
           setMessage(error.message);
           return;
         }
@@ -430,6 +453,7 @@ const resolveRoleAfterAuth = useCallback(
 
         setMode("login");
         setPassword("");
+        setMessageTone("info");
         setMessage(
           "Account created. Check your email to confirm your account, then return to sign in."
         );
@@ -443,22 +467,8 @@ const resolveRoleAfterAuth = useCallback(
       });
 
       if (error) {
-        const text = String(error.message || "Unable to sign in right now.");
-        const normalizedText = text.toLowerCase();
-        if (text.toLowerCase().includes("email not confirmed")) {
-          setMessage(
-            "Email not confirmed. Please check your inbox or disable email confirmation in Supabase Auth settings."
-          );
-        } else if (
-          normalizedText.includes("invalid login credentials") ||
-          normalizedText.includes("user not found") ||
-          normalizedText.includes("invalid credentials")
-        ) {
-          setAuthBanner("no-account");
-          setMessage(null);
-        } else {
-          setMessage(text);
-        }
+        setMessageTone("error");
+        setMessage(getEmailLoginErrorMessage(error));
         return;
       }
 
@@ -492,6 +502,7 @@ const resolveRoleAfterAuth = useCallback(
       router.replace(homePath);
       router.refresh();
     } catch (error: unknown) {
+      setMessageTone("error");
       setMessage(normalizeAuthErrorMessage(error, "Unable to sign in right now."));
       setOauthOverlayProvider(null);
       clearOAuthLoadingProvider();
@@ -716,9 +727,15 @@ const resolveRoleAfterAuth = useCallback(
             <div
               className="mt-4 rounded-[14px] border px-4 py-3 text-sm"
               style={{
-                background: "rgba(83,74,183,0.10)",
-                borderColor: "rgba(83,74,183,0.25)",
-                color: "#1E1B4B",
+                background:
+                  messageTone === "error"
+                    ? "rgba(254,226,226,0.85)"
+                    : "rgba(83,74,183,0.10)",
+                borderColor:
+                  messageTone === "error"
+                    ? "rgba(220,38,38,0.35)"
+                    : "rgba(83,74,183,0.25)",
+                color: messageTone === "error" ? "#991B1B" : "#1E1B4B",
                 fontFamily: '"Trebuchet MS", sans-serif',
               }}
             >

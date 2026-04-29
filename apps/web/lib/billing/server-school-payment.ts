@@ -7,17 +7,18 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   getSchoolPlanPricing,
   getSchoolPlanSharedCredits,
-  getSchoolPlanTeacherLimit,
   isValidSchoolPlanId,
   type SchoolPlanId,
 } from "@/lib/billing/server-school-pricing";
-import { generateSchoolCode } from "@/lib/principal/utils";
+import { generateSchoolCode, isMissingTableOrColumnError } from "@/lib/principal/utils";
 
 export interface ProcessSchoolPaymentInput {
   reference: string;
-  schoolId: string;
+  schoolId?: string | null;
   userId: string;
   plan: SchoolPlanId;
+  schoolName?: string | null;
+  principalName?: string | null;
   amount?: number | null;
   currency?: string | null;
   paystackCustomerCode?: string | null;
@@ -45,6 +46,8 @@ type ProcessSchoolPaymentPayload =
         school_id?: unknown;
         plan_id?: unknown;
         plan?: unknown;
+        school_name?: unknown;
+        principal_name?: unknown;
       } | null;
       [key: string]: unknown;
     };
@@ -55,7 +58,6 @@ export interface ProcessSchoolPaymentResult {
   schoolId: string;
   plan: SchoolPlanId;
   sharedCreditsAwarded: number;
-  teacherLimitAwarded: number;
   previousBalance: number;
   newBalance: number;
   alreadyProcessed: boolean;
@@ -72,14 +74,13 @@ function normalizeInput(
 ): { ok: true; input: ProcessSchoolPaymentInput } | { ok: false; error: string } {
   const structured = payload as ProcessSchoolPaymentInput;
 
-  if (structured?.reference && structured?.schoolId && structured?.userId) {
+  if (structured?.reference && structured?.userId) {
     const reference = String(structured.reference).trim();
-    const schoolId = String(structured.schoolId).trim();
+    const schoolId = String(structured.schoolId ?? "").trim() || null;
     const userId = String(structured.userId).trim();
     const plan = normalizeSchoolPlanId(structured.plan);
 
     if (!reference) return { ok: false, error: "Missing payment reference" };
-    if (!schoolId) return { ok: false, error: "Missing school_id" };
     if (!userId) return { ok: false, error: "Missing user_id" };
     if (!plan) return { ok: false, error: "Missing or invalid school plan_id" };
 
@@ -91,6 +92,8 @@ function normalizeInput(
         schoolId,
         userId,
         plan,
+        schoolName: structured.schoolName ?? null,
+        principalName: structured.principalName ?? null,
       },
     };
   }
@@ -100,12 +103,13 @@ function normalizeInput(
   };
   const metadata = paystackData?.metadata ?? {};
   const reference = String(paystackData?.reference ?? "").trim();
-  const schoolId = String(metadata?.school_id ?? "").trim();
+  const schoolId = String(metadata?.school_id ?? "").trim() || null;
   const userId = String(metadata?.user_id ?? "").trim();
   const plan = normalizeSchoolPlanId(metadata?.plan_id ?? metadata?.plan);
+  const schoolName = String(metadata?.school_name ?? "").trim() || null;
+  const principalName = String(metadata?.principal_name ?? "").trim() || null;
 
   if (!reference) return { ok: false, error: "Missing payment reference" };
-  if (!schoolId) return { ok: false, error: "Missing school_id in metadata" };
   if (!userId) return { ok: false, error: "Missing user_id in metadata" };
   if (!plan) return { ok: false, error: "Missing or invalid school plan_id in metadata" };
 
@@ -118,6 +122,8 @@ return {
     schoolId,
     userId,
     plan,
+    schoolName,
+    principalName,
     amount: typeof paystackData?.amount === "number" ? paystackData.amount : null,
     currency: paystackData?.currency ? String(paystackData.currency) : null,
     paystackCustomerCode: String(ps?.customer?.customer_code ?? ""),
@@ -151,17 +157,119 @@ export async function getSchoolPaymentTransactionByReference(reference: string) 
   return data ?? null;
 }
 
+async function insertSchoolWorkspace(
+  input: {
+    userId: string;
+    schoolName?: string | null;
+    principalName?: string | null;
+  }
+): Promise<string> {
+  const admin = createAdminClient();
+  const normalizedSchoolName =
+    String(input.schoolName ?? "").trim() || "LessonForge School";
+  const principalName = String(input.principalName ?? "").trim() || null;
+  let schoolCode = generateSchoolCode(normalizedSchoolName);
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const insertPayload: Record<string, unknown> = {
+      name: normalizedSchoolName,
+      created_by: input.userId,
+      code: schoolCode,
+      principal_name: principalName,
+      shared_credits: 0,
+      subscription_active: false,
+    };
+
+    let schoolRes = await admin
+      .from("schools")
+      .insert(insertPayload)
+      .select("id")
+      .maybeSingle();
+
+    if (schoolRes.error && isMissingTableOrColumnError(schoolRes.error)) {
+      schoolRes = await admin
+        .from("schools")
+        .insert({
+          name: normalizedSchoolName,
+          created_by: input.userId,
+          code: schoolCode,
+        })
+        .select("id")
+        .maybeSingle();
+    }
+
+    if (!schoolRes.error && schoolRes.data?.id) {
+      const schoolId = String(schoolRes.data.id);
+      let memberRes = await admin.from("school_members").insert({
+        school_id: schoolId,
+        user_id: input.userId,
+        role: "principal",
+        status: "active",
+      });
+
+      if (memberRes.error && isMissingTableOrColumnError(memberRes.error)) {
+        memberRes = await admin.from("school_members").insert({
+          school_id: schoolId,
+          user_id: input.userId,
+          role: "principal",
+        });
+      }
+
+      if (memberRes.error && String((memberRes.error as any)?.code ?? "") !== "23505") {
+        console.error("Failed to create principal school membership:", memberRes.error);
+        throw new Error(`Failed to create principal membership: ${memberRes.error.message}`);
+      }
+
+      return schoolId;
+    }
+
+    if (schoolRes.error && String((schoolRes.error as any)?.code ?? "") === "23505") {
+      schoolCode = generateSchoolCode(normalizedSchoolName);
+      continue;
+    }
+
+    if (schoolRes.error) {
+      console.error("Failed to create school workspace:", schoolRes.error);
+      throw new Error(`Failed to create school workspace: ${schoolRes.error.message}`);
+    }
+  }
+
+  throw new Error("Failed to create a unique school workspace");
+}
+
+async function resolveOrCreateSchoolWorkspace(input: ProcessSchoolPaymentInput): Promise<string> {
+  const admin = createAdminClient();
+  const existingSchoolId = String(input.schoolId ?? "").trim();
+  if (existingSchoolId) return existingSchoolId;
+
+  const { data: membership, error } = await admin
+    .from("school_members")
+    .select("school_id")
+    .eq("user_id", input.userId)
+    .eq("role", "principal")
+    .maybeSingle();
+
+  if (error && !isMissingTableOrColumnError(error)) {
+    console.error("Failed to resolve principal school membership:", error);
+    throw new Error(`Failed to resolve principal workspace: ${error.message}`);
+  }
+
+  const schoolId = String(membership?.school_id ?? "").trim();
+  if (schoolId) return schoolId;
+
+  return insertSchoolWorkspace(input);
+}
+
 /**
  * Create or return existing school payment transaction record.
  * Ensures idempotency by using reference as unique key.
  */
 export async function recordSchoolPaymentTransaction(
-  input: ProcessSchoolPaymentInput
+  input: ProcessSchoolPaymentInput & { schoolId: string }
 ): Promise<{
   isNew: boolean;
   alreadyProcessed: boolean;
   sharedCreditsAwarded: number;
-  teacherLimitAwarded: number;
 }> {
   const admin = createAdminClient();
   const now = new Date().toISOString();
@@ -172,12 +280,10 @@ export async function recordSchoolPaymentTransaction(
       isNew: false,
       alreadyProcessed: Boolean(existing.processed),
       sharedCreditsAwarded: Number(existing.shared_credits_awarded ?? 0),
-      teacherLimitAwarded: Number(existing.teacher_limit_awarded ?? 0),
     };
   }
 
   const sharedCreditsAwarded = getSchoolPlanSharedCredits(input.plan);
-  const teacherLimitAwarded = getSchoolPlanTeacherLimit(input.plan);
 
   const { error } = await admin.from("school_payment_transactions").insert({
     reference: input.reference,
@@ -195,7 +301,6 @@ export async function recordSchoolPaymentTransaction(
     paystack_subscription_code: input.paystackSubscriptionCode ?? null,
     paystack_email: input.paystackEmail ?? null,
     shared_credits_awarded: sharedCreditsAwarded,
-    teacher_limit_awarded: teacherLimitAwarded,
     shared_credits_awarded_at: null,
     provider_payload: input.payerPayload ?? null,
     result_snapshot: null,
@@ -211,7 +316,6 @@ export async function recordSchoolPaymentTransaction(
           isNew: false,
           alreadyProcessed: Boolean(retry.processed),
           sharedCreditsAwarded: Number(retry.shared_credits_awarded ?? 0),
-          teacherLimitAwarded: Number(retry.teacher_limit_awarded ?? 0),
         };
       }
     }
@@ -222,7 +326,6 @@ export async function recordSchoolPaymentTransaction(
     isNew: true,
     alreadyProcessed: false,
     sharedCreditsAwarded,
-    teacherLimitAwarded,
   };
 }
 
@@ -356,7 +459,6 @@ async function markSchoolPaymentProcessed(
   reference: string,
   snapshot: {
     sharedCreditsAwarded: number;
-    teacherLimitAwarded: number;
     previousBalance: number;
     newBalance: number;
     schoolCode: string;
@@ -424,7 +526,6 @@ export async function processSchoolPayment(
       schoolId: "",
       plan: "school_starter",
       sharedCreditsAwarded: 0,
-      teacherLimitAwarded: 0,
       previousBalance: 0,
       newBalance: 0,
       alreadyProcessed: false,
@@ -432,9 +533,12 @@ export async function processSchoolPayment(
     };
   }
 
-  const input = normalized.input;
+  let input: ProcessSchoolPaymentInput & { schoolId: string };
 
   try {
+    const schoolId = await resolveOrCreateSchoolWorkspace(normalized.input);
+    input = { ...normalized.input, schoolId };
+
     // Check if already recorded
     const transaction = await recordSchoolPaymentTransaction(input);
 
@@ -465,7 +569,6 @@ export async function processSchoolPayment(
         schoolId: input.schoolId,
         plan: input.plan,
         sharedCreditsAwarded: transaction.sharedCreditsAwarded,
-        teacherLimitAwarded: transaction.teacherLimitAwarded,
         previousBalance:
           typeof snapshot?.previousBalance === "number"
             ? snapshot.previousBalance
@@ -500,7 +603,6 @@ export async function processSchoolPayment(
       .update({
         plan_type: input.plan,
         subscription_active: true,
-        teacher_limit: planPricing.teacherLimit,
         updated_at: now,
       })
       .eq("id", input.schoolId);
@@ -514,7 +616,6 @@ export async function processSchoolPayment(
       input.reference,
       {
         sharedCreditsAwarded: planPricing.sharedCredits,
-        teacherLimitAwarded: planPricing.teacherLimit,
         previousBalance: balanceResult.previousBalance,
         newBalance: balanceResult.newBalance,
         schoolCode,
@@ -527,7 +628,6 @@ export async function processSchoolPayment(
       schoolId: input.schoolId,
       plan: input.plan,
       sharedCreditsAwarded: planPricing.sharedCredits,
-      teacherLimitAwarded: planPricing.teacherLimit,
       previousBalance: balanceResult.previousBalance,
       newBalance: balanceResult.newBalance,
       alreadyProcessed: false,
@@ -541,6 +641,7 @@ export async function processSchoolPayment(
 
     if (
       fallbackInput &&
+      fallbackInput.schoolId &&
       message.includes("already been processed or is processing")
     ) {
       const admin = createAdminClient();
@@ -552,17 +653,13 @@ export async function processSchoolPayment(
           .maybeSingle(),
         admin
           .from("school_payment_transactions")
-          .select("shared_credits_awarded, teacher_limit_awarded, result_snapshot")
+          .select("shared_credits_awarded, result_snapshot")
           .eq("reference", fallbackInput.reference)
           .maybeSingle(),
       ]);
       const sharedCreditsAwarded = Number(
         transaction?.shared_credits_awarded ??
           getSchoolPlanSharedCredits(fallbackInput.plan)
-      );
-      const teacherLimitAwarded = Number(
-        transaction?.teacher_limit_awarded ??
-          getSchoolPlanTeacherLimit(fallbackInput.plan)
       );
       const currentBalance = Math.max(0, Number(school?.shared_credits ?? 0));
       const snapshot = transaction?.result_snapshot as
@@ -576,7 +673,6 @@ export async function processSchoolPayment(
         schoolId: fallbackInput.schoolId,
         plan: fallbackInput.plan,
         sharedCreditsAwarded,
-        teacherLimitAwarded,
         previousBalance:
           typeof snapshot?.previousBalance === "number"
             ? snapshot.previousBalance
@@ -595,7 +691,6 @@ export async function processSchoolPayment(
       schoolId: fallbackInput?.schoolId ?? "",
       plan: fallbackInput?.plan ?? "school_starter",
       sharedCreditsAwarded: 0,
-      teacherLimitAwarded: 0,
       previousBalance: 0,
       newBalance: 0,
       alreadyProcessed: false,

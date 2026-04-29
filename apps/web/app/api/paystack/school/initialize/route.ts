@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { paystackHeaders, appUrl } from "@/lib/paystack";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@supabase/supabase-js";
 import {
   isValidSchoolPlanId,
   getSchoolPlanPaystackAmount,
   getSchoolPlanSharedCredits,
-  getSchoolPlanTeacherLimit,
 } from "@/lib/billing/server-school-pricing";
 
 export async function POST(req: NextRequest) {
@@ -35,10 +33,12 @@ export async function POST(req: NextRequest) {
       plan,
       callbackPath,
       schoolName,
+      principalName,
     } = (await req.json()) as {
       plan: unknown;
       callbackPath?: unknown;
       schoolName?: unknown;
+      principalName?: unknown;
     };
 
     if (!isValidSchoolPlanId(plan)) {
@@ -47,7 +47,6 @@ export async function POST(req: NextRequest) {
 
     const amountMinor = getSchoolPlanPaystackAmount(plan, "NGN");
     const sharedCredits = getSchoolPlanSharedCredits(plan);
-    const teacherLimit = getSchoolPlanTeacherLimit(plan);
 
     if (!Number.isFinite(amountMinor) || amountMinor <= 0) {
       return NextResponse.json(
@@ -55,59 +54,6 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
-
-    const admin = createAdminClient();
-
-    // Get or create school for this principal
-    let schoolId: string | null = null;
-    const { data: membership } = await admin
-      .from("school_members")
-      .select("school_id")
-      .eq("user_id", user.id)
-      .eq("role", "principal")
-      .maybeSingle();
-
-    if (membership?.school_id) {
-      schoolId = membership.school_id;
-    } else {
-      // Create a new school for this principal
-      const normalizedSchoolName = String(schoolName ?? "").trim();
-      const { data: newSchool, error: schoolError } = await admin
-        .from("schools")
-        .insert({
-          name: normalizedSchoolName || `School - ${user.email}`,
-          principal_id: user.id,
-          shared_credits: 0,
-          teacher_limit: 0,
-        })
-        .select("id")
-        .maybeSingle();
-
-      if (schoolError || !newSchool?.id) {
-        return NextResponse.json(
-          { error: "Failed to create school workspace" },
-          { status: 500 }
-        );
-      }
-
-      schoolId = newSchool.id;
-
-      // Add principal as member
-      await admin.from("school_members").insert({
-        school_id: schoolId,
-        user_id: user.id,
-        role: "principal",
-      });
-    }
-
-    await admin.from("profiles").upsert(
-      {
-        id: user.id,
-        paystack_email: user.email,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "id" }
-    );
 
     const normalizedCallbackPath =
       typeof callbackPath === "string" && callbackPath.startsWith("/")
@@ -123,14 +69,17 @@ export async function POST(req: NextRequest) {
         currency: "NGN",
         callback_url: appUrl(normalizedCallbackPath),
         metadata: {
+          type: "school_plan",
           payment_purpose: "school",
+          principal_id: user.id,
           user_id: user.id,
-          school_id: schoolId,
+          school_name: String(schoolName ?? "").trim(),
+          principal_name: String(principalName ?? "").trim(),
+          plan,
           plan_id: plan,
           currency: "NGN",
           expected_amount_minor: amountMinor,
           shared_credits_allowance: sharedCredits,
-          teacher_limit_allowance: teacherLimit,
           initiated_at: new Date().toISOString(),
         },
       }),

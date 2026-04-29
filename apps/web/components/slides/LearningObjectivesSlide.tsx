@@ -20,37 +20,128 @@ export default function LearningObjectivesSlide({ slide }: LearningObjectivesSli
   const objectives = Array.isArray(slide.objectives) ? slide.objectives : [];
 
   return (
-    <div className="grid h-full w-full grid-cols-1 bg-[linear-gradient(135deg,#ffffff_0%,#fbfaff_55%,#eefdf5_100%)] lg:grid-cols-[1.05fr_0.95fr]">
-      <div className="flex h-full flex-col justify-center px-12 py-12">
-        <div className="mb-5 flex items-center justify-between gap-3">
-          <div className="inline-flex items-center gap-2 rounded-full border border-purple-200 bg-purple-50 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-purple-700">
-            <span className="h-2 w-2 rounded-full bg-purple-500" />
+    <div className="relative grid h-full w-full bg-white" style={{ gridTemplateColumns: "62% 38%" }}>
+      {/* Purple left accent bar */}
+      <div
+        className="absolute left-0 top-0 bottom-0 z-10"
+        style={{ width: "4px", background: "#6C63FF" }}
+      />
+
+      {/* Left content */}
+      <div
+        className="flex h-full flex-col justify-center overflow-hidden"
+        style={{ padding: "5% 4% 5% 6%" }}
+      >
+        {/* Badge row */}
+        <div className="mb-4 flex items-center gap-3 flex-wrap">
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "7px",
+              background: "#EDE9FE",
+              border: "1px solid rgba(108,99,255,0.2)",
+              borderRadius: "20px",
+              padding: "4px 13px",
+              fontSize: "10px",
+              fontWeight: 700,
+              letterSpacing: "3px",
+              color: "#7C3AED",
+              textTransform: "uppercase" as const,
+            }}
+          >
+            <span
+              style={{
+                width: "6px",
+                height: "6px",
+                borderRadius: "50%",
+                background: "#6C63FF",
+                display: "inline-block",
+                flexShrink: 0,
+              }}
+            />
             Learning Objectives
           </div>
           {slide.bloom_level && (
-            <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
+            <span
+              style={{
+                display: "inline-block",
+                background: "#FFF7ED",
+                border: "1px solid #FDE68A",
+                borderRadius: "20px",
+                padding: "3px 11px",
+                fontSize: "9px",
+                fontWeight: 700,
+                letterSpacing: "1.5px",
+                color: "#92400E",
+                textTransform: "uppercase" as const,
+              }}
+            >
               Bloom: {slide.bloom_level}
             </span>
           )}
         </div>
 
-        <h2 className="text-5xl font-black leading-tight tracking-tight text-gray-950">
+        {/* Title */}
+        <h2
+          style={{
+            fontSize: "clamp(22px, 3.4vw, 40px)",
+            fontWeight: 800,
+            color: "#0D0A1E",
+            lineHeight: 1.1,
+            letterSpacing: "-0.5px",
+            margin: 0,
+          }}
+        >
           {slide.title}
         </h2>
-        <p className="mt-3 text-base font-medium text-gray-500">
+
+        <p
+          style={{
+            fontSize: "clamp(11px, 1.2vw, 13px)",
+            color: "#6B7280",
+            marginTop: "8px",
+            fontWeight: 400,
+          }}
+        >
           By the end of this lesson, learners will be able to:
         </p>
 
-        <div className="mt-7 grid grid-cols-1 gap-3">
-          {objectives.slice(0, 5).map((objective, index) => (
+        {/* Objectives */}
+        <div className="mt-4 flex flex-col gap-2.5 overflow-hidden">
+          {objectives.slice(0, 4).map((objective, index) => (
             <div
               key={index}
-              className="flex items-start gap-4 rounded-2xl border border-white bg-white/85 px-5 py-4 shadow-[0_18px_45px_-34px_rgba(17,17,39,0.45)]"
+              className="flex items-start gap-3"
+              style={{
+                background: "#F9F8FF",
+                border: "1px solid #EDE9FE",
+                borderRadius: "10px",
+                padding: "10px 14px",
+              }}
             >
-              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-purple-600 text-sm font-black text-white shadow-sm">
+              <span
+                className="flex flex-shrink-0 items-center justify-center font-bold text-white"
+                style={{
+                  width: "28px",
+                  height: "28px",
+                  borderRadius: "50%",
+                  background: "#6C63FF",
+                  fontSize: "12px",
+                  lineHeight: 1,
+                }}
+              >
                 {index + 1}
               </span>
-              <span className="text-base font-medium leading-relaxed text-gray-800">
+              <span
+                style={{
+                  fontSize: "clamp(11px, 1.2vw, 13.5px)",
+                  color: "#374151",
+                  lineHeight: 1.55,
+                  fontWeight: 500,
+                  paddingTop: "4px",
+                }}
+              >
                 {objective}
               </span>
             </div>
@@ -58,6 +149,7 @@ export default function LearningObjectivesSlide({ slide }: LearningObjectivesSli
         </div>
       </div>
 
+      {/* Right image */}
       <SlideVisualPanel
         imageUrl={resolveSlideImageUrl(slide)}
         alt={slide.visual_suggestion || slide.title}

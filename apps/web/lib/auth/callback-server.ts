@@ -28,6 +28,8 @@ import {
   resolveAuthRoleContext,
   type AuthRoleContext,
 } from "@/lib/auth/role-context";
+import { sendEmail } from "@/lib/emails/send";
+import { welcomeEmail } from "@/lib/emails/templates";
 
 export type CallbackResult = {
   ok: boolean;
@@ -145,16 +147,25 @@ const userEmail: string | null = typeof user.email === "string" ? user.email : n
   email: userEmail,
 });
     // ==================== Stage 3: Ensure profile ====================
-    await runStage("ensuring_profile", async () => {
-     await ensureUserProfile(user.id, {
+    const fullName = getBestFullName(userMetadata);
+    const profileCreated = await runStage("ensuring_profile", async () => {
+     return ensureUserProfile(user.id, {
   email: userEmail,
-  fullName: getBestFullName(userMetadata),
+  fullName,
 });
     });
 
     console.log("[Auth Callback] Profile ensured", {
       userId: user.id,
     });
+
+    if (profileCreated && userEmail) {
+      await sendEmail({
+        to: userEmail,
+        subject: "Welcome to LessonForge",
+        html: welcomeEmail({ firstName: getFirstName(fullName) }),
+      });
+    }
 
     // ==================== Stage 4: Resolve roles ====================
     const roleContext = await runStage("resolving_roles", async () => {
@@ -285,7 +296,7 @@ const userEmail: string | null = typeof user.email === "string" ? user.email : n
  * Ensures a profile row exists for the authenticated user.
  * Safe to call multiple times.
  */
-async function ensureUserProfile(userId: string, info: ProfileInfo): Promise<void> {
+async function ensureUserProfile(userId: string, info: ProfileInfo): Promise<boolean> {
   const admin = createAdminClient();
   const now = new Date().toISOString();
 
@@ -300,7 +311,7 @@ async function ensureUserProfile(userId: string, info: ProfileInfo): Promise<voi
   }
 
   if (existing?.id) {
-    return;
+    return false;
   }
 
   const { error: insertError } = await admin.from("profiles").insert({
@@ -313,11 +324,13 @@ async function ensureUserProfile(userId: string, info: ProfileInfo): Promise<voi
   if (insertError) {
     if ((insertError as { code?: string }).code === "23505") {
       console.log("[ensureUserProfile] Profile already created by another request");
-      return;
+      return false;
     }
 
     throw new Error(`Failed to create profile: ${insertError.message}`);
   }
+
+  return true;
 }
 
 /**
@@ -435,4 +448,10 @@ async function withTimeout<T>(
  */
 function logStage(stage: string, message: string): void {
   console.log(`[Auth Callback] Stage: ${stage}`, message);
+}
+
+function getFirstName(value: unknown, fallback = "there") {
+  const name = String(value ?? "").trim();
+  if (!name) return fallback;
+  return name.split(/\s+/)[0] || fallback;
 }

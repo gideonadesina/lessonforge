@@ -25,16 +25,16 @@ export default function TeacherPricingPlanCard({
   return (
     <article
       className={[
-        "relative flex h-full flex-col rounded-[20px] border bg-white p-6 shadow-[0_4px_24px_rgba(83,74,183,0.08)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_30px_rgba(83,74,183,0.14)]",
+        "relative flex h-full w-full min-w-0 flex-col overflow-hidden rounded-[20px] border bg-white p-6 shadow-[0_4px_24px_rgba(83,74,183,0.08)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_30px_rgba(83,74,183,0.14)] md:p-8",
         plan.highlighted
-          ? "scale-[1.02] border-[#534AB7] ring-1 ring-[rgba(83,74,183,0.2)]"
+          ? "border-[#534AB7] ring-1 ring-[rgba(83,74,183,0.2)]"
           : "border-[#E2E8F0]",
       ].join(" ")}
     >
       {plan.highlighted ? (
         <span
-          className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-[100px] bg-gradient-to-r from-[#534AB7] to-[#3D35A0] px-3 py-1 text-[10px] uppercase text-white"
-          style={{ fontFamily: '"Trebuchet MS", sans-serif', letterSpacing: "2.5px" }}
+          className="mb-4 inline-flex max-w-full self-center rounded-[100px] bg-gradient-to-r from-[#534AB7] to-[#3D35A0] px-2.5 py-1 text-center text-[9px] uppercase leading-tight text-white sm:text-[10px]"
+          style={{ fontFamily: '"Trebuchet MS", sans-serif', letterSpacing: "1.5px" }}
         >
           Most teachers choose this
         </span>
@@ -59,7 +59,7 @@ export default function TeacherPricingPlanCard({
         </span>
       </div>
       <div
-        className="mt-2 text-4xl font-bold tracking-tight text-[#1E1B4B]"
+        className="mt-2 text-3xl font-bold tracking-tight text-[#1E1B4B] md:text-4xl"
         style={{ fontFamily: '"Playfair Display", Georgia, serif' }}
       >
         {formatNaira(plan.priceNaira)}

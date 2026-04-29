@@ -20,7 +20,11 @@ export default function DiscussionSlide({ slide }: DiscussionSlideProps) {
   const questions = Array.isArray(slide.guiding_questions) ? slide.guiding_questions : [];
 
   return (
-    <div className="grid h-full w-full grid-cols-1 bg-[linear-gradient(135deg,#ffffff_0%,#f7f4ff_60%,#eefdf5_100%)] lg:grid-cols-[0.95fr_1.05fr]">
+    <div
+      className="grid h-full w-full overflow-hidden"
+      style={{ gridTemplateColumns: "38% 62%", background: "#FFFFFF" }}
+    >
+      {/* Left image */}
       <SlideVisualPanel
         imageUrl={resolveSlideImageUrl(slide)}
         alt={slide.visual_suggestion || slide.prompt}
@@ -28,51 +32,148 @@ export default function DiscussionSlide({ slide }: DiscussionSlideProps) {
         label="Discussion Visual"
       />
 
-      <div className="flex h-full flex-col justify-center px-12 py-12">
-        <div className="mb-6 flex items-center justify-between gap-3">
-          <div className="inline-flex items-center gap-2 rounded-full border border-purple-200 bg-purple-50 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-purple-700">
-            <span className="h-2 w-2 rounded-full bg-purple-500" />
+      {/* Right content */}
+      <div
+        className="flex h-full flex-col justify-center overflow-hidden"
+        style={{ padding: "5% 5% 5% 4%" }}
+      >
+        {/* Badge row */}
+        <div className="mb-4 flex items-center gap-3 flex-wrap">
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "7px",
+              background: "#EDE9FE",
+              border: "1px solid rgba(108,99,255,0.2)",
+              borderRadius: "20px",
+              padding: "4px 13px",
+              fontSize: "10px",
+              fontWeight: 700,
+              letterSpacing: "3px",
+              color: "#7C3AED",
+              textTransform: "uppercase" as const,
+            }}
+          >
+            <span
+              style={{
+                width: "6px",
+                height: "6px",
+                borderRadius: "50%",
+                background: "#6C63FF",
+                display: "inline-block",
+              }}
+            />
             Discussion
           </div>
           {slide.think_pair_share && (
-            <span className="rounded-full border border-purple-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-purple-700 shadow-sm">
-              Think Pair Share
+            <span
+              style={{
+                display: "inline-block",
+                background: "#F3F0FF",
+                border: "1px solid #DDD6FE",
+                borderRadius: "20px",
+                padding: "3px 11px",
+                fontSize: "9px",
+                fontWeight: 700,
+                letterSpacing: "1.5px",
+                color: "#6C63FF",
+                textTransform: "uppercase" as const,
+              }}
+            >
+              Think · Pair · Share
             </span>
           )}
         </div>
 
-        <div className="rounded-3xl bg-[linear-gradient(135deg,#171721_0%,#2a235f_100%)] px-7 py-8 text-white shadow-[0_25px_70px_-35px_rgba(17,17,39,0.8)]">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-purple-200">
+        {/* Prompt card — dark */}
+        <div
+          style={{
+            background: "linear-gradient(135deg, #0D0A1E 0%, #1e1660 100%)",
+            borderRadius: "14px",
+            padding: "16px 20px",
+            marginBottom: "14px",
+          }}
+        >
+          <p
+            style={{
+              fontSize: "9px",
+              fontWeight: 700,
+              letterSpacing: "2.5px",
+              color: "#A78BFA",
+              textTransform: "uppercase" as const,
+              marginBottom: "8px",
+            }}
+          >
             Prompt
           </p>
-          <p className="mt-4 text-4xl font-extrabold leading-tight tracking-tight">
-            &quot;{slide.prompt}&quot;
+          <p
+            style={{
+              fontSize: "clamp(14px, 1.8vw, 20px)",
+              fontWeight: 800,
+              color: "#FFFFFF",
+              lineHeight: 1.3,
+              letterSpacing: "-0.3px",
+            }}
+          >
+            &ldquo;{slide.prompt}&rdquo;
           </p>
         </div>
 
-        {questions.length > 0 ? (
-          <div className="mt-5 grid grid-cols-1 gap-3">
-            {questions.slice(0, 3).map((question, index) => (
+        {/* Guiding questions */}
+        <div className="flex flex-col gap-2 overflow-hidden">
+          {questions.length > 0 ? (
+            questions.slice(0, 3).map((question, index) => (
               <div
                 key={index}
-                className="flex items-start gap-3 rounded-2xl border border-white bg-white/88 px-5 py-4 shadow-[0_18px_45px_-34px_rgba(17,17,39,0.45)]"
+                className="flex items-start gap-3"
+                style={{
+                  background: "#F9F8FF",
+                  border: "1px solid #EDE9FE",
+                  borderRadius: "10px",
+                  padding: "9px 13px",
+                }}
               >
-                <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-purple-100 text-sm font-black text-purple-700">
+                <span
+                  className="flex flex-shrink-0 items-center justify-center font-bold text-[#6C63FF]"
+                  style={{
+                    width: "24px",
+                    height: "24px",
+                    borderRadius: "6px",
+                    background: "#EDE9FE",
+                    fontSize: "10px",
+                    marginTop: "1px",
+                  }}
+                >
                   Q{index + 1}
                 </span>
-                <span className="text-base font-medium leading-relaxed text-gray-800">
+                <span
+                  style={{
+                    fontSize: "clamp(10px, 1.1vw, 12.5px)",
+                    color: "#374151",
+                    lineHeight: 1.5,
+                    fontWeight: 500,
+                  }}
+                >
                   {question}
                 </span>
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="mt-5 rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-5 py-4">
-            <p className="text-sm font-medium text-gray-600">
-              Use the prompt to surface evidence, examples, and opposing viewpoints.
-            </p>
-          </div>
-        )}
+            ))
+          ) : (
+            <div
+              style={{
+                background: "#F9F8FF",
+                border: "1px dashed #DDD6FE",
+                borderRadius: "10px",
+                padding: "12px 14px",
+              }}
+            >
+              <p style={{ fontSize: "12px", color: "#6B7280", fontWeight: 500 }}>
+                Use the prompt to surface evidence, examples, and opposing viewpoints.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -26,7 +26,7 @@ export default function SchoolPricingPlanCard({
   return (
     <article
   className={[
-    "relative flex h-full flex-col rounded-[20px] border bg-white p-6 pt-8 shadow-[0_4px_24px_rgba(83,74,183,0.08)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_30px_rgba(83,74,183,0.14)]",
+    "relative flex h-full min-h-[520px] flex-col overflow-visible rounded-[20px] border bg-white p-6 pt-10 shadow-[0_4px_24px_rgba(83,74,183,0.08)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_30px_rgba(83,74,183,0.14)]",
         plan.highlighted
           ? "scale-[1.02] border-[#534AB7] ring-1 ring-[rgba(83,74,183,0.2)]"
           : "border-[#E2E8F0]",
@@ -34,10 +34,10 @@ export default function SchoolPricingPlanCard({
     >
       {plan.highlighted ? (
         <span
-          className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-[100px] bg-gradient-to-r from-[#534AB7] to-[#3D35A0] px-3 py-1 text-[10px] uppercase text-white"
-          style={{ fontFamily: '"Trebuchet MS", sans-serif', letterSpacing: "2.5px" }}
+          className="absolute left-1/2 top-[-1px] -translate-x-1/2 whitespace-nowrap rounded-full bg-[#6C63FF] px-4 py-1 text-xs font-semibold text-white"
+          style={{ fontFamily: '"Trebuchet MS", sans-serif' }}
         >
-          Most schools choose this
+          Most popular
         </span>
       ) : null}
 
@@ -64,7 +64,7 @@ export default function SchoolPricingPlanCard({
 
       <div className="mt-4 space-y-1 border-t border-[#E2E8F0] pt-4">
         <p className="text-sm text-[#475569]" style={{ fontFamily: '"Trebuchet MS", sans-serif' }}>
-          Up to {plan.teachers} teachers
+          Unlimited teachers
         </p>
         <p className="text-sm text-[#475569]" style={{ fontFamily: '"Trebuchet MS", sans-serif' }}>
           {plan.credits} shared credits/month

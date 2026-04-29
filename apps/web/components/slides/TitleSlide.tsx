@@ -20,43 +20,129 @@ export default function TitleSlide({ slide }: TitleSlideProps) {
   const imageUrl = resolveSlideImageUrl(slide);
 
   return (
-    <div className="relative h-full w-full overflow-hidden">
+    <div
+      className="relative h-full w-full overflow-hidden"
+      style={{ background: "#0D0A1E" }}
+    >
+      {/* Background image — right 45%, with fade-to-dark gradient on its left edge */}
       {imageUrl ? (
-        <img
-          src={imageUrl}
-          alt={slide.visual_suggestion || slide.title}
-          className="absolute inset-0 h-full w-full object-cover"
-          crossOrigin="anonymous"
-        />
+        <>
+          <img
+            src={imageUrl}
+            alt={slide.visual_suggestion || slide.title}
+            className="absolute top-0 right-0 h-full object-cover object-center"
+            style={{ width: "48%" }}
+            crossOrigin="anonymous"
+          />
+          {/* Gradient that blends image into dark bg */}
+          <div
+            className="absolute top-0 right-0 h-full pointer-events-none"
+            style={{
+              width: "60%",
+              background:
+                "linear-gradient(to right, #0D0A1E 0%, rgba(13,10,30,0.85) 28%, rgba(13,10,30,0.3) 62%, transparent 100%)",
+            }}
+          />
+        </>
       ) : (
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_22%,#ffffff_0,#f5efff_34%,#eaf1ff_70%,#eefdf5_100%)]" />
+        /* No image — subtle purple radial glow */
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse at 75% 50%, rgba(108,99,255,0.18) 0%, transparent 65%)",
+          }}
+        />
       )}
 
-      <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/48 to-black/10" />
-
-      <div className="relative z-10 flex h-full w-full items-center px-16 py-14">
-        <div className="max-w-4xl">
-          <div className="mb-5 inline-flex rounded-full border border-white/35 bg-white/15 px-4 py-2 text-xs font-bold uppercase tracking-[0.22em] text-white backdrop-blur">
+      {/* Text content — left zone */}
+      <div
+        className="relative z-10 flex h-full items-center"
+        style={{ paddingLeft: "6%", paddingRight: "46%", paddingTop: "7%", paddingBottom: "7%" }}
+      >
+        <div style={{ maxWidth: "100%" }}>
+          {/* Category pill */}
+          <div
+            style={{
+              display: "inline-block",
+              background: "rgba(108,99,255,0.22)",
+              border: "1px solid rgba(108,99,255,0.38)",
+              borderRadius: "20px",
+              padding: "4px 14px",
+              marginBottom: "18px",
+              fontSize: "10px",
+              fontWeight: 700,
+              letterSpacing: "3px",
+              color: "#A78BFA",
+              textTransform: "uppercase" as const,
+            }}
+          >
             Lesson Opener
           </div>
 
-          <h1 className="max-w-5xl text-7xl font-black leading-[0.88] tracking-tight text-white drop-shadow-lg">
+          {/* Title */}
+          <h1
+            style={{
+              fontSize: "clamp(24px, 4.2vw, 50px)",
+              fontWeight: 900,
+              color: "#FFFFFF",
+              lineHeight: 1.05,
+              letterSpacing: "-1.5px",
+              margin: 0,
+            }}
+          >
             {slide.title}
           </h1>
 
+          {/* Subtitle */}
           {slide.subtitle && (
-            <p className="mt-6 max-w-3xl text-2xl font-semibold leading-snug text-white/90">
+            <p
+              style={{
+                fontSize: "clamp(13px, 1.6vw, 18px)",
+                color: "rgba(255,255,255,0.7)",
+                marginTop: "14px",
+                lineHeight: 1.5,
+                fontWeight: 400,
+                maxWidth: "360px",
+              }}
+            >
               {slide.subtitle}
             </p>
           )}
 
+          {/* Hook question card */}
           {slide.hook_question && (
-            <div className="mt-8 max-w-3xl rounded-3xl border border-white/30 bg-white/16 p-6 shadow-[0_24px_70px_-40px_rgba(0,0,0,0.8)] backdrop-blur-md">
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-purple-100">
+            <div
+              style={{
+                background: "rgba(255,255,255,0.08)",
+                border: "1px solid rgba(255,255,255,0.14)",
+                borderRadius: "12px",
+                padding: "14px 18px",
+                marginTop: "22px",
+                maxWidth: "400px",
+              }}
+            >
+              <p
+                style={{
+                  fontSize: "9px",
+                  fontWeight: 700,
+                  letterSpacing: "2.5px",
+                  color: "#A78BFA",
+                  textTransform: "uppercase" as const,
+                  marginBottom: "8px",
+                }}
+              >
                 Hook Question
               </p>
-              <p className="mt-2 text-2xl font-semibold leading-snug text-white">
-                &quot;{slide.hook_question}&quot;
+              <p
+                style={{
+                  fontSize: "clamp(12px, 1.3vw, 15px)",
+                  color: "rgba(255,255,255,0.9)",
+                  lineHeight: 1.5,
+                  fontWeight: 500,
+                }}
+              >
+                &ldquo;{slide.hook_question}&rdquo;
               </p>
             </div>
           )}

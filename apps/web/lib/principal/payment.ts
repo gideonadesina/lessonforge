@@ -2,11 +2,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   DEFAULT_BILLING_CYCLE,
   DEFAULT_CURRENCY,
-  DEFAULT_SLOT_PRICE,
-  computeSubscriptionAmount,
   isMissingTableOrColumnError,
-  sanitizeSlotCount,
 } from "@/lib/principal/utils";
+import { getSchoolPlanPricing } from "@/lib/billing/server-school-pricing";
 
 const PRINCIPAL_PAYSTACK_FLOW = "principal_onboarding";
 
@@ -37,7 +35,6 @@ type PrincipalPaystackMetadata = {
   tier?: string;
   principal_name?: string;
   school_name?: string;
-  teacher_slots?: number | string;
 };
 
 export type PaystackVerifyResponseData = {
@@ -57,7 +54,6 @@ export type PrincipalActivationResult = {
   schoolId: string;
   schoolName: string;
   schoolCode: string;
-  teacherSlots: number;
   amount: number;
   currency: "NGN" | "USD";
   alreadyActivated: boolean;
@@ -208,47 +204,6 @@ async function ensurePrincipalMembership(
   }
 }
 
-async function ensureTeacherSlotLimit(
-  admin: ReturnType<typeof createAdminClient>,
-  schoolId: string,
-  teacherSlots: number,
-  currency: "NGN" | "USD"
-) {
-  const latestSlot = await admin
-    .from("teacher_slots")
-    .select("slot_limit")
-    .eq("school_id", schoolId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (latestSlot.error) {
-    throw new Error(latestSlot.error.message);
-  }
-
-  const currentLimit = Number(latestSlot.data?.slot_limit ?? 0);
-  if (currentLimit === teacherSlots) {
-    return;
-  }
-
-  const createSlot = await admin.from("teacher_slots").insert({
-    school_id: schoolId,
-    slot_limit: teacherSlots,
-    slot_price: DEFAULT_SLOT_PRICE,
-    currency,
-    status: "active",
-  });
-
-  if (createSlot.error) {
-    throw new Error(createSlot.error.message);
-  }
-
-  const licenseUpdate = await admin.from("school_licenses").update({ seats: teacherSlots }).eq("school_id", schoolId);
-  if (licenseUpdate.error && !isMissingTableOrColumnError(licenseUpdate.error)) {
-    throw new Error(licenseUpdate.error.message);
-  }
-}
-
 async function ensureSchoolCode(
   admin: ReturnType<typeof createAdminClient>,
   schoolId: string,
@@ -309,7 +264,6 @@ async function saveSubscription(
     amount: number;
     currency: "NGN" | "USD";
     reference: string;
-    teacherSlots: number;
     paidAt: string;
   }
 ) {
@@ -323,7 +277,6 @@ async function saveSubscription(
         currency: input.currency,
         status: "paid",
         provider: "paystack",
-        teacher_slots: input.teacherSlots,
         billing_cycle: DEFAULT_BILLING_CYCLE,
         paid_at: input.paidAt,
       })
@@ -342,7 +295,6 @@ async function saveSubscription(
     status: "paid",
     provider: "paystack",
     reference: input.reference,
-    teacher_slots: input.teacherSlots,
     billing_cycle: DEFAULT_BILLING_CYCLE,
     paid_at: input.paidAt,
   });
@@ -376,7 +328,6 @@ function assertPrincipalMetadata(metadata: PrincipalPaystackMetadata | null | un
     throw new Error("Missing principal or school details in payment metadata.");
   }
 
-  const teacherSlots = sanitizeSlotCount(getMetadataValue(metadata, "teacher_slots") ?? 1);
   const safeReference = normalizePrincipalReference(reference);
   if (!safeReference) {
     throw new Error("Invalid payment reference.");
@@ -386,7 +337,6 @@ function assertPrincipalMetadata(metadata: PrincipalPaystackMetadata | null | un
     userId,
     principalName,
     schoolName,
-    teacherSlots,
     flow,
     safeReference,
   };
@@ -420,10 +370,10 @@ export async function finalizePrincipalActivationFromPaystackData(
   const parsed = assertPrincipalMetadata(metadata, reference);
 
   const currency = normalizeCurrency(paystackData.currency ?? DEFAULT_CURRENCY);
-  const expectedAmount = computeSubscriptionAmount(parsed.teacherSlots, DEFAULT_SLOT_PRICE);
+  const expectedAmount = getSchoolPlanPricing("school_starter")?.priceNaira ?? 35000;
   const settledAmount = Math.round(Number(paystackData.amount ?? 0) / 100);
   if (settledAmount !== expectedAmount) {
-    throw new Error("Payment amount mismatch for selected teacher slots.");
+    throw new Error("Payment amount mismatch for selected school plan.");
   }
 
   const admin = createAdminClient();
@@ -438,7 +388,6 @@ export async function finalizePrincipalActivationFromPaystackData(
         schoolId: existingSchool.id,
         schoolName: existingSchool.name ?? parsed.schoolName,
         schoolCode: existingSchool.code ?? buildDeterministicSchoolCode(parsed.schoolName, parsed.safeReference),
-        teacherSlots: parsed.teacherSlots,
         amount: expectedAmount,
         currency,
         alreadyActivated: true,
@@ -458,14 +407,12 @@ export async function finalizePrincipalActivationFromPaystackData(
   }
 
   await ensurePrincipalMembership(admin, school.id, parsed.userId);
-  await ensureTeacherSlotLimit(admin, school.id, parsed.teacherSlots, currency);
   await ensureSchoolCode(admin, school.id, school.code ?? deterministicCode, parsed.userId);
   await saveSubscription(admin, {
     schoolId: school.id,
     amount: expectedAmount,
     currency,
     reference: parsed.safeReference,
-    teacherSlots: parsed.teacherSlots,
     paidAt: paystackData.paid_at ?? new Date().toISOString(),
   });
 
@@ -475,7 +422,6 @@ export async function finalizePrincipalActivationFromPaystackData(
     schoolId: school.id,
     schoolName: school.name ?? parsed.schoolName,
     schoolCode: school.code ?? deterministicCode,
-    teacherSlots: parsed.teacherSlots,
     amount: expectedAmount,
     currency,
     alreadyActivated: false,

@@ -18,6 +18,8 @@ import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAppRole, normalizeRole, rolesFromUserMetadata, type AppRole, ROLE_COOKIE_KEY } from "@/lib/auth/roles";
 import { resolveAuthRoleContext } from "@/lib/auth/role-context";
+import { sendEmail } from "@/lib/emails/send";
+import { welcomeEmail } from "@/lib/emails/templates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -131,17 +133,26 @@ export async function POST(req: NextRequest): Promise<NextResponse<CallbackRespo
     // ==================== Stage 3: Ensure Profile ====================
     stages.push("ensuring_profile");
 
-    await ensureUserProfile(user.id, {
+    const fullName =
+      typeof user.user_metadata?.full_name === "string"
+        ? user.user_metadata.full_name
+        : typeof user.user_metadata?.name === "string"
+        ? user.user_metadata.name
+        : null;
+    const profileCreated = await ensureUserProfile(user.id, {
       email: user.email,
-      fullName:
-        typeof user.user_metadata?.full_name === "string"
-          ? user.user_metadata.full_name
-          : typeof user.user_metadata?.name === "string"
-          ? user.user_metadata.name
-          : null,
+      fullName,
     });
 
     console.log("[API /auth/callback] Profile ensured", { userId: user.id });
+
+    if (profileCreated) {
+      await sendEmail({
+        to: user.email,
+        subject: "Welcome to LessonForge",
+        html: welcomeEmail({ firstName: getFirstName(fullName) }),
+      });
+    }
 
     // ==================== Stage 4: Determine Target Role ====================
     stages.push("determining_role");
@@ -282,7 +293,7 @@ async function ensureUserProfile(
     .single();
 
   if (existing?.id) {
-    return;
+    return false;
   }
 
   // Create profile
@@ -296,10 +307,18 @@ async function ensureUserProfile(
     // Handle race condition where another request created it
     if ((error as { code?: string }).code === "23505") {
       console.log("[ensureUserProfile] Race condition - profile created by another request");
-      return;
+      return false;
     }
     throw error;
   }
+
+  return true;
+}
+
+function getFirstName(value: unknown, fallback = "there") {
+  const name = String(value ?? "").trim();
+  if (!name) return fallback;
+  return name.split(/\s+/)[0] || fallback;
 }
 
 /**

@@ -11,40 +11,13 @@ import {
 import { formatDateOnly, getErrorMessage, toNaira, usePrincipalDashboard } from "@/lib/principal/client";
 
 export default function PrincipalBillingPage() {
-  const { supabase, loading, forbidden, error, setError, dashboard, onboardingRequired, getToken, loadDashboard } =
+  const { supabase, loading, forbidden, error, setError, dashboard, onboardingRequired, loadDashboard } =
     usePrincipalDashboard();
-  const [slotUpgradeBusy, setSlotUpgradeBusy] = useState(false);
   const [paystackBusy, setPaystackBusy] = useState(false);
-  const [addSlots, setAddSlots] = useState(1);
 
   useEffect(() => {
     void loadDashboard();
   }, [loadDashboard]);
-
-  async function upgradeSlots() {
-    setSlotUpgradeBusy(true);
-    setError(null);
-    try {
-      const token = await getToken();
-      if (!token) throw new Error("Session expired.");
-
-      const res = await fetch("/api/principal/slots", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ addSlots }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json?.ok) throw new Error(json?.error || "Failed to add slots.");
-      await loadDashboard();
-    } catch (err: unknown) {
-      setError(getErrorMessage(err, "Failed to add slots."));
-    } finally {
-      setSlotUpgradeBusy(false);
-    }
-  }
 
   async function payWithPaystack() {
     setPaystackBusy(true);
@@ -85,7 +58,7 @@ export default function PrincipalBillingPage() {
       <PrincipalPageHeader
         eyebrow="Billing & Payments"
         title="Principal Billing"
-        description="Review your school plan, manage teacher slots, and process payments via Paystack."
+        description="Review your school plan, shared credits, and Paystack payments."
       />
 
       {error ? (
@@ -102,10 +75,6 @@ export default function PrincipalBillingPage() {
                   <span className="font-semibold text-[var(--text-primary)]">{dashboard.subscription.planName}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[var(--text-secondary)]">Teacher slots</span>
-                  <span className="font-semibold text-[var(--text-primary)]">{dashboard.subscription.slotLimit}</span>
-                </div>
-                <div className="flex items-center justify-between">
                   <span className="text-[var(--text-secondary)]">Amount</span>
                   <span className="font-semibold text-violet-700">{toNaira(dashboard.subscription.amountPerCycle)}</span>
                 </div>
@@ -120,25 +89,8 @@ export default function PrincipalBillingPage() {
               </div>
             </SectionCard>
 
-            <SectionCard title="Billing actions" subtitle="Increase capacity or trigger payment checkout.">
+            <SectionCard title="Billing actions" subtitle="Buy more shared credits for your school.">
               <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min={1}
-                    value={addSlots}
-                    onChange={(e) => setAddSlots(Math.max(1, Number(e.target.value || 1)))}
-                    className="w-24 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-violet-500"
-                  />
-                  <button
-                    onClick={upgradeSlots}
-                    disabled={slotUpgradeBusy}
-                    className="flex-1 rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
-                  >
-                    {slotUpgradeBusy ? "Updating..." : "Add teacher slots"}
-                  </button>
-                </div>
-
                 <button
                   onClick={payWithPaystack}
                   disabled={paystackBusy}

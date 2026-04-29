@@ -8,13 +8,11 @@ import { paystackHeaders } from "@/lib/paystack";
 import { verifyPaystackTransaction } from "@/lib/paystack";
 import {
   DEFAULT_CURRENCY,
-  DEFAULT_SLOT_PRICE,
-  computeSubscriptionAmount,
   generateLicenseCode,
   generateSchoolCode,
   isMissingTableOrColumnError,
-  sanitizeSlotCount,
 } from "@/lib/principal/utils";
+import { getSchoolPlanPricing } from "@/lib/billing/server-school-pricing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,7 +21,6 @@ export const revalidate = 0;
 type OnboardingPayload = {
   principalName?: string;
   schoolName?: string;
-  teacherSlots?: number;
   payment?: {
     provider?: "paystack";
     reference?: string | null;
@@ -221,50 +218,6 @@ async function ensurePrincipalMembership(
   }
 }
 
-async function ensureTeacherSlots(
-  admin: ReturnType<typeof createAdminClient>,
-  schoolId: string,
-  teacherSlots: number
-) {
-  const currentSlotRes = await admin
-    .from("teacher_slots")
-    .select("slot_limit")
-    .eq("school_id", schoolId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (currentSlotRes.error && !isMissingTableOrColumnError(currentSlotRes.error)) {
-    throw new Error(currentSlotRes.error.message);
-  }
-
-  if (
-    !currentSlotRes.error &&
-    Number(currentSlotRes.data?.slot_limit) === teacherSlots
-  ) {
-    return;
-  }
-
-  let slotRes = await admin.from("teacher_slots").insert({
-    school_id: schoolId,
-    slot_limit: teacherSlots,
-    slot_price: DEFAULT_SLOT_PRICE,
-    currency: DEFAULT_CURRENCY,
-    status: "active",
-  });
-
-  if (slotRes.error && isMissingTableOrColumnError(slotRes.error)) {
-    slotRes = await admin.from("teacher_slots").insert({
-      school_id: schoolId,
-      slot_limit: teacherSlots,
-    });
-  }
-
-  if (slotRes.error && !isMissingTableOrColumnError(slotRes.error)) {
-    throw new Error(slotRes.error.message);
-  }
-}
-
 async function ensureSchoolCode(
   admin: ReturnType<typeof createAdminClient>,
   input: {
@@ -342,7 +295,6 @@ async function ensureInitialSubscription(
   admin: ReturnType<typeof createAdminClient>,
   input: {
     schoolId: string;
-    teacherSlots: number;
     amount: number;
     provider: "placeholder" | "paystack";
     reference: string | null;
@@ -391,7 +343,6 @@ async function ensureInitialSubscription(
     status: "paid",
     provider: input.provider,
     reference: input.reference,
-    teacher_slots: input.teacherSlots,
     billing_cycle: "monthly",
     paid_at: new Date().toISOString(),
   });
@@ -496,7 +447,6 @@ export async function POST(req: NextRequest) {
 
     const principalName = String(metadata?.principal_name ?? body?.principalName ?? "").trim();
     const schoolName = String(metadata?.school_name ?? body?.schoolName ?? context.school?.name ?? "").trim();
-    const teacherSlots = sanitizeSlotCount(metadata?.teacher_slots ?? body?.teacherSlots ?? 1);
 
     const provider: "paystack" = "paystack";
     const reference = body?.payment?.reference ?? null;
@@ -504,7 +454,7 @@ export async function POST(req: NextRequest) {
     if (!principalName || !schoolName) {
       return NextResponse.json({ ok: false, error: "Principal name and school name are required." }, { status: 400 });
     }
-     const expectedAmount = computeSubscriptionAmount(teacherSlots, DEFAULT_SLOT_PRICE);
+     const expectedAmount = getSchoolPlanPricing("school_starter")?.priceNaira ?? 35000;
     const expectedAmountFromMeta = parsePositiveNumber(metadata?.expected_amount_major);
     const expectedMajorAmount = expectedAmountFromMeta ?? expectedAmount;
     const paidAmountMajor = Math.round(Number(verified.amount ?? 0)) / 100;
@@ -513,7 +463,7 @@ export async function POST(req: NextRequest) {
     }
 
    
-    const amount = computeSubscriptionAmount(teacherSlots, DEFAULT_SLOT_PRICE);
+    const amount = expectedAmount;
 
     await assertPayment({
       provider,
@@ -541,7 +491,6 @@ export async function POST(req: NextRequest) {
     }
 
     await ensurePrincipalMembership(admin, school.id, context.user.id);
-    await ensureTeacherSlots(admin, school.id, teacherSlots);
 
     schoolCode = await ensureSchoolCode(admin, {
       schoolId: school.id,
@@ -552,7 +501,6 @@ export async function POST(req: NextRequest) {
 
     await ensureInitialSubscription(admin, {
       schoolId: school.id,
-      teacherSlots,
       amount,
       provider,
       reference,
@@ -566,7 +514,6 @@ export async function POST(req: NextRequest) {
           schoolId: school.id,
           schoolName: school.name,
           schoolCode,
-          teacherSlots,
           amount,
           currency: DEFAULT_CURRENCY,
           redirectTo: "/principal/dashboard",

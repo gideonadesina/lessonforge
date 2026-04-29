@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import SlideVisualPanel, { resolveSlideImageUrl } from "./SlideVisualPanel";
 
 type ExitTicketSlideProps = {
   slide: {
@@ -21,63 +20,155 @@ export default function ExitTicketSlide({ slide }: ExitTicketSlideProps) {
   const starters = Array.isArray(slide.sentence_starters) ? slide.sentence_starters : [];
 
   return (
-    <div className="grid h-full w-full grid-cols-1 bg-[linear-gradient(135deg,#ffffff_0%,#fbfaff_56%,#fff8e8_100%)] lg:grid-cols-[1.05fr_0.95fr]">
-      <div className="flex h-full flex-col justify-center px-12 py-12">
-        <div className="mb-5 inline-flex w-fit items-center gap-2 rounded-full border border-purple-200 bg-purple-50 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-purple-700">
-          <span className="h-2 w-2 rounded-full bg-purple-500" />
+    <div
+      className="flex h-full w-full flex-col items-center justify-center overflow-hidden bg-white"
+      style={{ borderTop: "4px solid #6C63FF" }}
+    >
+      <div
+        className="flex w-full flex-col overflow-hidden"
+        style={{ maxWidth: "600px", padding: "4% 5%" }}
+      >
+        {/* Category pill */}
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "7px",
+            background: "#EDE9FE",
+            border: "1px solid rgba(108,99,255,0.2)",
+            borderRadius: "20px",
+            padding: "4px 13px",
+            marginBottom: "10px",
+            fontSize: "10px",
+            fontWeight: 700,
+            letterSpacing: "3px",
+            color: "#7C3AED",
+            textTransform: "uppercase" as const,
+            width: "fit-content",
+          }}
+        >
+          <span
+            style={{
+              width: "6px",
+              height: "6px",
+              borderRadius: "50%",
+              background: "#6C63FF",
+              display: "inline-block",
+            }}
+          />
           Exit Ticket
         </div>
 
-        <h2 className="text-5xl font-black leading-tight tracking-tight text-gray-950">
+        {/* Title */}
+        <h2
+          style={{
+            fontSize: "clamp(20px, 3vw, 36px)",
+            fontWeight: 800,
+            color: "#0D0A1E",
+            lineHeight: 1.1,
+            letterSpacing: "-0.5px",
+            margin: 0,
+            marginBottom: "14px",
+          }}
+        >
           {slide.title}
         </h2>
 
-        <div className="mt-7 rounded-3xl bg-[linear-gradient(135deg,#171721_0%,#352a78_100%)] px-7 py-8 text-white shadow-[0_25px_70px_-35px_rgba(17,17,39,0.8)]">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-purple-200">
+        {/* Reflection prompt card */}
+        <div
+          style={{
+            background: "#F3F0FF",
+            border: "1.5px solid #DDD6FE",
+            borderRadius: "12px",
+            padding: "16px 20px",
+            marginBottom: "12px",
+          }}
+        >
+          <p
+            style={{
+              fontSize: "9px",
+              fontWeight: 700,
+              letterSpacing: "2.5px",
+              color: "#7C3AED",
+              textTransform: "uppercase" as const,
+              marginBottom: "7px",
+            }}
+          >
             Reflection Prompt
           </p>
-          <p className="mt-4 text-2xl font-bold leading-snug">
+          <p
+            style={{
+              fontSize: "clamp(13px, 1.5vw, 17px)",
+              fontWeight: 700,
+              color: "#0D0A1E",
+              lineHeight: 1.4,
+            }}
+          >
             {slide.prompt}
           </p>
         </div>
 
-        {starters.length > 0 && (
-          <div className="mt-5 grid grid-cols-1 gap-2">
-            {starters.slice(0, 3).map((starter, index) => (
-              <div
-                key={index}
-                className="rounded-2xl border border-dashed border-gray-300 bg-white/88 px-4 py-3 text-sm italic text-gray-700 shadow-[0_14px_35px_-30px_rgba(17,17,39,0.45)]"
+        {/* Response lines */}
+        <div className="flex flex-col gap-2 overflow-hidden">
+          {starters.slice(0, 3).map((starter, index) => (
+            <div
+              key={index}
+              style={{
+                background: "#FFFFFF",
+                border: "1px solid #E5E7EB",
+                borderRadius: "8px",
+                padding: "11px 14px",
+              }}
+            >
+              <p
+                style={{
+                  fontSize: "clamp(10px, 1.15vw, 13px)",
+                  color: "#9CA3AF",
+                  fontStyle: "italic",
+                }}
               >
-                {starter} ___________________
-              </div>
-            ))}
-          </div>
-        )}
+                {starter} _________________________
+              </p>
+            </div>
+          ))}
+        </div>
 
+        {/* Confidence scale */}
         {slide.self_rating && (
-          <div className="mt-5 flex items-center gap-3 rounded-2xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
-            <p className="text-sm font-bold text-gray-700">Confidence:</p>
-            <div className="flex items-center gap-2">
+          <div
+            className="mt-3 flex items-center gap-2.5"
+            style={{ flexWrap: "wrap" }}
+          >
+            <p
+              style={{
+                fontSize: "clamp(10px, 1.1vw, 12px)",
+                fontWeight: 700,
+                color: "#374151",
+              }}
+            >
+              Confidence:
+            </p>
+            <div className="flex gap-1.5">
               {[1, 2, 3, 4, 5].map((num) => (
-                <button
+                <div
                   key={num}
-                  type="button"
-                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold text-gray-600 transition hover:border-purple-300 hover:bg-purple-50 hover:text-purple-700"
+                  className="flex items-center justify-center font-bold"
+                  style={{
+                    width: "28px",
+                    height: "28px",
+                    borderRadius: "50%",
+                    border: "1.5px solid #6C63FF",
+                    color: "#6C63FF",
+                    fontSize: "11px",
+                  }}
                 >
                   {num}
-                </button>
+                </div>
               ))}
             </div>
           </div>
         )}
       </div>
-
-      <SlideVisualPanel
-        imageUrl={resolveSlideImageUrl(slide)}
-        alt={slide.visual_suggestion || slide.title}
-        suggestion={slide.visual_suggestion}
-        label="Exit Context"
-      />
     </div>
   );
 }

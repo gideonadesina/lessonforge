@@ -2,6 +2,7 @@ import PptxGenJS from "pptxgenjs";
 
 import type { SlideDeck, Slide } from "./slideRenderer";
 import { resolveSlideImageUrl } from "./slideImageResolver";
+import { CATEGORY_LABELS } from "./slideSchema";
 
 // PptxGenJS v4 exposes ShapeType only as an instance getter, not a static property.
 // The enum values are identical to their string keys, so we use typed string literals.
@@ -10,11 +11,13 @@ const SHAPE_ROUND_RECT = "roundRect" as PptxGenJS.ShapeType;
 
 const W = 10;
 const H = 5.625;
-const ACCENT = "534AB7";
-const DARK = "171721";
-const MUTED = "666B78";
-const SOFT = "F4EFFB";
-const AMBER = "FFF4D8";
+const ACCENT = "6C63FF";    // primary purple
+const _ACCENT_DEEP = "4C46B6"; // deep purple (reserved for future gradient shapes)
+const DARK = "0D0A1E";     // dark navy
+const MUTED = "6B7280";    // muted text
+const SOFT = "F3F0FF";     // light purple bg
+const AMBER = "FFF7ED";    // amber tint
+const NAVY_BG = "0D0A1E";  // title slide bg
 
 type LooseSlide = Partial<Record<string, unknown>>;
 type LooseObject = Partial<Record<string, unknown>>;
@@ -100,57 +103,99 @@ async function renderSlideToPptx(
     case "exit_ticket":
       renderExitTicket(slide, content, imageData);
       break;
-    default:
-      addTitle(slide, "Slide", 0.7, 0.8, 8.6, 0.6, 28);
+    case "real_world_connection": {
+      const rwMapped: LooseSlide = {
+        ...content,
+        explanation:
+          getString(content as LooseSlide, "explanation") ||
+          getString(content as LooseSlide, "scenario"),
+        key_point: getString(content as LooseSlide, "key_point"),
+        analogy:
+          getString(content as LooseSlide, "analogy") ||
+          getString(content as LooseSlide, "student_activity"),
+      };
+      renderConcept(slide, rwMapped, imageData, "Real-world Connection");
       break;
+    }
+    default: {
+      // Generic renderer — never shows bare "Slide" as the title.
+      const anyContent = content as LooseSlide & Record<string, unknown>;
+      const badge =
+        CATEGORY_LABELS[String(anyContent.type ?? "")] ||
+        String(anyContent.type ?? "").replace(/_/g, " ") ||
+        "Lesson Content";
+      const titleText = getString(anyContent, "title") || badge;
+      const bodyText =
+        getString(anyContent, "explanation") ||
+        getString(anyContent, "scenario") ||
+        getString(anyContent, "prompt") ||
+        getString(anyContent, "content") ||
+        "";
+      renderSplitBase(slide, imageData, getString(anyContent, "visual_suggestion"), "Visual Guide");
+      addBadge(slide, badge, 0.55, 0.65);
+      addTitle(slide, titleText, 0.55, 1.12, 4.55, 0.82, 28);
+      if (bodyText) {
+        addText(slide, bodyText, 0.58, 2.08, 4.35, 1.5, 12.5, MUTED, false, false, undefined, "top");
+      }
+      break;
+    }
   }
 
   addChrome(slide, slideNumber, totalSlides);
 }
 
 function renderTitle(slide: PptxGenJS.Slide, content: LooseSlide, imageData: string | null) {
+  // Dark navy background
+  slide.background = { color: NAVY_BG };
+
+  // Right image zone (x=5.5, w=4.5, full height)
   if (imageData) {
-    slide.addImage({ data: imageData, x: 0, y: 0, w: W, h: H });
-  } else {
+    slide.addImage({ data: imageData, x: 5.5, y: 0, w: 4.5, h: H });
+    // Gradient overlay: dark-to-transparent left-to-right over image zone
     slide.addShape(SHAPE_RECT, {
-      x: 0,
+      x: 5.5,
       y: 0,
-      w: W,
+      w: 4.5,
       h: H,
-      fill: { color: "F4EFFB" },
-      line: { color: "F4EFFB" },
+      fill: { color: NAVY_BG, transparency: 55 },
+      line: { color: NAVY_BG, transparency: 100 },
     });
-    addVisualPlaceholder(slide, 5.6, 0, 4.4, H, getString(content, "visual_suggestion"), "Hero Visual");
+  } else {
+    // No image: subtle right panel placeholder
+    slide.addShape(SHAPE_RECT, {
+      x: 5.5,
+      y: 0,
+      w: 4.5,
+      h: H,
+      fill: { color: ACCENT, transparency: 88 },
+      line: { color: ACCENT, transparency: 100 },
+    });
   }
 
-  slide.addShape(SHAPE_RECT, {
-    x: 0,
-    y: 0,
-    w: W,
-    h: H,
-    fill: { color: "000000", transparency: imageData ? 25 : 12 },
-    line: { color: "000000", transparency: 100 },
-  });
+  // Category label pill
+  addBadge(slide, "Lesson Opener", 0.5, 0.4, "A78BFA", NAVY_BG, 75);
 
-  addBadge(slide, "Lesson Opener", 0.65, 0.75, "FFFFFF", "FFFFFF", 70);
-  addTitle(slide, getString(content, "title"), 0.65, 1.55, 6.9, 1.45, 40, "FFFFFF");
+  // Title
+  addTitle(slide, getString(content, "title"), 0.5, 0.8, 4.8, 1.8, 40, "FFFFFF");
 
+  // Subtitle
   const subtitle = getString(content, "subtitle");
   if (subtitle) {
-    addText(slide, subtitle, 0.68, 3.05, 6.5, 0.62, 15, "FFFFFF", false, false, undefined, "top");
+    addText(slide, subtitle, 0.5, 2.75, 4.8, 0.65, 16, "B0A8D0", false, false, undefined, "top");
   }
 
+  // Hook question card
   const hookQuestion = getString(content, "hook_question");
   if (hookQuestion) {
-    addPanel(slide, 0.65, 3.82, 6.85, 0.9, "FFFFFF", "FFFFFF", 65);
-    addText(slide, "Hook Question", 0.85, 3.98, 2, 0.18, 8, "F3E8FF", true);
-    addText(slide, `"${hookQuestion}"`, 0.85, 4.18, 6.35, 0.46, 13, "FFFFFF", true, false, undefined, "top");
+    addPanel(slide, 0.5, 3.58, 4.8, 0.88, NAVY_BG, "FFFFFF", 80);
+    addText(slide, "Hook Question", 0.72, 3.7, 2, 0.18, 8, "A78BFA", true);
+    addText(slide, `"${hookQuestion}"`, 0.72, 3.92, 4.2, 0.42, 12, "FFFFFF", false, false, undefined, "top");
   }
 }
 
-function renderConcept(slide: PptxGenJS.Slide, content: LooseSlide, imageData: string | null) {
+function renderConcept(slide: PptxGenJS.Slide, content: LooseSlide, imageData: string | null, badge = "Core Concept") {
   renderSplitBase(slide, imageData, getString(content, "visual_suggestion"), "Visual Guide");
-  addBadge(slide, "Core Concept", 0.55, 0.65);
+  addBadge(slide, badge, 0.55, 0.65);
   addTitle(slide, getString(content, "title"), 0.55, 1.12, 4.55, 0.82, 28);
   addText(slide, getString(content, "explanation"), 0.58, 2.08, 4.35, 1.0, 12.5, MUTED, false, false, undefined, "top");
 
@@ -173,22 +218,58 @@ function renderConcept(slide: PptxGenJS.Slide, content: LooseSlide, imageData: s
 }
 
 function renderVocabulary(slide: PptxGenJS.Slide, content: LooseSlide, imageData: string | null) {
-  renderSplitBase(slide, imageData, getString(content, "visual_suggestion"), "Vocabulary Context");
-  addBadge(slide, "Key Vocabulary", 0.55, 0.55);
-  addTitle(slide, getString(content, "title"), 0.55, 0.98, 4.45, 0.6, 26);
+  // Full-width vocabulary — no separate visual panel
+  slide.background = { color: "FFFFFF" };
 
-  const terms = getObjectArray(content, "terms").slice(0, 6);
-  const cardW = 2.05;
-  const cardH = 1.02;
+  // Header area
+  addBadge(slide, "Key Vocabulary", 0.4, 0.25, "7C3AED", SOFT);
+  addTitle(slide, getString(content, "title"), 0.4, 0.6, 9.2, 0.72, 28);
+
+  // 2×2 card grid: positions from the design spec
+  const CARD_POSITIONS = [
+    { x: 0.4, y: 1.4 },
+    { x: 5.1, y: 1.4 },
+    { x: 0.4, y: 3.3 },
+    { x: 5.1, y: 3.3 },
+  ];
+  const cardW = 4.5;
+  const cardH = 1.8;
+
+  const terms = getObjectArray(content, "terms").slice(0, 4);
   terms.forEach((term, idx) => {
-    const col = idx % 2;
-    const row = Math.floor(idx / 2);
-    const x = 0.55 + col * 2.22;
-    const y = 1.8 + row * 1.1;
-    addPanel(slide, x, y, cardW, cardH, "FFFFFF", "E5E7EB");
-    addText(slide, String.fromCharCode(65 + idx), x + 0.13, y + 0.13, 0.32, 0.22, 9, "FFFFFF", true, false, ACCENT);
-    addText(slide, getFirstString(term, ["word", "term", "name"], "Term"), x + 0.52, y + 0.13, 1.35, 0.22, 10, DARK, true);
-    addText(slide, getString(term, "definition", "Definition unavailable."), x + 0.15, y + 0.43, 1.75, 0.45, 7.8, MUTED, false, false, undefined, "top");
+    const pos = CARD_POSITIONS[idx];
+    if (!pos) return;
+    // Card with left accent border
+    addPanel(slide, pos.x, pos.y, cardW, cardH, "FFFFFF", "EDE9FE");
+    slide.addShape(SHAPE_RECT, {
+      x: pos.x, y: pos.y, w: 0.04, h: cardH,
+      fill: { color: ACCENT }, line: { color: ACCENT },
+    });
+    // Letter badge
+    slide.addShape(SHAPE_ROUND_RECT, {
+      x: pos.x + 0.15, y: pos.y + 0.15, w: 0.35, h: 0.35,
+      rectRadius: 0.06,
+      fill: { color: ACCENT }, line: { color: ACCENT },
+    });
+    addText(slide, String.fromCharCode(65 + idx), pos.x + 0.15, pos.y + 0.15, 0.35, 0.35, 10, "FFFFFF", true, false, undefined, "middle");
+    // Term name
+    addText(slide, getFirstString(term, ["word", "term", "name"], "Term"), pos.x + 0.62, pos.y + 0.16, 3.6, 0.32, 12, DARK, true);
+    // Definition
+    addText(slide, getString(term, "definition", "Definition unavailable."), pos.x + 0.18, pos.y + 0.6, 4.1, 0.9, 8.5, MUTED, false, false, undefined, "top");
+    // Example (if present)
+    const example = getString(term, "example");
+    if (example) {
+      addPanel(slide, pos.x + 0.18, pos.y + 1.45, 4.1, 0.28, AMBER, "FDE68A");
+      addText(slide, `e.g. ${example}`, pos.x + 0.28, pos.y + 1.5, 3.9, 0.16, 7.5, "92400E", false, true);
+    }
+  });
+
+  // If 5-6 terms, render extras as simple list below
+  getObjectArray(content, "terms").slice(4, 6).forEach((term, idx) => {
+    const word = getFirstString(term, ["word", "term", "name"], "Term");
+    const def = getString(term, "definition", "");
+    const y = 5.12 + idx * 0.18;
+    addText(slide, `${String.fromCharCode(69 + idx)}. ${word}: ${def}`, 0.4, y, 9.2, 0.14, 7.5, MUTED);
   });
 }
 
@@ -296,24 +377,39 @@ function renderListWithVisual(
   }
 ) {
   renderSplitBase(slide, opts.imageData, opts.visualSuggestion, opts.visualLabel);
-  addBadge(slide, opts.badge, 0.55, 0.65);
-  if (opts.eyebrow) addBadge(slide, opts.eyebrow, 3.45, 0.65, "9A6A00", AMBER);
-  addTitle(slide, opts.title, 0.55, 1.12, 4.45, 0.82, 27);
 
-  let y = 2.08;
-  opts.items.slice(0, 5).forEach((item, idx) => {
-    const cardH = Math.min(0.66, Math.max(0.46, estimateTextHeight(item, 3.55, 9.2, 0.18) + 0.22));
-    if (y + cardH > 4.85) return;
-    addPanel(slide, 0.55, y, 4.35, cardH, "FFFFFF", "E5E7EB");
-    addText(slide, String(idx + 1), 0.72, y + 0.12, 0.28, 0.16, 8, "FFFFFF", true, false, ACCENT);
-    addText(slide, item, 1.12, y + 0.1, 3.55, cardH - 0.18, 9.2, DARK, false, false, undefined, "top");
-    y += cardH + 0.12;
+  // Purple left accent bar
+  slide.addShape(SHAPE_RECT, {
+    x: 0, y: 0, w: 0.06, h: H,
+    fill: { color: ACCENT }, line: { color: ACCENT },
   });
 
+  addBadge(slide, opts.badge, 0.5, 0.3, "7C3AED", SOFT);
+  if (opts.eyebrow) addBadge(slide, opts.eyebrow, 3.2, 0.3, "92400E", AMBER);
+  addTitle(slide, opts.title, 0.5, 0.65, 5.5, 0.9, 28);
+
+  let y = 1.7;
+  opts.items.slice(0, 4).forEach((item, idx) => {
+    const cardH = Math.min(0.75, Math.max(0.52, estimateTextHeight(item, 4.4, 9.5, 0.18) + 0.24));
+    if (y + cardH > 4.88) return;
+    addPanel(slide, 0.5, y, 5.5, cardH, "F9F8FF", "EDE9FE");
+    // Number circle
+    slide.addShape(SHAPE_ROUND_RECT, {
+      x: 0.65, y: y + 0.12, w: 0.3, h: 0.3,
+      rectRadius: 0.15,
+      fill: { color: ACCENT },
+      line: { color: ACCENT },
+    });
+    addText(slide, String(idx + 1), 0.65, y + 0.12, 0.3, 0.3, 8, "FFFFFF", true, false, undefined, "middle");
+    addText(slide, item, 1.1, y + 0.08, 4.4, cardH - 0.18, 9.5, DARK, false, false, undefined, "top");
+    y += cardH + 0.1;
+  });
+
+  // Summary: "next lesson" footer card
   if (opts.footerTitle && opts.footerText) {
-    addPanel(slide, 0.55, 5.0, 4.35, 0.42, AMBER, "F0D38A");
-    addText(slide, opts.footerTitle, 0.72, 5.11, 0.9, 0.12, 7.5, "9A6A00", true);
-    addText(slide, opts.footerText, 1.72, 5.08, 2.9, 0.2, 7.8, DARK, false, false, undefined, "top");
+    addPanel(slide, 0.5, y + 0.05, 5.5, 0.48, SOFT, "DDD6FE");
+    addText(slide, opts.footerTitle, 0.68, y + 0.12, 1.0, 0.14, 7.5, ACCENT, true);
+    addText(slide, opts.footerText, 1.75, y + 0.1, 3.8, 0.22, 8, DARK, false, false, undefined, "top");
   }
 }
 
@@ -324,32 +420,37 @@ function renderSplitBase(
   label = "Visual Guide",
   imageLeft = false
 ) {
-  const visualX = imageLeft ? 0 : 5.25;
-  const textX = imageLeft ? 5.25 : 0;
+  const visualX = imageLeft ? 0 : 5.8;
+  const visualW = 4.2;
+  const textX = imageLeft ? 4.2 : 0;
+  const textW = 5.8;
+
+  // Text side: white
   slide.addShape(SHAPE_RECT, {
-    x: textX,
-    y: 0,
-    w: 5.25,
-    h: H,
-    fill: { color: "FFFFFF" },
-    line: { color: "FFFFFF" },
+    x: textX, y: 0, w: textW, h: H,
+    fill: { color: "FFFFFF" }, line: { color: "FFFFFF" },
   });
+
   if (imageData) {
-    slide.addImage({ data: imageData, x: visualX, y: 0, w: 4.75, h: H });
+    slide.addImage({ data: imageData, x: visualX, y: 0, w: visualW, h: H });
+    // Bottom fade overlay
+    slide.addShape(SHAPE_RECT, {
+      x: visualX, y: H * 0.55, w: visualW, h: H * 0.45,
+      fill: { color: DARK, transparency: 45 },
+      line: { color: DARK, transparency: 100 },
+    });
   } else {
-    addVisualPlaceholder(slide, visualX, 0, 4.75, H, suggestion, label);
+    addVisualPlaceholder(slide, visualX, 0, visualW, H, suggestion, label);
   }
-  slide.addShape(SHAPE_RECT, {
-    x: visualX,
-    y: 0,
-    w: 4.75,
-    h: H,
-    fill: { color: "000000", transparency: 90 },
-    line: { color: "000000", transparency: 100 },
-  });
-  addPanel(slide, visualX + 0.35, 4.58, 4.05, 0.62, "FFFFFF", "FFFFFF", 10);
-  addText(slide, label, visualX + 0.55, 4.73, 1.5, 0.12, 7.5, MUTED, true);
-  addText(slide, suggestion || "Clean supporting visual", visualX + 0.55, 4.9, 3.45, 0.24, 7.8, DARK, true, false, undefined, "top");
+
+  // Caption card at bottom of visual zone
+  if (imageData && (label || suggestion)) {
+    addPanel(slide, visualX + 0.25, 4.5, visualW - 0.5, 0.72, "FFFFFF", "EDE9FE", 5);
+    addText(slide, label, visualX + 0.42, 4.6, visualW - 0.9, 0.14, 7.5, ACCENT, true, false, undefined, "top");
+    if (suggestion) {
+      addText(slide, suggestion, visualX + 0.42, 4.78, visualW - 0.9, 0.3, 8, DARK, true, false, undefined, "top");
+    }
+  }
 }
 
 function addVisualPlaceholder(
@@ -362,28 +463,23 @@ function addVisualPlaceholder(
   label = "Visual Guide"
 ) {
   slide.addShape(SHAPE_RECT, {
-    x,
-    y,
-    w,
-    h,
-    fill: { color: "F4EFFB" },
-    line: { color: "F4EFFB" },
+    x, y, w, h,
+    fill: { color: "F3F0FF" }, line: { color: "F3F0FF" },
   });
-  slide.addShape(SHAPE_RECT, {
-    x: x + 0.45,
-    y: y + 1.6,
-    w: w - 0.9,
-    h: 1.05,
-    fill: { color: "FFFFFF", transparency: 12 },
-    line: { color: "FFFFFF", transparency: 50 },
+  // Accent panel
+  slide.addShape(SHAPE_ROUND_RECT, {
+    x: x + 0.5, y: y + h / 2 - 0.65, w: w - 1.0, h: 1.3,
+    rectRadius: 0.1,
+    fill: { color: "FFFFFF", transparency: 15 },
+    line: { color: ACCENT, transparency: 60 },
   });
-  addText(slide, label, x + 0.75, y + 1.85, w - 1.5, 0.18, 9, ACCENT, true);
-  addText(slide, suggestion || "Visual placeholder", x + 0.75, y + 2.14, w - 1.5, 0.38, 10.5, DARK, true, false, undefined, "top");
+  addText(slide, label, x + 0.7, y + h / 2 - 0.42, w - 1.4, 0.2, 9, ACCENT, true);
+  addText(slide, suggestion || "Visual placeholder", x + 0.7, y + h / 2 - 0.16, w - 1.4, 0.44, 10.5, DARK, true, false, undefined, "top");
 }
 
 function addChrome(slide: PptxGenJS.Slide, slideNumber: number, totalSlides: number) {
-  addText(slide, "LessonForge", 8.6, 0.18, 0.95, 0.12, 6.5, "A0A0A8", true);
-  addText(slide, `${slideNumber} / ${totalSlides}`, 8.85, 5.28, 0.7, 0.12, 6.5, "A0A0A8");
+  addText(slide, "Generated by LessonForge", 0.3, 5.3, 4.0, 0.25, 9, "9CA3AF");
+  addText(slide, `${slideNumber} / ${totalSlides}`, 8.5, 5.3, 1.2, 0.25, 9, "9CA3AF", false, false, undefined, "middle");
 }
 
 function addBadge(
@@ -391,24 +487,25 @@ function addBadge(
   text: unknown,
   x: number,
   y: number,
-  color = ACCENT,
+  color = "7C3AED",
   fill = SOFT,
   transparency = 0
 ) {
   slide.addText(safeText(text).toUpperCase(), {
     x,
     y,
-    w: 1.9,
-    h: 0.25,
-    fontSize: 7.5,
+    w: 2.2,
+    h: 0.28,
+    fontSize: 8,
     color,
     bold: true,
     fontFace: "Arial",
     fit: "shrink",
-    margin: 0.05,
+    margin: 0.06,
     fill: { color: fill, transparency },
-    line: { color: fill, transparency },
-    align: "center",
+    line: { color: "EDE9FE", transparency },
+    align: "left",
+    charSpacing: 2,
   });
 }
 

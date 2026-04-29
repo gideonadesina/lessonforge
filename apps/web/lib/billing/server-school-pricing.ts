@@ -17,7 +17,6 @@ export interface SchoolPlanPricing {
   name: string;
   priceNaira: number;
   priceUsdCents: number;
-  teacherLimit: number;
   sharedCredits: number;
   lessonPacks: number;
 }
@@ -28,7 +27,6 @@ export const SCHOOL_PLAN_PRICING: Record<SchoolPlanId, SchoolPlanPricing> = {
     name: "Starter",
     priceNaira: 35000,
     priceUsdCents: 35000,
-    teacherLimit: 15,
     sharedCredits: 200,
     lessonPacks: 50,
   },
@@ -37,7 +35,6 @@ export const SCHOOL_PLAN_PRICING: Record<SchoolPlanId, SchoolPlanPricing> = {
     name: "Growth",
     priceNaira: 75000,
     priceUsdCents: 75000,
-    teacherLimit: 35,
     sharedCredits: 450,
     lessonPacks: 112,
   },
@@ -46,7 +43,6 @@ export const SCHOOL_PLAN_PRICING: Record<SchoolPlanId, SchoolPlanPricing> = {
     name: "Full School",
     priceNaira: 130000,
     priceUsdCents: 130000,
-    teacherLimit: 70,
     sharedCredits: 850,
     lessonPacks: 212,
   },
@@ -55,7 +51,6 @@ export const SCHOOL_PLAN_PRICING: Record<SchoolPlanId, SchoolPlanPricing> = {
     name: "Enterprise",
     priceNaira: 200000,
     priceUsdCents: 200000,
-    teacherLimit: 70,
     sharedCredits: 1200,
     lessonPacks: 300,
   },
@@ -102,13 +97,5 @@ export function getSchoolPlanPaystackAmount(planId: SchoolPlanId, currency: "NGN
 export function getSchoolPlanSharedCredits(planId: unknown): number {
   const plan = getSchoolPlanPricing(planId);
   return plan?.sharedCredits ?? 0;
-}
-
-/**
- * Get teacher limit for a school plan.
- */
-export function getSchoolPlanTeacherLimit(planId: unknown): number {
-  const plan = getSchoolPlanPricing(planId);
-  return plan?.teacherLimit ?? 0;
 }
 

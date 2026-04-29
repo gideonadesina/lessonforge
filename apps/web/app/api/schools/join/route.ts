@@ -12,7 +12,6 @@ type SchoolRow = {
   name: string | null;
   code: string | null;
   created_at: string | null;
-  max_seats?: number | null;
 };
  
 type MembershipRow = {
@@ -25,20 +24,6 @@ type MembershipRow = {
 type SchoolCodeRow = {
   school_id: string;
 };
- 
-type SlotRow = {
-  slot_limit: number | null;
-};
- 
-type LicenseRow = {
-  seats: number | null;
-};
- 
-type SchoolMemberSeatRow = {
-  user_id: string | null;
-  role: string | null;
-};
- 
  
 function getBearerToken(req: NextRequest) {
   const auth = req.headers.get("authorization") ?? "";
@@ -77,7 +62,7 @@ async function resolveSchoolByCode(
  
   const schoolRes = await admin
     .from("schools")
-    .select("id, name, code, created_at, max_seats")
+    .select("id, name, code, created_at")
     .eq(schoolIdFromCode ? "id" : "code", schoolIdFromCode ?? code)
     .maybeSingle();
  
@@ -106,89 +91,12 @@ async function resolveSchoolByCode(
   return null;
 }
  
-async function resolveSlotLimit(
-  admin: ReturnType<typeof createAdminClient>,
-  school: SchoolRow
-): Promise<number | null> {
-  let slotLimit: number | null = null;
- 
-  const slotRes = await admin
-    .from("teacher_slots")
-    .select("slot_limit")
-    .eq("school_id", school.id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
- 
-  if (slotRes.error && !isMissingTableOrColumnError(slotRes.error)) {
-    throw new Error(slotRes.error.message);
-  }
- 
-  const teacherSlotLimit = Number((slotRes.data as SlotRow | null)?.slot_limit ?? 0);
-  if (teacherSlotLimit > 0) {
-    slotLimit = teacherSlotLimit;
-  }
- 
-  if (slotLimit == null) {
-    const licenseRes = await admin
-      .from("school_licenses")
-      .select("seats")
-      .eq("school_id", school.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
- 
-    if (licenseRes.error && !isMissingTableOrColumnError(licenseRes.error)) {
-      throw new Error(licenseRes.error.message);
-    }
- 
-    const licenseSeats = Number((licenseRes.data as LicenseRow | null)?.seats ?? 0);
-    if (licenseSeats > 0) {
-      slotLimit = licenseSeats;
-    }
-  }
- 
-  if (slotLimit == null) {
-    const maxSeats = Number(school.max_seats ?? 0);
-    if (maxSeats > 0) {
-      slotLimit = maxSeats;
-    }
-  }
- 
-  return slotLimit;
-}
- 
 function roleConsumesTeacherSeat(role: string | null | undefined) {
   const normalized = String(role ?? "").toLowerCase();
   if (!normalized) return true;
   if (isPrincipalRole(normalized)) return false;
   if (normalized === "removed_teacher") return false;
   return true;
-}
- 
-async function countUsedTeacherSeats(
-  admin: ReturnType<typeof createAdminClient>,
-  schoolId: string
-) {
-  const membersRes = await admin
-    .from("school_members")
-    .select("user_id, role")
-    .eq("school_id", schoolId);
- 
-  if (membersRes.error) {
-    throw new Error(membersRes.error.message);
-  }
- 
-  const usersOccupyingSeat = new Set<string>();
- 
-  for (const row of (membersRes.data ?? []) as SchoolMemberSeatRow[]) {
-    if (!roleConsumesTeacherSeat(row.role)) continue;
-    const userId = String(row.user_id ?? "").trim();
-    if (!userId) continue;
-    usersOccupyingSeat.add(userId);
-  }
- 
-  return usersOccupyingSeat.size;
 }
  
 async function updateTeacherMembership(
@@ -341,20 +249,6 @@ export async function POST(req: NextRequest) {
         { ok: false, error: "Principal accounts cannot join a school as a teacher." },
         { status: 403 }
       );
-    }
- 
-    const existingSchoolRows = allUserMemberships.filter((row) => row.school_id === school.id);
-    const alreadyConsumesSeat = existingSchoolRows.some((row) => roleConsumesTeacherSeat(row.role));
- 
-    const slotLimit = await resolveSlotLimit(admin, school);
-    if (!alreadyConsumesSeat && slotLimit != null) {
-      const usedSeats = await countUsedTeacherSeats(admin, school.id);
-      if (usedSeats >= slotLimit) {
-        return NextResponse.json(
-          { ok: false, error: "This school is full. Ask your principal to add more teacher slots." },
-          { status: 409 }
-        );
-      }
     }
  
     await normalizeTeacherMembershipRows(admin, school.id, user.id);

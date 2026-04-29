@@ -40,9 +40,9 @@ const TEACHER_PLAN_BENEFITS: Record<string, string[]> = {
 
 const SCHOOL_PLAN_BENEFITS: Record<string, string[]> = {
   school_starter: ["Shared school credits", "Teacher join code", "Principal dashboard"],
-  school_growth: ["Larger shared credit pool", "More teacher seats", "Principal dashboard"],
-  school_full: ["Full-school shared credits", "Expanded teacher seats", "Principal analytics"],
-  school_enterprise: ["Enterprise shared credits", "Highest teacher capacity", "Principal analytics"],
+  school_growth: ["Larger shared credit pool", "Unlimited teachers", "Principal dashboard"],
+  school_full: ["Full-school shared credits", "Unlimited teachers", "Principal analytics"],
+  school_enterprise: ["Enterprise shared credits", "Unlimited teachers", "Principal analytics"],
 };
 
 function formatNumber(value: number | null) {
@@ -164,8 +164,16 @@ function SuccessInner() {
         if (!active) return;
 
         if (!res.ok || json?.ok === false) {
-          setState("error");
-          setErrorMsg(json?.error || "Could not confirm payment. Please try again.");
+          if (isSchoolFlow) {
+            setState("error");
+            setErrorMsg(
+              "Payment received! We're setting up your workspace. If it doesn't load in 60 seconds please contact support."
+            );
+            window.setTimeout(() => router.push("/principal/dashboard"), 3000);
+          } else {
+            setState("error");
+            setErrorMsg(json?.error || "Could not confirm payment. Please try again.");
+          }
           track("payment_failed", {
             user_role: isSchoolFlow ? "principal" : "teacher",
             active_role: isSchoolFlow ? "principal" : "teacher",
@@ -237,7 +245,14 @@ function SuccessInner() {
       } catch (e) {
         if (!active) return;
         setState("error");
-        setErrorMsg(e instanceof Error ? e.message : "Verification failed.");
+        if (isSchoolFlow) {
+          setErrorMsg(
+            "Payment received! We're setting up your workspace. If it doesn't load in 60 seconds please contact support."
+          );
+          window.setTimeout(() => router.push("/principal/dashboard"), 3000);
+        } else {
+          setErrorMsg(e instanceof Error ? e.message : "Verification failed.");
+        }
         track("payment_failed", {
           user_role: isSchoolFlow ? "principal" : "teacher",
           active_role: isSchoolFlow ? "principal" : "teacher",
@@ -249,7 +264,7 @@ function SuccessInner() {
     return () => {
       active = false;
     };
-  }, [reference, isSchoolFlow, supabase]);
+  }, [reference, isSchoolFlow, supabase, router]);
 
   useEffect(() => {
     if (state !== "ok") return;
@@ -257,7 +272,7 @@ function SuccessInner() {
       setCountdown((current) => {
         if (current <= 1) {
           window.clearInterval(interval);
-          router.push(isSchoolFlow ? "/principal" : "/dashboard");
+          router.push(isSchoolFlow ? "/principal/dashboard" : "/dashboard");
           return 0;
         }
         return current - 1;
@@ -298,7 +313,7 @@ function SuccessInner() {
             Payment verification failed
           </h1>
           <p style={{ color: "#64748B", fontSize: 14, lineHeight: 1.6 }}>{errorMsg}</p>
-          <Link href={isSchoolFlow ? "/principal" : "/dashboard"} style={primaryButtonStyle}>
+          <Link href={isSchoolFlow ? "/principal/dashboard" : "/dashboard"} style={primaryButtonStyle}>
             Go to dashboard
           </Link>
         </section>
@@ -451,7 +466,7 @@ function SuccessInner() {
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
               {isSchoolFlow ? (
-                <Link href="/principal" style={primaryButtonStyle}>
+                <Link href="/principal/dashboard" style={primaryButtonStyle}>
                   Go to principal dashboard
                 </Link>
               ) : (

@@ -9,7 +9,6 @@ import {
   type SlideDeck,
   type Slide,
 } from "../../lib/slideRenderer";
-import { exportToPdf } from "../../lib/exportToPdf";
 import { exportToPptx } from "../../lib/exportToPptx";
 import { exportSlideToPng } from "../../lib/exportToPng";
 import { track } from "@/lib/analytics";
@@ -27,6 +26,7 @@ export default function SlideViewer({ deck }: SlideViewerProps) {
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingPptx, setExportingPptx] = useState(false);
   const [exportingPng, setExportingPng] = useState(false);
+  const [capturingSlide, setCapturingSlide] = useState<number | null>(null);
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
   const [googleSlidesNotice, setGoogleSlidesNotice] = useState(false);
   const slideContainerRef = useRef<HTMLDivElement>(null);
@@ -148,7 +148,7 @@ export default function SlideViewer({ deck }: SlideViewerProps) {
   }, [liveDeck]);
 
   const handleExportPDF = async () => {
-    if (exportingPdf || !liveDeck) return;
+    if (exportingPdf || !liveDeck || !slides.length) return;
     track("export_pdf_clicked", {
       user_role: "teacher",
       active_role: "teacher",
@@ -158,11 +158,55 @@ export default function SlideViewer({ deck }: SlideViewerProps) {
     setExportingPdf(true);
     setExportDropdownOpen(false);
     try {
-      await exportToPdf(liveDeck);
+      // Use browser print — renders the exact same HTML/CSS as the preview
+      const html2canvas = (await import("html2canvas")).default;
+      const { jsPDF } = await import("jspdf");
+
+      const pdf = new jsPDF({
+        orientation: "landscape",
+        unit: "px",
+        format: [960, 540],
+      });
+
+      for (let i = 0; i < slides.length; i++) {
+        setCapturingSlide(i);
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        await new Promise<void>((resolve) => setTimeout(resolve, 300));
+
+        const element = document.getElementById("slide-capture-target");
+        if (!element) {
+          console.error("Capture target not found");
+          return;
+        }
+
+        await waitForImages(element);
+
+        const canvas = await html2canvas(element, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: false,
+          backgroundColor: "#ffffff",
+          width: 960,
+          height: 540,
+          logging: true,
+          onclone: sanitizeHtml2CanvasClone,
+        });
+
+        const imgData = canvas.toDataURL("image/png");
+        if (i > 0) pdf.addPage([960, 540], "landscape");
+        pdf.addImage(imgData, "PNG", 0, 0, 960, 540);
+      }
+
+      const safeTopic = (liveDeck.deck_title || "Lesson")
+        .replace(/[^a-zA-Z0-9\s-]/g, "")
+        .replace(/\s+/g, "_")
+        .slice(0, 50);
+      pdf.save(`LessonForge_${safeTopic}_Slides.pdf`);
     } catch (err) {
-      console.error("PDF export failed:", err);
+      console.error("PDF export error:", err);
       alert("Failed to export PDF. Please try again.");
     } finally {
+      setCapturingSlide(null);
       setExportingPdf(false);
     }
   };
@@ -268,6 +312,35 @@ export default function SlideViewer({ deck }: SlideViewerProps) {
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-b from-[#FAFAF8] via-[#F7F6F2] to-[#F2F0EC]">
+      {/* ── Print stylesheet — exact HTML/CSS rendering of every slide ── */}
+      {/* ── Hidden print-only slide area — all slides rendered for browser print ── */}
+      <div
+        aria-hidden
+        style={{
+          position: "fixed",
+          left: "-9999px",
+          top: 0,
+          width: "960px",
+          height: "540px",
+          overflow: "hidden",
+          zIndex: -1,
+        }}
+      >
+        <div id="slide-capture-target" style={{ width: "960px", height: "540px" }}>
+          {capturingSlide !== null && slides[capturingSlide] ? (
+            <SlideWrapper
+              deckTitle={metadata.deckTitle}
+              slideTypeLabel={getSlideTypeLabel(slides[capturingSlide])}
+              slideNumber={capturingSlide + 1}
+              totalSlides={totalSlides}
+              className="rounded-none"
+            >
+              {renderSlide(slides[capturingSlide])}
+            </SlideWrapper>
+          ) : null}
+        </div>
+      </div>
+
       <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-8 px-6 py-10 md:px-10 md:py-14">
         <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="min-w-0">
@@ -299,7 +372,16 @@ export default function SlideViewer({ deck }: SlideViewerProps) {
                   "disabled:cursor-not-allowed disabled:opacity-50",
                 ].join(" ")}
               >
-                {exportingPdf || exportingPptx || exportingPng ? "Exporting…" : "Export"}
+                {exportingPdf ? (
+                  <>
+                    <Spinner />
+                    Generating PDF...
+                  </>
+                ) : exportingPptx || exportingPng ? (
+                  "Exporting..."
+                ) : (
+                  "Export"
+                )}
                 <svg viewBox="0 0 10 6" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="opacity-60">
                   <path d="M1 1l4 4 4-4" />
                 </svg>
@@ -315,9 +397,11 @@ export default function SlideViewer({ deck }: SlideViewerProps) {
                   <div className="absolute right-0 top-full z-40 mt-1.5 w-52 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
                     <ExportMenuItem
                       icon="📄"
-                      label="Export PDF"
+                      label={exportingPdf ? "Generating PDF..." : "Export PDF"}
                       sublabel="All slides, split layout"
                       onClick={handleExportPDF}
+                      disabled={exportingPdf}
+                      loading={exportingPdf}
                     />
                     <ExportMenuItem
                       icon="📊"
@@ -450,6 +534,7 @@ export default function SlideViewer({ deck }: SlideViewerProps) {
                         <img
                           src={thumbImg}
                           alt={`Slide ${i + 1} preview`}
+                          crossOrigin="anonymous"
                           className="absolute inset-0 h-full w-full object-cover"
                           draggable={false}
                         />
@@ -579,25 +664,102 @@ function ExportMenuItem({
   label,
   sublabel,
   onClick,
+  disabled,
+  loading,
 }: {
   icon: string;
   label: string;
   sublabel: string;
   onClick: () => void;
+  disabled?: boolean;
+  loading?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-gray-50"
+      disabled={disabled}
+      className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
     >
-      <span className="text-base leading-none">{icon}</span>
+      <span className="text-base leading-none">{loading ? <Spinner /> : icon}</span>
       <div>
         <p className="text-sm font-semibold text-gray-800">{label}</p>
         <p className="text-[11px] text-gray-400">{sublabel}</p>
       </div>
     </button>
   );
+}
+
+function Spinner() {
+  return (
+    <span
+      aria-hidden
+      className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-300 border-t-purple-600"
+    />
+  );
+}
+
+async function waitForImages(element: HTMLElement) {
+  const images = Array.from(element.querySelectorAll<HTMLImageElement>("img"));
+
+  await Promise.all(
+    images.map((img) => {
+      img.crossOrigin = "anonymous";
+      if (img.complete) return Promise.resolve();
+
+      return new Promise<void>((resolve) => {
+        img.addEventListener("load", () => resolve(), { once: true });
+        img.addEventListener("error", () => resolve(), { once: true });
+      });
+    })
+  );
+}
+
+function sanitizeHtml2CanvasClone(clonedDocument: Document) {
+  clonedDocument.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
+    img.crossOrigin = "anonymous";
+  });
+
+  const clonedWindow = clonedDocument.defaultView;
+  const allElements = clonedDocument.querySelectorAll("*");
+
+  allElements.forEach((el) => {
+    const element = el as HTMLElement;
+    const style = element.style;
+    const computedStyle = clonedWindow?.getComputedStyle(element);
+
+    if (hasUnsupportedColorFunction(style.color) || hasUnsupportedColorFunction(computedStyle?.color)) {
+      style.color = "#374151";
+    }
+    if (
+      hasUnsupportedColorFunction(style.background) ||
+      hasUnsupportedColorFunction(computedStyle?.background)
+    ) {
+      style.background = "#ffffff";
+    }
+    if (
+      hasUnsupportedColorFunction(style.backgroundColor) ||
+      hasUnsupportedColorFunction(computedStyle?.backgroundColor)
+    ) {
+      style.backgroundColor = "#ffffff";
+    }
+    if (
+      hasUnsupportedColorFunction(style.borderColor) ||
+      hasUnsupportedColorFunction(computedStyle?.borderColor)
+    ) {
+      style.borderColor = "#e5e7eb";
+    }
+    if (
+      hasUnsupportedColorFunction(style.boxShadow) ||
+      hasUnsupportedColorFunction(computedStyle?.boxShadow)
+    ) {
+      style.boxShadow = "none";
+    }
+  });
+}
+
+function hasUnsupportedColorFunction(value?: string | null) {
+  return !!value && /\b(?:oklab|oklch|lab|lch|color)\(/i.test(value);
 }
 
 function StageNavButton({

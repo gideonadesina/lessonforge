@@ -5,8 +5,6 @@ import { createBrowserSupabase } from "@/lib/supabase/browser";
 import type { PrincipalDashboardPayload } from "@/lib/principal/types";
  
 export type PaymentQuote = {
-  teacherSlots: number;
-  slotPrice: number;
   amount: number;
   currency: "NGN" | "USD";
   billingCycle: "monthly";

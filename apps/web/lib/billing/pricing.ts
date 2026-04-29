@@ -25,7 +25,6 @@ export type SchoolPlanConfig = {
   id: SchoolPlanId;
   name: string;
   priceNaira: number | string;
-  teachers: number | string;
   credits: number | string;
   lessonPacks: number | string;
   features: string[];
@@ -98,7 +97,6 @@ export const SCHOOL_PRICING_PLANS: SchoolPlanConfig[] = [
     id: "school_starter",
     name: "Starter",
     priceNaira: 35000,
-    teachers: 15,
     credits: 200,
     lessonPacks: 50,
     features: [
@@ -113,7 +111,6 @@ export const SCHOOL_PRICING_PLANS: SchoolPlanConfig[] = [
     id: "school_growth",
     name: "Growth",
     priceNaira: 75000,
-    teachers: 35,
     credits: 450,
     lessonPacks: 112,
     features: [
@@ -129,7 +126,6 @@ export const SCHOOL_PRICING_PLANS: SchoolPlanConfig[] = [
     id: "school_full",
     name: "Full School",
     priceNaira: 130000,
-    teachers: 70,
     credits: 850,
     lessonPacks: 212,
     features: [
@@ -144,7 +140,6 @@ export const SCHOOL_PRICING_PLANS: SchoolPlanConfig[] = [
     id: "school_enterprise",
     name: "Enterprise",
     priceNaira: 200000,
-    teachers: "70+",
     credits: 1200,
     lessonPacks: 300,
     features: [

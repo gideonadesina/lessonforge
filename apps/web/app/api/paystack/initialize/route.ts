@@ -68,6 +68,7 @@ export async function POST(req: Request) {
         currency,
         callback_url: appUrl("/payment/success"),
         metadata: {
+          type: "teacher_plan",
           purpose: "teacher_plan_purchase",
           user_id: user.id,
           plan,

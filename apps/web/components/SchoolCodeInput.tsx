@@ -58,7 +58,7 @@ export default function SchoolCodeInput({ onJoined }: SchoolCodeInputProps) {
         if (msg.toLowerCase().includes("invalid")) {
           setError("Invalid school code — check with your principal");
         } else if (msg.toLowerCase().includes("full")) {
-          setError("This school is full. Ask your principal to add more teacher slots.");
+          setError("This school is currently unavailable. Ask your principal to confirm the school code.");
         } else if (msg.toLowerCase().includes("principal")) {
           setError("Principal accounts cannot join a school as a teacher.");
         } else if (msg.toLowerCase().includes("inactive") || msg.toLowerCase().includes("active")) {

@@ -2,6 +2,7 @@ import { jsPDF } from "jspdf";
 
 import type { SlideDeck, Slide } from "./slideRenderer";
 import { resolveSlideImageUrl } from "./slideImageResolver";
+import { CATEGORY_LABELS } from "./slideSchema";
 
 const ACCENT = [83, 74, 183] as const;   // brand #534AB7
 const DARK = [23, 23, 33] as const;
@@ -413,8 +414,50 @@ function renderSlideToPdf(
       break;
     }
 
-    default:
-      addBody("Slide", 24, MUTED, true);
+    case "real_world_connection": {
+      const rwSlide = slide as unknown as Record<string, unknown>;
+      addLabel("Real-world Connection");
+      addTitle(String(rwSlide.title || "Where You See This in Real Life"), 26);
+      const rwBody = String(rwSlide.explanation ?? rwSlide.scenario ?? "");
+      if (rwBody) addBody(rwBody, 13);
+      const rwKey = String(
+        rwSlide.key_point ??
+        (Array.isArray(rwSlide.connection_points) ? (rwSlide.connection_points as string[])[0] ?? "" : "") ??
+        ""
+      );
+      if (rwKey) {
+        yPos += 4;
+        addPanel(yPos - 4, 52, AMBER_BG, [240, 211, 138]);
+        addBody("Key Connection", 8, [154, 106, 0], true);
+        addBody(rwKey, 12, DARK, true);
+      }
+      const rwActivity = String(rwSlide.analogy ?? rwSlide.student_activity ?? "");
+      if (rwActivity) {
+        yPos += 4;
+        addPanel(yPos - 4, 52, SOFT_BG, [200, 180, 230]);
+        addBody("Activity", 8, ACCENT as unknown as readonly [number, number, number], true);
+        addBody(rwActivity, 11, MUTED);
+      }
+      break;
+    }
+
+    default: {
+      // Generic renderer for any unrecognised slide type — never shows bare "Slide".
+      const anySlide = slide as unknown as Record<string, unknown>;
+      const categoryLabel =
+        CATEGORY_LABELS[String(anySlide.type ?? "")] ||
+        String(anySlide.type ?? "").replace(/_/g, " ") ||
+        "Lesson Content";
+      addLabel(categoryLabel);
+      const titleText = String(anySlide.title || categoryLabel);
+      addTitle(titleText, 26);
+      const bodyText = String(
+        anySlide.explanation ?? anySlide.scenario ?? anySlide.prompt ??
+        anySlide.content ?? anySlide.description ?? ""
+      );
+      if (bodyText) addBody(bodyText, 13);
+      break;
+    }
   }
 
   // ── Footer chrome ───────────────────────────────────────────

@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState } from "react";
-import SlideVisualPanel, { resolveSlideImageUrl } from "./SlideVisualPanel";
 
 type CheckForUnderstandingSlideProps = {
   slide: {
@@ -18,78 +17,163 @@ type CheckForUnderstandingSlideProps = {
 
 export default function CheckForUnderstandingSlide({ slide }: CheckForUnderstandingSlideProps) {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const [showExplanation, setShowExplanation] = useState(false);
   const choices = Array.isArray(slide.choices) ? slide.choices : [];
-
-  const handleSelect = (index: number) => {
-    setSelectedIndex(index);
-    setShowExplanation(true);
-  };
+  const revealed = selectedIndex !== null;
 
   return (
-    <div className="grid h-full w-full grid-cols-1 bg-[linear-gradient(135deg,#ffffff_0%,#fbfaff_58%,#f4fbff_100%)] lg:grid-cols-[1.1fr_0.9fr]">
-      <div className="flex h-full flex-col justify-center px-12 py-12">
-        <div className="mb-5 inline-flex w-fit items-center gap-2 rounded-full border border-purple-200 bg-purple-50 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-purple-700">
-          <span className="h-2 w-2 rounded-full bg-purple-500" />
-          Check for Understanding
-        </div>
-
-        <h2 className="text-4xl font-black leading-tight tracking-tight text-gray-950">
-          {slide.question}
-        </h2>
-
-        <div className="mt-7 grid grid-cols-1 gap-3">
-          {choices.slice(0, 5).map((choice, index) => {
-            const isSelected = selectedIndex === index;
-            const isCorrect = !!choice.is_correct;
-            const showResult = selectedIndex !== null;
-
-            let borderClass = "border-white bg-white/88 shadow-[0_16px_40px_-32px_rgba(17,17,39,0.5)] hover:border-purple-400";
-            let markerClass = "border-gray-200 bg-gray-50 text-gray-700";
-
-            if (showResult && isCorrect) {
-              borderClass = "border-emerald-400 bg-emerald-50";
-              markerClass = "bg-emerald-500 text-white border-emerald-500";
-            } else if (showResult && isSelected && !isCorrect) {
-              borderClass = "border-red-400 bg-red-50";
-              markerClass = "bg-red-500 text-white border-red-500";
-            }
-
-            return (
-              <button
-                key={index}
-                type="button"
-                onClick={() => !showResult && handleSelect(index)}
-                disabled={showResult}
-                className={`group flex w-full items-center gap-4 rounded-2xl border-2 px-5 py-4 text-left transition ${borderClass}`}
-              >
-                <span
-                  className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border-2 text-sm font-black transition ${markerClass}`}
-                >
-                  {showResult && isCorrect ? "OK" : choice.label || String.fromCharCode(65 + index)}
-                </span>
-                <span className="text-base font-medium leading-relaxed text-gray-800">
-                  {choice.text || "Choice unavailable."}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {showExplanation && slide.explanation && (
-          <div className="mt-5 rounded-2xl border border-gray-200 bg-gray-50 px-5 py-4">
-            <span className="text-sm font-bold text-gray-800">Why: </span>
-            <span className="text-sm font-medium text-gray-600">{slide.explanation}</span>
-          </div>
-        )}
+    <div
+      className="flex h-full w-full flex-col items-center justify-center overflow-hidden"
+      style={{ background: "#F9F8FF", padding: "4% 5%" }}
+    >
+      {/* Category pill — centered */}
+      <div
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "7px",
+          background: "#EDE9FE",
+          border: "1px solid rgba(108,99,255,0.2)",
+          borderRadius: "20px",
+          padding: "4px 13px",
+          marginBottom: "12px",
+          fontSize: "10px",
+          fontWeight: 700,
+          letterSpacing: "3px",
+          color: "#7C3AED",
+          textTransform: "uppercase" as const,
+        }}
+      >
+        <span
+          style={{
+            width: "6px",
+            height: "6px",
+            borderRadius: "50%",
+            background: "#6C63FF",
+            display: "inline-block",
+          }}
+        />
+        Check for Understanding
       </div>
 
-      <SlideVisualPanel
-        imageUrl={resolveSlideImageUrl(slide)}
-        alt={slide.visual_suggestion || slide.question}
-        suggestion={slide.visual_suggestion}
-        label="Question Context"
-      />
+      {/* Question */}
+      <h2
+        className="text-center"
+        style={{
+          fontSize: "clamp(16px, 2.4vw, 28px)",
+          fontWeight: 800,
+          color: "#0D0A1E",
+          lineHeight: 1.25,
+          letterSpacing: "-0.4px",
+          maxWidth: "640px",
+          marginBottom: "18px",
+        }}
+      >
+        {slide.question}
+      </h2>
+
+      {/* 2×2 choices grid */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: choices.length <= 2 ? "1fr" : "1fr 1fr",
+          gap: "10px",
+          width: "100%",
+          maxWidth: "700px",
+        }}
+      >
+        {choices.slice(0, 4).map((choice, index) => {
+          const isSelected = selectedIndex === index;
+          const isCorrect = !!choice.is_correct;
+
+          let bg = "#FFFFFF";
+          let border = "1.5px solid #EDE9FE";
+          let labelBg = "#6C63FF";
+          let labelColor = "#FFFFFF";
+
+          if (revealed) {
+            if (isCorrect) {
+              bg = "#F0FDF4";
+              border = "1.5px solid #86EFAC";
+              labelBg = "#16A34A";
+            } else if (isSelected && !isCorrect) {
+              bg = "#FFF1F2";
+              border = "1.5px solid #FDA4AF";
+              labelBg = "#DC2626";
+            } else {
+              labelBg = "#D1D5DB";
+              labelColor = "#6B7280";
+            }
+          }
+
+          return (
+            <button
+              key={index}
+              type="button"
+              onClick={() => !revealed && setSelectedIndex(index)}
+              disabled={revealed}
+              className="flex items-center gap-3 text-left transition-all"
+              style={{
+                background: bg,
+                border,
+                borderRadius: "10px",
+                padding: "12px 16px",
+                cursor: revealed ? "default" : "pointer",
+                boxShadow: "0 2px 8px rgba(108,99,255,0.06)",
+              }}
+            >
+              <span
+                className="flex flex-shrink-0 items-center justify-center font-bold"
+                style={{
+                  width: "28px",
+                  height: "28px",
+                  borderRadius: "7px",
+                  background: labelBg,
+                  color: labelColor,
+                  fontSize: "12px",
+                  transition: "all 0.2s",
+                }}
+              >
+                {choice.label || String.fromCharCode(65 + index)}
+              </span>
+              <span
+                style={{
+                  fontSize: "clamp(11px, 1.2vw, 13.5px)",
+                  color: "#374151",
+                  lineHeight: 1.45,
+                  fontWeight: 500,
+                }}
+              >
+                {choice.text || "Choice unavailable."}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Explanation (shows after selection) */}
+      {revealed && slide.explanation && (
+        <div
+          className="mt-3"
+          style={{
+            maxWidth: "700px",
+            width: "100%",
+            background: "#F3F0FF",
+            border: "1px solid #DDD6FE",
+            borderRadius: "10px",
+            padding: "10px 14px",
+          }}
+        >
+          <span
+            style={{
+              fontSize: "clamp(10px, 1.1vw, 12px)",
+              color: "#374151",
+            }}
+          >
+            <span style={{ fontWeight: 700, color: "#6C63FF" }}>Why: </span>
+            {slide.explanation}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
