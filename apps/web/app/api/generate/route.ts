@@ -1016,11 +1016,18 @@ INTRODUCTION
 - 1 short engaging paragraph
 - Must use familiar real-life or local situations
 - Must hook learners immediately
+- Must include a creative local analogy or story-based hook, preferably a Nigerian everyday-life example when the curriculum or context is Nigerian
+- Example style: connect the topic to a market scene, football game, bus stop, family cooking, rainfall, farm work, mobile money, electricity use, classroom routine, or another familiar community situation
 
 ========================
 STEP-BY-STEP LESSON DELIVERY (CRITICAL)
 ========================
-- EXACTLY 4 to 6 steps
+- EXACTLY 4 steps/phases, no more and no fewer, in this exact order:
+  1. Introduction
+  2. Development
+  3. Application
+  4. Conclusion
+- Each phase MUST have a clear time allocation.
 
 Each step MUST include:
 - stepNumber
@@ -1036,13 +1043,18 @@ Each step MUST include:
 RULES:
 - Must feel like REAL teaching flow
 - timeMinutes must be realistic and sum approximately to the lesson duration
+- teacherActivity MUST begin with a minute-by-minute range such as "Minutes 0-5:" or "Minutes 10-18:" and give a minute-by-minute teacher activity breakdown for that phase
+- teacherActivity MUST include exact teacher dialogue examples using quoted speech, showing what the teacher should SAY word-for-word, for example: Teacher says, "Look at this example from our local market..."
 - teacherActivity MUST include explanation, questioning, demonstration, guided discovery, real objects, drawing, role play, worked examples, board illustration, or experiment where relevant
-- learnerActivity MUST be ACTIVE
-- guidedQuestions must contain EXACTLY 2 or 3 short teacher questions
+- The Introduction step MUST contain a creative local Nigerian/African analogy or story-based hook tied to the topic
+- learnerActivity MUST be ACTIVE and must correspond directly to the same minute range and phase as teacherActivity
+- learnerActivity MUST describe the corresponding student activity for each minute range/phase, including what students say, write, discuss, calculate, observe, sort, present, or practise
+- guidedQuestions must contain EXACTLY 2 or 3 short student engagement questions the teacher asks the class
 - teachingMethod must be specific
 - assessmentCheck must include a quick observable check
 - concretisedLearningPoint must state what learners now understand or can do
 - Steps must build logically
+- Step titles must clearly name the phase, for example: "Introduction: Local hook and prior knowledge", "Development: Teacher demonstration", "Application: Guided practice", "Conclusion: Recap and exit check"
 
 ========================
 LESSON NOTES (STRUCTURED)

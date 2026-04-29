@@ -1,0 +1,25 @@
+<svg width="500" height="220" viewBox="0 0 500 220" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>LessonForge</title>
+  <desc>LessonForge primary logo — book spark icon with wordmark</desc>
+
+  <!-- Purple rounded square -->
+  <rect x="205" y="10" width="90" height="90" rx="20" fill="#6C63FF"/>
+
+  <!-- Book left page -->
+  <path d="M218,80 L249,68 L249,35 L218,47 Z" fill="white"/>
+  <!-- Book right page -->
+  <path d="M249,68 L280,80 L280,47 L249,35 Z" fill="white" opacity="0.78"/>
+  <!-- Spine -->
+  <line x1="249" y1="33" x2="249" y2="82" stroke="#6C63FF" stroke-width="2.5"/>
+
+  <!-- 4-pointed spark -->
+  <path d="M250,30 L255,16 L260,30 L274,35 L260,40 L255,54 L250,40 L236,35 Z" fill="white"/>
+
+  <!-- Wordmark -->
+  <text x="250" y="144" font-family="'Helvetica Neue',Arial,sans-serif" font-size="38" font-weight="800" text-anchor="middle" letter-spacing="-1.5">
+    <tspan fill="#1a1a2e">Lesson</tspan><tspan fill="#6C63FF">Forge</tspan>
+  </text>
+
+  <!-- Tagline -->
+  <text x="250" y="170" font-family="'Helvetica Neue',Arial,sans-serif" font-size="11" font-weight="400" fill="#7C3AED" text-anchor="middle" letter-spacing="2.5">AI FOR AFRICA'S CLASSROOMS</text>
+</svg>

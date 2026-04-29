@@ -185,6 +185,10 @@ export default function Sidebar({
 
   const SidebarCard = ({ onNavigate }: { onNavigate?: () => void }) => (
     <aside className="flex h-full min-h-0 flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm text-[var(--text-primary)]">
+      <Link href="/dashboard" onClick={onNavigate} className="mb-4 flex shrink-0 items-center">
+        <img src="/lessonforge_logo_primary.svg" alt="LessonForge" height="48" />
+      </Link>
+
       {/* User */}
       <div className="flex shrink-0 items-center gap-3 border-b border-[var(--border)] pb-4">
         <label className="relative cursor-pointer">

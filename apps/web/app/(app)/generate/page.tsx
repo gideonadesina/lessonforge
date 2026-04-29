@@ -12,7 +12,16 @@ import { getInvalidJsonMessage, readJsonResponse } from "@/lib/http/safe-json";
 import { track } from "@/lib/analytics";
 import { enrichGeneratedLessonImages } from "@/lib/generation/enrich-images-client";
 import { renderLessonPackHTML } from "@/lib/export/renderLessonPack";
-import { AlertCircle, CheckCircle2, Circle, Loader2, RotateCcw } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronDown,
+  Circle,
+  Download,
+  FileText,
+  Loader2,
+  RotateCcw,
+} from "lucide-react";
 
 type VocabularyItem = {
   word?: string;
@@ -257,6 +266,88 @@ function getRealLifeItems(result: Generated | null): string[] {
     []
   );
 }
+
+function cloneGenerated(value: Generated): Generated {
+  return JSON.parse(JSON.stringify(value)) as Generated;
+}
+
+function getStudentHtmlLesson(value: Generated): Generated {
+  const next = cloneGenerated(value);
+  if (next.quiz?.mcq) {
+    next.quiz.mcq = next.quiz.mcq.map((item) => {
+      const {
+        answerIndex,
+        answer,
+        correctAnswer,
+        explanation,
+        ...question
+      } = item as typeof item & {
+        answer?: unknown;
+        correctAnswer?: unknown;
+      };
+      void answerIndex;
+      void answer;
+      void correctAnswer;
+      void explanation;
+      return question;
+    });
+  }
+  if (next.quiz?.theory) {
+    next.quiz.theory = next.quiz.theory.map((item) => {
+      const {
+        markingGuide,
+        modelAnswer,
+        answer,
+        expectedAnswer,
+        ...question
+      } = item as typeof item & {
+        modelAnswer?: unknown;
+        answer?: unknown;
+        expectedAnswer?: unknown;
+      };
+      void markingGuide;
+      void modelAnswer;
+      void answer;
+      void expectedAnswer;
+      return question;
+    });
+  }
+  return next;
+}
+
+function linesToArray(value: string): string[] {
+  return value.split("\n").map((item) => item.trim()).filter(Boolean);
+}
+
+function EditableTextArea({
+  value,
+  onChange,
+  className = "mt-1 text-sm text-[var(--text-secondary)]",
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className={`${className} w-full resize-none overflow-hidden rounded-lg border border-transparent bg-transparent px-2 py-1 outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-200`}
+      rows={1}
+    />
+  );
+}
+
 export default function GeneratePage() {
   const router = useRouter();
   const supabase = useMemo(() => createBrowserSupabase(), []);
@@ -276,6 +367,7 @@ export default function GeneratePage() {
   const [saving, setSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [downloadingPack, setDownloadingPack] = useState(false); // ← NEW
+  const [showExportMenu, setShowExportMenu] = useState(false);
   const { isOnline, isUnstable } = useNetworkStatus();
   const networkRef = useRef({ isOnline, isUnstable });
   const generatingRef = useRef(false);
@@ -288,6 +380,8 @@ export default function GeneratePage() {
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
   const [result, setResult] = useState<Generated | null>(null);
+  const [editableResult, setEditableResult] = useState<Generated | null>(null);
+  const [isEditingOutput, setIsEditingOutput] = useState(false);
   const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
   const [schoolCreditsRemaining, setSchoolCreditsRemaining] = useState<number | null>(null);
@@ -493,6 +587,8 @@ export default function GeneratePage() {
     setError(null);
     setSaveMsg("Lesson generation may take about 30 to 60 seconds. Please do not close this page.");
     setResult(null);
+    setEditableResult(null);
+    setIsEditingOutput(false);
     setFailedStage(null);
     setStagedLessonId(null);
     setStagedGenerationMeta(null);
@@ -565,6 +661,8 @@ export default function GeneratePage() {
       setStagedLessonId(lessonId);
       setStagedGenerationMeta(generationMeta);
       setResult(stage1Data);
+      setEditableResult(cloneGenerated(stage1Data));
+      setIsEditingOutput(false);
       setStagedStepIndex(1);
 
       setStagedStepIndex(2);
@@ -580,6 +678,7 @@ export default function GeneratePage() {
 
       const stage2Data = stage2.json.data as Generated;
       setResult(stage2Data);
+      setEditableResult(cloneGenerated(stage2Data));
       setStagedStepIndex(3);
 
       const stage3 = await postGenerationStage("/api/generate/stage3", session.access_token, {
@@ -599,6 +698,8 @@ export default function GeneratePage() {
         "generate"
       );
       setResult(generated);
+      setEditableResult(cloneGenerated(generated));
+      setIsEditingOutput(false);
       setStagedStepIndex(4);
       setSaving(true);
       setStagedStepIndex(5);
@@ -664,6 +765,8 @@ export default function GeneratePage() {
         (enrichedData?.meta?.generationMeta as GenerationMetadata | undefined) ??
         stagedGenerationMeta;
       setResult(enrichedData);
+      setEditableResult(cloneGenerated(enrichedData));
+      setIsEditingOutput(false);
       setStagedGenerationMeta(nextMeta);
       setFailedStage(null);
       setSaveMsg(
@@ -679,10 +782,60 @@ export default function GeneratePage() {
     }
   }
 
-  const meta = result?.meta ?? {};
-  const slides = Array.isArray(result?.slides) ? result.slides : [];
-  const mcq = result?.quiz?.mcq ?? [];
-  const theory = result?.quiz?.theory ?? [];
+  const outputResult = editableResult ?? result;
+  const meta = outputResult?.meta ?? {};
+  const slides = Array.isArray(outputResult?.slides) ? outputResult.slides : [];
+  const mcq = outputResult?.quiz?.mcq ?? [];
+  const theory = outputResult?.quiz?.theory ?? [];
+
+  const setEditablePath = (path: Array<string | number>, value: unknown) => {
+    setEditableResult((prev) => {
+      if (!prev) return prev;
+      const next = cloneGenerated(prev);
+      let cursor: Record<string, unknown> | unknown[] = next as Record<string, unknown>;
+      path.slice(0, -1).forEach((key) => {
+        cursor = (cursor as Record<string, unknown>)[key as string] as Record<string, unknown> | unknown[];
+      });
+      const finalKey = path[path.length - 1];
+      if (Array.isArray(cursor) && typeof finalKey === "number") {
+        cursor[finalKey] = value;
+      } else {
+        (cursor as Record<string, unknown>)[finalKey as string] = value;
+      }
+      return next;
+    });
+  };
+
+  const resetOutputEdits = () => {
+    if (!result) return;
+    if (window.confirm("Reset all edits? This cannot be undone.")) {
+      setEditableResult(cloneGenerated(result));
+    }
+  };
+
+  const renderEditableStringArray = (
+    value: unknown,
+    path: Array<string | number>,
+    className = "mt-2 list-disc pl-6 space-y-2 text-sm text-[var(--text-secondary)]"
+  ) => {
+    const items = asStringArray(value);
+    if (isEditingOutput) {
+      return (
+        <EditableTextArea
+          value={items.join("\n")}
+          onChange={(nextValue) => setEditablePath(path, linesToArray(nextValue))}
+          className="mt-2 text-sm text-[var(--text-secondary)]"
+        />
+      );
+    }
+    return (
+      <ul className={className}>
+        {items.map((item, i) => (
+          <li key={i}>{item}</li>
+        ))}
+      </ul>
+    );
+  };
 
   function downloadFile(
     filename: string,
@@ -701,10 +854,11 @@ export default function GeneratePage() {
   }
   // ─── Download handler ─────────────────────────────────────────────────────
   async function handleDownloadCompletePack() {
-    if (!result || downloadingPack) return;
+    if (!outputResult || downloadingPack) return;
+    setShowExportMenu(false);
     setDownloadingPack(true);
     try {
-      const html = await renderLessonPackHTML(result, {
+      const html = await renderLessonPackHTML(getStudentHtmlLesson(outputResult), {
         subject,
         topic,
         grade,
@@ -746,8 +900,8 @@ export default function GeneratePage() {
     a.remove();
   }
 
-  const lessonTitle = getLessonTitle(result, subject, topic);
-  const realLifeItems = getRealLifeItems(result);
+  const lessonTitle = getLessonTitle(outputResult, subject, topic);
+  const realLifeItems = getRealLifeItems(outputResult);
 
   return (
     <div className="space-y-6">
@@ -922,7 +1076,7 @@ export default function GeneratePage() {
         </p>
       </div>
 
-      {!result ? (
+      {!outputResult ? (
         <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)] p-8 text-sm text-[var(--text-tertiary)]">
           Your generated lesson pack will show here.
         </div>
@@ -943,25 +1097,72 @@ export default function GeneratePage() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="relative flex flex-wrap gap-2 pb-24 sm:pb-0">
+                {showExportMenu ? (
+                  <button
+                    type="button"
+                    aria-label="Close export menu"
+                    onClick={() => setShowExportMenu(false)}
+                    className="fixed inset-0 z-[9998] cursor-default bg-black/10 sm:bg-transparent"
+                  />
+                ) : null}
+
                 <button
                   type="button"
-                  onClick={handleDownloadCompletePack}
+                  onClick={() => setIsEditingOutput((value) => !value)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm font-semibold text-[var(--text-primary)] hover:bg-slate-100"
+                >
+                  {isEditingOutput ? "✅ Done Editing" : "✏️ Edit"}
+                </button>
+
+                {isEditingOutput ? (
+                  <button
+                    type="button"
+                    onClick={resetOutputEdits}
+                    className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm font-semibold text-[var(--text-primary)] hover:bg-slate-100"
+                  >
+                    ↩ Reset to Original
+                  </button>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={() => setShowExportMenu((value) => !value)}
                   disabled={downloadingPack}
-                  className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-violet-700 disabled:opacity-60 flex items-center gap-2"
+                  className="relative z-[9999] inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-violet-700 disabled:opacity-60"
+                  aria-expanded={showExportMenu}
+                  aria-haspopup="menu"
                 >
                   {downloadingPack ? (
-                    <>
-                      <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                      </svg>
-                      Preparing Pack…
-                    </>
+                    <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    <>⬇ Download Complete Pack</>
+                    <Download className="h-4 w-4" />
                   )}
+                  Export
+                  <ChevronDown className="h-4 w-4" />
                 </button>
+
+                {showExportMenu ? (
+                  <div
+                    role="menu"
+                    className="absolute bottom-full right-0 z-[9999] mb-3 min-w-[220px] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] p-2 shadow-2xl sm:top-full sm:bottom-auto sm:mt-2 sm:mb-0"
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={handleDownloadCompletePack}
+                      disabled={downloadingPack}
+                      className="flex min-h-12 w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--card-alt)] disabled:opacity-60"
+                    >
+                      {downloadingPack ? (
+                        <Loader2 className="h-5 w-5 animate-spin text-violet-600" />
+                      ) : (
+                        <FileText className="h-5 w-5 text-violet-600" />
+                      )}
+                      <span>Download Complete Pack</span>
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -971,7 +1172,7 @@ export default function GeneratePage() {
             </div>
           </section>
 
-          {result?.lessonPlan ? (
+          {outputResult?.lessonPlan ? (
             <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm space-y-5">
               <h3 className="text-xl font-extrabold text-[var(--text-primary)] tracking-tight">
                 Lesson Plan
@@ -979,96 +1180,97 @@ export default function GeneratePage() {
 
               <div>
                 <p className="text-sm font-semibold text-[var(--text-primary)]">Title</p>
-                <p className="mt-1 text-sm text-[var(--text-secondary)]">{lessonTitle}</p>
+                {isEditingOutput ? (
+                  <EditableTextArea
+                    value={lessonTitle}
+                    onChange={(value) => setEditablePath(["lessonPlan", "lessonTitle"], value)}
+                  />
+                ) : (
+                  <p className="mt-1 text-sm text-[var(--text-secondary)]">{lessonTitle}</p>
+                )}
               </div>
 
-              {!!asStringArray(result.lessonPlan.performanceObjectives).length && (
+              {!!asStringArray(outputResult.lessonPlan.performanceObjectives).length && (
                 <div>
                   <p className="text-sm font-semibold text-[var(--text-primary)]">
                     Performance Objectives
                   </p>
-                  <ul className="mt-2 list-disc pl-6 space-y-2 text-sm text-[var(--text-secondary)]">
-                    {asStringArray(result.lessonPlan.performanceObjectives).map((item, i) => (
-                      <li key={i}>{item}</li>
-                    ))}
-                  </ul>
+                  {renderEditableStringArray(outputResult.lessonPlan.performanceObjectives, ["lessonPlan", "performanceObjectives"])}
                 </div>
               )}
 
-              {!!asStringArray(result.lessonPlan.successCriteria).length && (
+              {!!asStringArray(outputResult.lessonPlan.successCriteria).length && (
                 <div>
                   <p className="text-sm font-semibold text-[var(--text-primary)]">Success Criteria</p>
-                  <ul className="mt-2 list-disc pl-6 space-y-2 text-sm text-[var(--text-secondary)]">
-                    {asStringArray(result.lessonPlan.successCriteria).map((item, i) => (
-                      <li key={i}>{item}</li>
-                    ))}
-                  </ul>
+                  {renderEditableStringArray(outputResult.lessonPlan.successCriteria, ["lessonPlan", "successCriteria"])}
                 </div>
               )}
 
-              {!!asStringArray(result.lessonPlan.instructionalMaterials).length && (
+              {!!asStringArray(outputResult.lessonPlan.instructionalMaterials).length && (
                 <div>
                   <p className="text-sm font-semibold text-[var(--text-primary)]">
                     Instructional Materials
                   </p>
-                  <ul className="mt-2 list-disc pl-6 space-y-2 text-sm text-[var(--text-secondary)]">
-                    {asStringArray(result.lessonPlan.instructionalMaterials).map((item, i) => (
-                      <li key={i}>{item}</li>
-                    ))}
-                  </ul>
+                  {renderEditableStringArray(outputResult.lessonPlan.instructionalMaterials, ["lessonPlan", "instructionalMaterials"])}
                 </div>
               )}
 
-              {!!asStringArray(result.lessonPlan.lifeNatureActivities).length && (
+              {!!asStringArray(outputResult.lessonPlan.lifeNatureActivities).length && (
                 <div>
                   <p className="text-sm font-semibold text-[var(--text-primary)]">
                     Life / Nature Activities
                   </p>
-                  <ul className="mt-2 list-disc pl-6 space-y-2 text-sm text-[var(--text-secondary)]">
-                    {asStringArray(result.lessonPlan.lifeNatureActivities).map((item, i) => (
-                      <li key={i}>{item}</li>
-                    ))}
-                  </ul>
+                  {renderEditableStringArray(outputResult.lessonPlan.lifeNatureActivities, ["lessonPlan", "lifeNatureActivities"])}
                 </div>
               )}
 
-              {!!asStringArray(result.lessonPlan.crossCurricularActivities).length && (
+              {!!asStringArray(outputResult.lessonPlan.crossCurricularActivities).length && (
                 <div>
                   <p className="text-sm font-semibold text-[var(--text-primary)]">
                     Cross-Curricular Activities
                   </p>
-                  <ul className="mt-2 list-disc pl-6 space-y-2 text-sm text-[var(--text-secondary)]">
-                    {asStringArray(result.lessonPlan.crossCurricularActivities).map((item, i) => (
-                      <li key={i}>{item}</li>
-                    ))}
-                  </ul>
+                  {renderEditableStringArray(outputResult.lessonPlan.crossCurricularActivities, ["lessonPlan", "crossCurricularActivities"])}
                 </div>
               )}
 
-              {result.lessonPlan.previousKnowledge ? (
+              {outputResult.lessonPlan.previousKnowledge ? (
                 <div>
                   <p className="text-sm font-semibold text-[var(--text-primary)]">Previous Knowledge</p>
-                  <p className="mt-1 text-sm text-[var(--text-secondary)] whitespace-pre-wrap">
-                    {result.lessonPlan.previousKnowledge}
-                  </p>
+                  {isEditingOutput ? (
+                    <EditableTextArea
+                      value={outputResult.lessonPlan.previousKnowledge}
+                      onChange={(value) => setEditablePath(["lessonPlan", "previousKnowledge"], value)}
+                    />
+                  ) : (
+                    <p className="mt-1 text-sm text-[var(--text-secondary)] whitespace-pre-wrap">
+                      {outputResult.lessonPlan.previousKnowledge}
+                    </p>
+                  )}
                 </div>
               ) : null}
 
-              {result.lessonPlan.introduction ? (
+              {outputResult.lessonPlan.introduction ? (
                 <div>
                   <p className="text-sm font-semibold text-[var(--text-primary)]">Introduction</p>
-                  <p className="mt-1 text-sm text-[var(--text-secondary)] whitespace-pre-wrap">
-                    {result.lessonPlan.introduction}
-                  </p>
+                  {isEditingOutput ? (
+                    <EditableTextArea
+                      value={outputResult.lessonPlan.introduction}
+                      onChange={(value) => setEditablePath(["lessonPlan", "introduction"], value)}
+                    />
+                  ) : (
+                    <p className="mt-1 text-sm text-[var(--text-secondary)] whitespace-pre-wrap">
+                      {outputResult.lessonPlan.introduction}
+                    </p>
+                  )}
                 </div>
               ) : null}
 
-              {!!Array.isArray(result.lessonPlan.keyVocabulary) &&
-                result.lessonPlan.keyVocabulary.length > 0 && (
+              {!!Array.isArray(outputResult.lessonPlan.keyVocabulary) &&
+                outputResult.lessonPlan.keyVocabulary.length > 0 && (
                   <div>
                     <p className="text-sm font-semibold text-[var(--text-primary)]">Key Vocabulary</p>
                     <ul className="mt-2 list-disc pl-6 space-y-2 text-sm text-[var(--text-secondary)]">
-                      {result.lessonPlan.keyVocabulary.map((item, i) => (
+                      {outputResult.lessonPlan.keyVocabulary.map((item, i) => (
                         <li key={i}>
                           <span className="font-semibold">{item.word}</span>
                           {item.simpleMeaning ? ` — ${item.simpleMeaning}` : ""}
@@ -1078,25 +1280,21 @@ export default function GeneratePage() {
                   </div>
                 )}
 
-              {!!asStringArray(result.lessonPlan.commonMisconceptions).length && (
+              {!!asStringArray(outputResult.lessonPlan.commonMisconceptions).length && (
                 <div>
                   <p className="text-sm font-semibold text-[var(--text-primary)]">
                     Common Misconceptions
                   </p>
-                  <ul className="mt-2 list-disc pl-6 space-y-2 text-sm text-[var(--text-secondary)]">
-                    {asStringArray(result.lessonPlan.commonMisconceptions).map((item, i) => (
-                      <li key={i}>{item}</li>
-                    ))}
-                  </ul>
+                  {renderEditableStringArray(outputResult.lessonPlan.commonMisconceptions, ["lessonPlan", "commonMisconceptions"])}
                 </div>
               )}
 
-              {!!result.lessonPlan.steps?.length && (
+              {!!outputResult.lessonPlan.steps?.length && (
                 <div className="space-y-4">
                   <p className="text-sm font-semibold text-[var(--text-primary)]">
                     Lesson Delivery Steps
                   </p>
-                  {result.lessonPlan.steps.map((step, i) => {
+                  {outputResult.lessonPlan.steps.map((step, i) => {
                     const stepNumber = step.stepNumber ?? step.step ?? i + 1;
                     const stepTitle = step.stepTitle ?? step.title ?? `Step ${i + 1}`;
 
@@ -1116,27 +1314,48 @@ export default function GeneratePage() {
                         ) : null}
 
                         {step.teacherActivity ? (
-                          <p className="text-sm text-[var(--text-secondary)]">
-                            <span className="font-semibold">Teacher Activity:</span>{" "}
-                            {step.teacherActivity}
-                          </p>
+                          <div>
+                            <span className="text-sm font-semibold text-[var(--text-secondary)]">Teacher Activity:</span>
+                            {isEditingOutput ? (
+                              <EditableTextArea
+                                value={step.teacherActivity}
+                                onChange={(value) => setEditablePath(["lessonPlan", "steps", i, "teacherActivity"], value)}
+                              />
+                            ) : (
+                              <p className="text-sm text-[var(--text-secondary)]">{step.teacherActivity}</p>
+                            )}
+                          </div>
                         ) : null}
 
                         {step.learnerActivity ? (
-                          <p className="text-sm text-[var(--text-secondary)]">
-                            <span className="font-semibold">Learner Activity:</span>{" "}
-                            {step.learnerActivity}
-                          </p>
+                          <div>
+                            <span className="text-sm font-semibold text-[var(--text-secondary)]">Learner Activity:</span>
+                            {isEditingOutput ? (
+                              <EditableTextArea
+                                value={step.learnerActivity}
+                                onChange={(value) => setEditablePath(["lessonPlan", "steps", i, "learnerActivity"], value)}
+                              />
+                            ) : (
+                              <p className="text-sm text-[var(--text-secondary)]">{step.learnerActivity}</p>
+                            )}
+                          </div>
                         ) : null}
 
                         {step.guidedQuestions?.length ? (
                           <div className="text-sm text-[var(--text-secondary)]">
                             <div className="font-semibold">Guided Questions:</div>
-                            <ul className="mt-1 list-disc pl-6 space-y-1">
-                              {step.guidedQuestions.map((question, j) => (
-                                <li key={j}>{question}</li>
-                              ))}
-                            </ul>
+                            {isEditingOutput ? (
+                              <EditableTextArea
+                                value={step.guidedQuestions.join("\n")}
+                                onChange={(value) => setEditablePath(["lessonPlan", "steps", i, "guidedQuestions"], linesToArray(value))}
+                              />
+                            ) : (
+                              <ul className="mt-1 list-disc pl-6 space-y-1">
+                                {step.guidedQuestions.map((question, j) => (
+                                  <li key={j}>{question}</li>
+                                ))}
+                              </ul>
+                            )}
                           </div>
                         ) : null}
 
@@ -1166,59 +1385,88 @@ export default function GeneratePage() {
                 </div>
               )}
 
-              {result.lessonPlan.differentiation ? (
+              {outputResult.lessonPlan.differentiation ? (
                 <div className="space-y-2">
                   <p className="text-sm font-semibold text-[var(--text-primary)]">Differentiation</p>
 
-                  {result.lessonPlan.differentiation.supportForStrugglingLearners ? (
-                    <p className="text-sm text-[var(--text-secondary)]">
+                  {outputResult.lessonPlan.differentiation.supportForStrugglingLearners ? (
+                    <div className="text-sm text-[var(--text-secondary)]">
                       <span className="font-semibold">Support for Struggling Learners:</span>{" "}
-                      {result.lessonPlan.differentiation.supportForStrugglingLearners}
-                    </p>
+                      {isEditingOutput ? (
+                        <EditableTextArea
+                          value={outputResult.lessonPlan.differentiation.supportForStrugglingLearners}
+                          onChange={(value) => setEditablePath(["lessonPlan", "differentiation", "supportForStrugglingLearners"], value)}
+                        />
+                      ) : outputResult.lessonPlan.differentiation.supportForStrugglingLearners}
+                    </div>
                   ) : null}
 
-                  {result.lessonPlan.differentiation.supportForAverageLearners ? (
-                    <p className="text-sm text-[var(--text-secondary)]">
+                  {outputResult.lessonPlan.differentiation.supportForAverageLearners ? (
+                    <div className="text-sm text-[var(--text-secondary)]">
                       <span className="font-semibold">Support for Average Learners:</span>{" "}
-                      {result.lessonPlan.differentiation.supportForAverageLearners}
-                    </p>
+                      {isEditingOutput ? (
+                        <EditableTextArea
+                          value={outputResult.lessonPlan.differentiation.supportForAverageLearners}
+                          onChange={(value) => setEditablePath(["lessonPlan", "differentiation", "supportForAverageLearners"], value)}
+                        />
+                      ) : outputResult.lessonPlan.differentiation.supportForAverageLearners}
+                    </div>
                   ) : null}
 
-                  {result.lessonPlan.differentiation.challengeForAdvancedLearners ? (
-                    <p className="text-sm text-[var(--text-secondary)]">
+                  {outputResult.lessonPlan.differentiation.challengeForAdvancedLearners ? (
+                    <div className="text-sm text-[var(--text-secondary)]">
                       <span className="font-semibold">Challenge for Advanced Learners:</span>{" "}
-                      {result.lessonPlan.differentiation.challengeForAdvancedLearners}
-                    </p>
+                      {isEditingOutput ? (
+                        <EditableTextArea
+                          value={outputResult.lessonPlan.differentiation.challengeForAdvancedLearners}
+                          onChange={(value) => setEditablePath(["lessonPlan", "differentiation", "challengeForAdvancedLearners"], value)}
+                        />
+                      ) : outputResult.lessonPlan.differentiation.challengeForAdvancedLearners}
+                    </div>
                   ) : null}
                 </div>
               ) : null}
 
-              {!!asStringArray(result.lessonPlan.boardSummary).length && (
+              {!!asStringArray(outputResult.lessonPlan.boardSummary).length && (
                 <div>
                   <p className="text-sm font-semibold text-[var(--text-primary)]">Board Summary</p>
-                  <ul className="mt-2 list-disc pl-6 space-y-2 text-sm text-[var(--text-secondary)]">
-                    {asStringArray(result.lessonPlan.boardSummary).map((item, i) => (
-                      <li key={i}>{item}</li>
-                    ))}
-                  </ul>
+                  {renderEditableStringArray(outputResult.lessonPlan.boardSummary, ["lessonPlan", "boardSummary"])}
                 </div>
               )}
 
-              {!!result.lessonPlan.evaluation?.length && (
+              {!!outputResult.lessonPlan.evaluation?.length && (
                 <div>
                   <p className="text-sm font-semibold text-[var(--text-primary)]">Evaluation</p>
                   <ul className="mt-2 list-disc pl-6 space-y-3 text-sm text-[var(--text-secondary)]">
-                    {result.lessonPlan.evaluation.map((item, i) => (
+                    {outputResult.lessonPlan.evaluation.map((item, i) => (
                       <li key={i}>
                         {typeof item === "string" ? (
-                          item
+                          isEditingOutput ? (
+                            <EditableTextArea
+                              value={item}
+                              onChange={(value) => setEditablePath(["lessonPlan", "evaluation", i], value)}
+                            />
+                          ) : item
                         ) : (
                           <div className="space-y-1">
-                            <div>{item.question}</div>
+                            {isEditingOutput ? (
+                              <EditableTextArea
+                                value={item.question ?? item.q ?? ""}
+                                onChange={(value) => setEditablePath(["lessonPlan", "evaluation", i, item.question !== undefined ? "question" : "q"], value)}
+                              />
+                            ) : (
+                              <div>{item.question}</div>
+                            )}
                             {item.markingGuide ? (
                               <div className="text-xs text-[var(--text-tertiary)]">
                                 <span className="font-semibold">Marking Guide:</span>{" "}
-                                {item.markingGuide}
+                                {isEditingOutput ? (
+                                  <EditableTextArea
+                                    value={item.markingGuide}
+                                    onChange={(value) => setEditablePath(["lessonPlan", "evaluation", i, "markingGuide"], value)}
+                                    className="mt-1 text-xs text-[var(--text-tertiary)]"
+                                  />
+                                ) : item.markingGuide}
                               </div>
                             ) : null}
                           </div>
@@ -1229,25 +1477,17 @@ export default function GeneratePage() {
                 </div>
               )}
 
-              {!!asStringArray(result.lessonPlan.exitTicket).length && (
+              {!!asStringArray(outputResult.lessonPlan.exitTicket).length && (
                 <div>
                   <p className="text-sm font-semibold text-[var(--text-primary)]">Exit Ticket</p>
-                  <ul className="mt-2 list-disc pl-6 space-y-2 text-sm text-[var(--text-secondary)]">
-                    {asStringArray(result.lessonPlan.exitTicket).map((item, i) => (
-                      <li key={i}>{item}</li>
-                    ))}
-                  </ul>
+                  {renderEditableStringArray(outputResult.lessonPlan.exitTicket, ["lessonPlan", "exitTicket"])}
                 </div>
               )}
 
-              {!!asStringArray(result.lessonPlan.assignment).length && (
+              {!!asStringArray(outputResult.lessonPlan.assignment).length && (
                 <div>
                   <p className="text-sm font-semibold text-[var(--text-primary)]">Assignment</p>
-                  <ul className="mt-2 list-disc pl-6 space-y-2 text-sm text-[var(--text-secondary)]">
-                    {asStringArray(result.lessonPlan.assignment).map((item, i) => (
-                      <li key={i}>{item}</li>
-                    ))}
-                  </ul>
+                  {renderEditableStringArray(outputResult.lessonPlan.assignment, ["lessonPlan", "assignment"])}
                 </div>
               )}
 
@@ -1270,125 +1510,182 @@ export default function GeneratePage() {
             <h3 className="text-xl font-extrabold text-[var(--text-primary)] tracking-tight">
               Lesson Notes
             </h3>
-            {result.lessonNotes ? (
-              typeof result.lessonNotes === "string" ? (
-                <p className="whitespace-pre-wrap text-sm text-[var(--text-secondary)] leading-relaxed">
-                  {result.lessonNotes}
-                </p>
+            {outputResult.lessonNotes ? (
+              typeof outputResult.lessonNotes === "string" ? (
+                isEditingOutput ? (
+                  <EditableTextArea
+                    value={outputResult.lessonNotes}
+                    onChange={(value) => setEditablePath(["lessonNotes"], value)}
+                    className="text-sm text-[var(--text-secondary)] leading-relaxed"
+                  />
+                ) : (
+                  <p className="whitespace-pre-wrap text-sm text-[var(--text-secondary)] leading-relaxed">
+                    {outputResult.lessonNotes}
+                  </p>
+                )
               ) : (
                 <div className="space-y-4">
-                  {result.lessonNotes.introduction && (
+                  {outputResult.lessonNotes.introduction && (
                     <div>
                       <p className="text-sm font-semibold text-[var(--text-primary)]">Introduction</p>
-                      <p className="mt-1 text-sm text-[var(--text-secondary)] leading-relaxed">
-                        {result.lessonNotes.introduction}
-                      </p>
+                      {isEditingOutput ? (
+                        <EditableTextArea
+                          value={outputResult.lessonNotes.introduction}
+                          onChange={(value) => setEditablePath(["lessonNotes", "introduction"], value)}
+                          className="mt-1 text-sm text-[var(--text-secondary)] leading-relaxed"
+                        />
+                      ) : (
+                        <p className="mt-1 text-sm text-[var(--text-secondary)] leading-relaxed">
+                          {outputResult.lessonNotes.introduction}
+                        </p>
+                      )}
                     </div>
                   )}
-                  {result.lessonNotes.keyConcepts?.length ? (
+                  {outputResult.lessonNotes.keyConcepts?.length ? (
                     <div>
                       <p className="text-sm font-semibold text-[var(--text-primary)]">Key Concepts</p>
                       <div className="mt-2 space-y-3">
-                        {result.lessonNotes.keyConcepts.map((concept, i) => (
+                        {outputResult.lessonNotes.keyConcepts.map((concept, i) => (
                           <div key={i} className="border-l-2 border-violet-200 pl-3">
                             <p className="text-sm font-medium text-[var(--text-primary)]">
                               {concept.subheading || `Concept ${i + 1}`}
                             </p>
                             {concept.content && (
-                              <p className="mt-1 text-sm text-[var(--text-secondary)]">{concept.content}</p>
+                              isEditingOutput ? (
+                                <EditableTextArea
+                                  value={concept.content}
+                                  onChange={(value) => setEditablePath(["lessonNotes", "keyConcepts", i, "content"], value)}
+                                  className="mt-1 text-sm text-[var(--text-secondary)]"
+                                />
+                              ) : (
+                                <p className="mt-1 text-sm text-[var(--text-secondary)]">{concept.content}</p>
+                              )
                             )}
                           </div>
                         ))}
                       </div>
                     </div>
                   ) : null}
-                  {result.lessonNotes.workedExamples?.length ? (
+                  {outputResult.lessonNotes.workedExamples?.length ? (
                     <div>
                       <p className="text-sm font-semibold text-[var(--text-primary)]">Worked Examples</p>
                       <div className="mt-2 space-y-4">
-                        {result.lessonNotes.workedExamples.map((example, i) => (
+                        {outputResult.lessonNotes.workedExamples.map((example, i) => (
                           <div key={i} className="rounded-lg border border-[var(--border)] p-3">
                             <p className="text-sm font-medium text-[var(--text-primary)]">
                               {example.title || `Example ${i + 1}`}
                             </p>
                             {example.problem && (
-                              <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                                <span className="font-medium">Problem:</span> {example.problem}
-                              </p>
+                              <div className="mt-1 text-sm text-[var(--text-secondary)]">
+                                <span className="font-medium">Problem:</span>{" "}
+                                {isEditingOutput ? (
+                                  <EditableTextArea
+                                    value={example.problem}
+                                    onChange={(value) => setEditablePath(["lessonNotes", "workedExamples", i, "problem"], value)}
+                                    className="mt-1 text-sm text-[var(--text-secondary)]"
+                                  />
+                                ) : example.problem}
+                              </div>
                             )}
                             {example.steps?.length ? (
                               <div className="mt-2">
                                 <p className="text-sm font-medium text-[var(--text-primary)]">Steps:</p>
-                                <ol className="mt-1 list-decimal pl-5 space-y-1 text-sm text-[var(--text-secondary)]">
-                                  {example.steps.map((step, j) => (
-                                    <li key={j}>{step}</li>
-                                  ))}
-                                </ol>
+                                {isEditingOutput ? (
+                                  <EditableTextArea
+                                    value={example.steps.join("\n")}
+                                    onChange={(value) => setEditablePath(["lessonNotes", "workedExamples", i, "steps"], linesToArray(value))}
+                                    className="mt-1 text-sm text-[var(--text-secondary)]"
+                                  />
+                                ) : (
+                                  <ol className="mt-1 list-decimal pl-5 space-y-1 text-sm text-[var(--text-secondary)]">
+                                    {example.steps.map((step, j) => (
+                                      <li key={j}>{step}</li>
+                                    ))}
+                                  </ol>
+                                )}
                               </div>
                             ) : null}
                             {example.finalAnswer && (
-                              <p className="mt-2 text-sm text-[var(--text-secondary)]">
-                                <span className="font-medium">Final Answer:</span> {example.finalAnswer}
-                              </p>
+                              <div className="mt-2 text-sm text-[var(--text-secondary)]">
+                                <span className="font-medium">Final Answer:</span>{" "}
+                                {isEditingOutput ? (
+                                  <EditableTextArea
+                                    value={example.finalAnswer}
+                                    onChange={(value) => setEditablePath(["lessonNotes", "workedExamples", i, "finalAnswer"], value)}
+                                    className="mt-1 text-sm text-[var(--text-secondary)]"
+                                  />
+                                ) : example.finalAnswer}
+                              </div>
                             )}
                             {example.explanation && (
-                              <p className="mt-2 text-sm text-[var(--text-secondary)]">
-                                <span className="font-medium">Explanation:</span> {example.explanation}
-                              </p>
+                              <div className="mt-2 text-sm text-[var(--text-secondary)]">
+                                <span className="font-medium">Explanation:</span>{" "}
+                                {isEditingOutput ? (
+                                  <EditableTextArea
+                                    value={example.explanation}
+                                    onChange={(value) => setEditablePath(["lessonNotes", "workedExamples", i, "explanation"], value)}
+                                    className="mt-1 text-sm text-[var(--text-secondary)]"
+                                  />
+                                ) : example.explanation}
+                              </div>
                             )}
                           </div>
                         ))}
                       </div>
                     </div>
                   ) : null}
-                  {result.lessonNotes.summaryPoints?.length ? (
+                  {outputResult.lessonNotes.summaryPoints?.length ? (
                     <div>
                       <p className="text-sm font-semibold text-[var(--text-primary)]">Summary Points</p>
-                      <ul className="mt-2 list-disc pl-5 space-y-1 text-sm text-[var(--text-secondary)]">
-                        {result.lessonNotes.summaryPoints.map((point, i) => (
-                          <li key={i}>{point}</li>
-                        ))}
-                      </ul>
+                      {renderEditableStringArray(outputResult.lessonNotes.summaryPoints, ["lessonNotes", "summaryPoints"], "mt-2 list-disc pl-5 space-y-1 text-sm text-[var(--text-secondary)]")}
                     </div>
                   ) : null}
-                  {result.lessonNotes.keyVocabulary?.length ? (
+                  {outputResult.lessonNotes.keyVocabulary?.length ? (
                     <div>
                       <p className="text-sm font-semibold text-[var(--text-primary)]">Key Vocabulary</p>
                       <div className="mt-2 space-y-2">
-                        {result.lessonNotes.keyVocabulary.map((item, i) => (
+                        {outputResult.lessonNotes.keyVocabulary.map((item, i) => (
                           <div key={i} className="flex gap-2 text-sm">
-                            <span className="font-medium text-[var(--text-primary)] min-w-0 flex-1">
-                              {item.word}
-                            </span>
+                            {isEditingOutput ? (
+                              <EditableTextArea
+                                value={item.word ?? ""}
+                                onChange={(value) => setEditablePath(["lessonNotes", "keyVocabulary", i, "word"], value)}
+                                className="text-sm font-medium text-[var(--text-primary)] min-w-0 flex-1"
+                              />
+                            ) : (
+                              <span className="font-medium text-[var(--text-primary)] min-w-0 flex-1">
+                                {item.word}
+                              </span>
+                            )}
                             <span className="text-[var(--text-secondary)]">:</span>
-                            <span className="text-[var(--text-secondary)] flex-1">{item.meaning}</span>
+                            {isEditingOutput ? (
+                              <EditableTextArea
+                                value={item.meaning ?? ""}
+                                onChange={(value) => setEditablePath(["lessonNotes", "keyVocabulary", i, "meaning"], value)}
+                                className="text-sm text-[var(--text-secondary)] flex-1"
+                              />
+                            ) : (
+                              <span className="text-[var(--text-secondary)] flex-1">{item.meaning}</span>
+                            )}
                           </div>
                         ))}
                       </div>
                     </div>
                   ) : null}
 
-                  {result.lessonNotes.realLifeApplications?.length ? (
+                  {outputResult.lessonNotes.realLifeApplications?.length ? (
                     <div>
                       <p className="text-sm font-semibold text-[var(--text-primary)]">
                         Real-Life Applications
                       </p>
-                      <ul className="mt-2 list-disc pl-6 space-y-2 text-sm text-[var(--text-secondary)]">
-                        {result.lessonNotes.realLifeApplications.map((item, i) => (
-                          <li key={i}>{item}</li>
-                        ))}
-                      </ul>
+                      {renderEditableStringArray(outputResult.lessonNotes.realLifeApplications, ["lessonNotes", "realLifeApplications"])}
                     </div>
                   ) : null}
 
-                  {result.lessonNotes.exitTicket?.length ? (
+                  {outputResult.lessonNotes.exitTicket?.length ? (
                     <div>
                       <p className="text-sm font-semibold text-[var(--text-primary)]">Exit Ticket</p>
-                      <ul className="mt-2 list-disc pl-6 space-y-2 text-sm text-[var(--text-secondary)]">
-                        {result.lessonNotes.exitTicket.map((item, i) => (
-                          <li key={i}>{item}</li>
-                        ))}
-                      </ul>
+                      {renderEditableStringArray(outputResult.lessonNotes.exitTicket, ["lessonNotes", "exitTicket"])}
                     </div>
                   ) : null}
                 </div>
@@ -1398,13 +1695,13 @@ export default function GeneratePage() {
             )}
           </section>
 
-          {Array.isArray(result.references) && result.references.length ? (
+          {Array.isArray(outputResult.references) && outputResult.references.length ? (
             <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm space-y-2">
               <h3 className="text-xl font-extrabold text-[var(--text-primary)] tracking-tight">
                 References
               </h3>
               <ul className="list-disc pl-6 space-y-2 text-sm text-[var(--text-secondary)]">
-                {result.references.map((ref, i) => (
+                {outputResult.references.map((ref, i) => (
                   <li key={i}>{ref}</li>
                 ))}
               </ul>
@@ -1436,7 +1733,7 @@ export default function GeneratePage() {
                   return (
                     <div
                       key={i}
-                      className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm space-y-4"
+                      className="w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 text-base shadow-sm space-y-4 md:p-5"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
@@ -1489,7 +1786,7 @@ export default function GeneratePage() {
                           </div>
                         </>
                       ) : (
-                        <div className="rounded-xl border bg-slate-50 p-5 text-sm text-[var(--text-secondary)]">
+                        <div className="rounded-xl border bg-slate-50 p-5 text-base text-[var(--text-secondary)] md:text-sm">
                           <div className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-700">
                             Visual Guide
                           </div>
@@ -1500,16 +1797,16 @@ export default function GeneratePage() {
                       )}
 
                       {bullets.length ? (
-                        <ul className="list-disc pl-6 space-y-2 text-[var(--text-primary)] font-medium">
+                        <ul className="list-disc pl-6 space-y-2 text-base text-[var(--text-primary)] font-medium">
                           {bullets.map((b, j) => (
                             <li key={j}>{b}</li>
                           ))}
                         </ul>
                       ) : (
-                        <p className="text-sm text-[var(--text-secondary)]">No bullet points.</p>
+                        <p className="text-base text-[var(--text-secondary)] md:text-sm">No bullet points.</p>
                       )}
 
-                      <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--card-alt)] p-3 text-sm text-[var(--text-primary)]">
+                      <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--card-alt)] p-3 text-base text-[var(--text-primary)] md:text-sm">
                         <div>
                           <span className="font-semibold">Teacher Prompt:</span> {teacherPrompt}
                         </div>
@@ -1518,7 +1815,7 @@ export default function GeneratePage() {
                         </div>
                       </div>
 
-                      <div className="flex flex-wrap gap-4 text-sm">
+                      <div className="flex flex-wrap gap-4 text-base md:text-sm">
                         <a
                           href={youtubeSearchUrl(videoQuery)}
                           target="_blank"
@@ -1529,7 +1826,7 @@ export default function GeneratePage() {
                         </a>
                       </div>
 
-                      <div className="rounded-xl border bg-yellow-50 p-3 text-sm text-[var(--text-primary)]">
+                      <div className="rounded-xl border bg-yellow-50 p-3 text-base text-[var(--text-primary)] md:text-sm">
                         <span className="font-bold">👩🏽‍🏫 Classroom Activity:</span>{" "}
                         {activity}
                       </div>
@@ -1655,13 +1952,13 @@ export default function GeneratePage() {
             </section>
           ) : null}
 
-          {Array.isArray(result.liveApplications) && result.liveApplications.length ? (
+          {Array.isArray(outputResult.liveApplications) && outputResult.liveApplications.length ? (
             <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm space-y-2">
               <h3 className="text-xl font-extrabold text-[var(--text-primary)] tracking-tight">
                 Live / Real-World Applications
               </h3>
               <ul className="list-disc pl-6 space-y-2 text-sm text-[var(--text-secondary)]">
-                {result.liveApplications.map((item, i) => (
+                {outputResult.liveApplications.map((item, i) => (
                   <li key={i}>{item}</li>
                 ))}
               </ul>

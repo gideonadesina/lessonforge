@@ -85,8 +85,10 @@ function SidebarCard({
       ].join(" ")}
     >
       <div className="mb-4 flex items-center justify-between gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card-alt)] px-3 py-3">
-        <div className={collapsed ? "w-full text-center" : "min-w-0"}>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-700">LessonForge</p>
+        <Link href="/principal" className={collapsed ? "flex w-full justify-center" : "min-w-0"}>
+          <img src="/lessonforge_logo_primary.svg" alt="LessonForge" height="48" />
+        </Link>
+        <div className={collapsed ? "hidden" : "min-w-0"}>
           {!collapsed ? (
             <p className="truncate text-sm font-semibold text-[var(--text-primary)]">Principal Command Center</p>
           ) : null}

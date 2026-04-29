@@ -25,11 +25,8 @@ export function Navbar() {
       }`}
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-        <Link href="/" className="group flex items-center gap-3 text-slate-900">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-purple-600 to-violet-500 text-white shadow-lg shadow-purple-700/20 transition-transform duration-300 group-hover:scale-105">
-            LF
-          </span>
-          <span className="text-base font-semibold tracking-tight">LessonForge</span>
+        <Link href="/" className="group flex items-center">
+          <img src="/lessonforge_logo_horizontal.svg" alt="LessonForge" height="36" />
         </Link>
 
         <nav className="hidden items-center gap-8 md:flex">

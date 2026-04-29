@@ -1,0 +1,9 @@
+<svg width="512" height="512" viewBox="0 0 512 512" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>LessonForge</title>
+  <desc>LessonForge icon — open book with spark</desc>
+  <rect width="512" height="512" rx="112" fill="#6C63FF"/>
+  <path d="M136,340 L252,295 L252,190 L136,235 Z" fill="white"/>
+  <path d="M252,295 L368,340 L368,235 L252,190 Z" fill="white" opacity="0.78"/>
+  <line x1="252" y1="183" x2="252" y2="348" stroke="#6C63FF" stroke-width="9"/>
+  <path d="M256,178 L270,138 L284,178 L324,192 L284,206 L270,246 L256,206 L216,192 Z" fill="white"/>
+</svg>

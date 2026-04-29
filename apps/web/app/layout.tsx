@@ -5,57 +5,58 @@ import { ToastProvider } from "@/components/ui/ToastProvider";
 import { NetworkProvider } from "@/components/network/NetworkProvider";
 import ThemeInitializer from "@/components/theme/ThemeInitializer";
 
+const defaultDescription =
+  "LessonForge helps teachers across Africa generate complete lesson packs - lesson plans, lesson notes, slides, quizzes and exams - aligned to NERDC, WAEC, NECO, Cambridge and local curricula. Free to start.";
+
 export const metadata: Metadata = {
   metadataBase: new URL("https://lessonforge.app"),
 
   title: {
-    default: "LessonForge – AI Lesson Plan Generator for Teachers",
+    default: "LessonForge - AI Lesson Planning for African Teachers",
     template: "%s | LessonForge",
   },
 
-  description:
-    "Generate complete lesson packs: objectives, lesson notes, slides, quizzes, and classroom activities. Built for WAEC, NECO, Cambridge & Nigeria-friendly teaching.",
+  description: defaultDescription,
 
   applicationName: "LessonForge",
 
   keywords: [
     "lesson plan generator",
-    "AI lesson planner",
-    "lesson notes generator",
-    "teacher lesson plan software",
+    "AI lesson plan",
+    "lesson note generator",
+    "African teachers",
+    "Nigerian teachers",
     "WAEC lesson plan",
-    "NECO lesson plan",
-    "Cambridge lesson plan",
-    "Nigeria teachers",
+    "NERDC curriculum",
+    "worksheet generator",
+    "exam question generator",
+    "teacher AI tools Africa",
   ],
 
   icons: {
-    icon: "/favicon.png",
+    icon: [
+      { url: "/favicon.ico", sizes: "32x32" },
+      { url: "/favicon-16x16.png", sizes: "16x16" },
+      { url: "/favicon-32x32.png", sizes: "32x32" },
+    ],
+    apple: "/apple-touch-icon.png",
+    other: [{ rel: "manifest", url: "/site.webmanifest" }],
   },
 
   openGraph: {
-    title: "LessonForge – AI Lesson Plan Generator for Teachers",
-    description:
-      "Generate complete lesson packs: notes, slides, quizzes, and activities. Built for WAEC, NECO, Cambridge & Nigeria-friendly teaching.",
+    title: "LessonForge - AI Lesson Planning for African Teachers",
+    description: defaultDescription,
     url: "https://lessonforge.app",
     siteName: "LessonForge",
+    images: [{ url: "/og-image.png", width: 1200, height: 630 }],
+    locale: "en_NG",
     type: "website",
-    images: [
-      {
-        url: "/og.png",
-        width: 1200,
-        height: 630,
-        alt: "LessonForge",
-      },
-    ],
   },
 
   twitter: {
     card: "summary_large_image",
-    title: "LessonForge – AI Lesson Plan Generator for Teachers",
-    description:
-      "Generate lesson notes, slides, quizzes, and classroom activities in seconds.",
-    images: ["/og.png"],
+    title: "LessonForge - AI Lesson Planning for African Teachers",
+    description: defaultDescription,
   },
 
   alternates: {
@@ -95,9 +96,7 @@ export default function RootLayout({
         <ThemeInitializer />
 
         <ToastProvider>
-          <NetworkProvider>
-            {children}
-          </NetworkProvider>
+          <NetworkProvider>{children}</NetworkProvider>
         </ToastProvider>
       </body>
     </html>

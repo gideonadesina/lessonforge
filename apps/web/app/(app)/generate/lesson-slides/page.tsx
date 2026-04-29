@@ -108,9 +108,98 @@ type FormData = {
 // ─────────────────────────────────────────────────────────────
 
 type JsonRecord = Record<string, unknown>;
+type EditableSlide = SlideDeck["slides"][number] & JsonRecord;
 
 const isRecord = (value: unknown): value is JsonRecord =>
   typeof value === "object" && value !== null;
+
+function cloneDeck(deck: SlideDeck): SlideDeck {
+  return JSON.parse(JSON.stringify(deck)) as SlideDeck;
+}
+
+function getEditableSlides(deck: SlideDeck | null): EditableSlide[] {
+  return ((deck?.slides ?? []) as EditableSlide[]);
+}
+
+function stringifyList(value: unknown): string {
+  return Array.isArray(value)
+    ? value
+        .map((item) => {
+          if (typeof item === "string") return item;
+          if (isRecord(item)) {
+            return Object.entries(item)
+              .map(([key, val]) => `${key}: ${String(val ?? "")}`)
+              .join(" - ");
+          }
+          return String(item ?? "");
+        })
+        .filter(Boolean)
+        .join("\n")
+    : "";
+}
+
+function getSlideTitle(slide: EditableSlide, index: number): string {
+  return String(slide.title ?? slide.question ?? slide.prompt ?? `Slide ${index + 1}`);
+}
+
+function getSlideBody(slide: EditableSlide): string {
+  const direct = slide.content ?? slide.body ?? slide.explanation ?? slide.subtitle ?? slide.key_point ?? slide.analogy;
+  if (typeof direct === "string" && direct.trim()) return direct;
+
+  const listBody =
+    stringifyList(slide.objectives) ||
+    stringifyList(slide.takeaways) ||
+    stringifyList(slide.steps) ||
+    stringifyList(slide.terms) ||
+    stringifyList(slide.choices) ||
+    stringifyList(slide.guiding_questions) ||
+    stringifyList(slide.sentence_starters);
+
+  return listBody || String(slide.visual_suggestion ?? "");
+}
+
+function getBodyPatchKey(slide: EditableSlide): string {
+  if ("content" in slide) return "content";
+  if ("body" in slide) return "body";
+  if ("explanation" in slide) return "explanation";
+  if ("subtitle" in slide) return "subtitle";
+  if ("key_point" in slide) return "key_point";
+  if ("objectives" in slide) return "objectives";
+  if ("takeaways" in slide) return "takeaways";
+  if ("guiding_questions" in slide) return "guiding_questions";
+  if ("sentence_starters" in slide) return "sentence_starters";
+  return "content";
+}
+
+function exportTextFile(filename: string, content: string, type = "text/plain;charset=utf-8") {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function deckToText(deck: SlideDeck): string {
+  return [
+    deck.deck_title,
+    `Subject: ${deck.subject}`,
+    `Grade: ${deck.grade}`,
+    "",
+    ...getEditableSlides(deck).flatMap((slide, index) => [
+      `Slide ${index + 1}: ${getSlideTitle(slide, index)}`,
+      getSlideBody(slide),
+      "",
+    ]),
+  ].join("\n");
+}
+
+function getSafeFilenamePart(value: string) {
+  return value.replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_") || "lesson";
+}
 
 export default function LessonSlidesPage() {
   const supabase = createBrowserSupabase();
@@ -131,6 +220,10 @@ export default function LessonSlidesPage() {
   const SLIDES_CREDIT_COST = 2;
   const [error, setError] = useState<string | null>(null);
   const [deck, setDeck] = useState<SlideDeck | null>(null);
+  const [editableDeck, setEditableDeck] = useState<SlideDeck | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exportingPptx, setExportingPptx] = useState(false);
 
   useEffect(() => {
     // reset grade when school level changes
@@ -153,6 +246,8 @@ export default function LessonSlidesPage() {
   const topicSuggestions = TOPIC_SUGGESTIONS[formData.subject] ?? [];
   const selectedDuration = DURATION_OPTIONS.find((d) => d.value === formData.duration)!;
   const canSubmit = !loading && !!formData.topic && !!formData.subject && !!formData.grade;
+  const outputDeck = editableDeck ?? deck;
+  const outputSlides = getEditableSlides(outputDeck);
 
   const getDeckFromResponse = (payload: unknown): SlideDeck | null => {
     if (!isRecord(payload)) return null;
@@ -179,11 +274,119 @@ export default function LessonSlidesPage() {
     return typeof payload.error === "string" ? payload.error : null;
   };
 
+  const updateSlide = (index: number, patch: JsonRecord) => {
+    setEditableDeck((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        slides: prev.slides.map((slide, slideIndex) =>
+          slideIndex === index ? ({ ...(slide as EditableSlide), ...patch } as SlideDeck["slides"][number]) : slide
+        ),
+      };
+    });
+  };
+
+  const updateSlideBody = (index: number, value: string) => {
+    const slide = outputSlides[index];
+    if (!slide) return;
+    const key = getBodyPatchKey(slide);
+    if (
+      key === "objectives" ||
+      key === "takeaways" ||
+      key === "guiding_questions" ||
+      key === "sentence_starters"
+    ) {
+      updateSlide(index, { [key]: value.split("\n").map((item) => item.trim()).filter(Boolean) });
+    } else {
+      updateSlide(index, { [key]: value });
+    }
+  };
+
+  const resetEdits = () => {
+    if (!deck) return;
+    if (window.confirm("Reset all edits? This cannot be undone.")) {
+      setEditableDeck(cloneDeck(deck));
+    }
+  };
+
+  const exportToPptx = async () => {
+    if (!outputDeck || exportingPptx) return;
+    setShowExportMenu(false);
+    setExportingPptx(true);
+    try {
+      const PptxGenJS = (await import("pptxgenjs")).default;
+      const pptx = new PptxGenJS();
+      pptx.layout = "LAYOUT_WIDE";
+
+      getEditableSlides(outputDeck).forEach((slideItem, index) => {
+        const slide = pptx.addSlide();
+        slide.background = { color: "F0F4FF" };
+        slide.addText(getSlideTitle(slideItem, index), {
+          x: 0.4, y: 0.3, w: 9.2, h: 1.0,
+          fontSize: 26, bold: true, color: "1A1A2E"
+        });
+        slide.addText(getSlideBody(slideItem), {
+          x: 0.4, y: 1.5, w: 9.2, h: 4.8,
+          fontSize: 15, color: "2D2D2D", valign: "top",
+          breakLine: true
+        });
+      });
+
+      const finalSlide = pptx.addSlide();
+      finalSlide.background = { color: "F0F4FF" };
+      finalSlide.addText("Generated by LessonForge ", {
+        x: 0.4,
+        y: 2.6,
+        w: 12.5,
+        h: 0.8,
+        align: "center",
+        fontSize: 22,
+        bold: true,
+        color: "6C63FF",
+      });
+
+      await pptx.writeFile({
+        fileName: `LessonForge_${getSafeFilenamePart(outputDeck.deck_title || formData.topic)}_Slides.pptx`
+      });
+    } finally {
+      setExportingPptx(false);
+    }
+  };
+
+  const exportDeckAs = (format: "txt" | "html" | "doc") => {
+    if (!outputDeck) return;
+    setShowExportMenu(false);
+    const safeName = getSafeFilenamePart(outputDeck.deck_title || formData.topic);
+    const text = deckToText(outputDeck);
+    if (format === "txt") {
+      exportTextFile(`LessonForge_${safeName}_Slides.txt`, text);
+      return;
+    }
+
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${outputDeck.deck_title}</title></head><body><pre>${text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")}</pre></body></html>`;
+    exportTextFile(
+      `LessonForge_${safeName}_Slides.${format === "doc" ? "doc" : "html"}`,
+      html,
+      format === "doc" ? "application/msword;charset=utf-8" : "text/html;charset=utf-8"
+    );
+  };
+
+  const exportDeckPdf = () => {
+    if (!outputDeck) return;
+    setShowExportMenu(false);
+    window.print();
+  };
+
  const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
   setLoading(true);
   setError(null);
   setDeck(null);
+  setEditableDeck(null);
+  setIsEditing(false);
   setLoadingStep(0);
 
   try {
@@ -267,6 +470,7 @@ export default function LessonSlidesPage() {
           "lesson-slides"
         );
         setDeck(enrichedRetryDeck);
+        setEditableDeck(cloneDeck(enrichedRetryDeck));
         track("lesson_slides_generated", {
           user_role: "teacher",
           active_role: "teacher",
@@ -305,6 +509,7 @@ export default function LessonSlidesPage() {
       "lesson-slides"
     );
     setDeck(enrichedDeck);
+    setEditableDeck(cloneDeck(enrichedDeck));
     track("lesson_slides_generated", {
       user_role: "teacher",
       active_role: "teacher",
@@ -468,8 +673,45 @@ export default function LessonSlidesPage() {
   }
 
   // ── Deck result ─────────────────────────────────────────
-  if (deck) {
-    return <SlideViewer deck={deck} />;
+  if (outputDeck) {
+    return (
+      <div className="lesson-slides-result min-h-[420px] md:min-h-screen">
+        <style>{`
+          @media (max-width: 767px) {
+            .lesson-slides-result > div > div {
+              max-width: none !important;
+              padding-left: 0 !important;
+              padding-right: 0 !important;
+            }
+
+            .lesson-slides-result section.relative {
+              padding-left: 0 !important;
+              padding-right: 0 !important;
+            }
+
+            .lesson-slides-result [data-slide] > div {
+              width: 100% !important;
+              min-height: 500px !important;
+              border-radius: 0 !important;
+            }
+
+            .lesson-slides-result header .relative > .absolute {
+              left: auto !important;
+              right: 0 !important;
+              top: auto !important;
+              bottom: 100% !important;
+              z-index: 9999 !important;
+              min-width: 220px !important;
+            }
+
+            .lesson-slides-result header .relative > .absolute p {
+              white-space: nowrap !important;
+            }
+          }
+        `}</style>
+        <SlideViewer deck={outputDeck} />
+      </div>
+    );
   }
 
   // ── Form ────────────────────────────────────────────────

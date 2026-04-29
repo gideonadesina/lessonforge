@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { AnnouncementBar } from "@/components/landing/AnnouncementBar";
 import { BenefitsSection } from "@/components/landing/BenefitsSection";
 import { CTA } from "@/components/landing/CTA";
@@ -31,10 +32,79 @@ export default function LandingPage() {
         <PlanningIntelligence />
         <SolutionsSplit />
         <Testimonials />
+        <ExploreToolsSection />
         <ResourcesSection />
         <CTA />
       </main>
       <Footer />
     </div>
+  );
+}
+
+function ExploreToolsSection() {
+  const tools = [
+    {
+      title: "AI Lesson Plan Generator",
+      href: "/lesson-plan-generator",
+      description: "Generate curriculum-aligned lesson plans in seconds.",
+    },
+    {
+      title: "Lesson Note Generator",
+      href: "/lesson-note-generator",
+      description: "Write detailed notes for African classrooms.",
+    },
+    {
+      title: "Worksheet Generator",
+      href: "/worksheet-generator",
+      description: "Create print-ready worksheets with answers.",
+    },
+    {
+      title: "Exam Question Generator",
+      href: "/exam-question-generator",
+      description: "Build exams and marking schemes quickly.",
+    },
+    {
+      title: "AI Tools for African Teachers",
+      href: "/ai-tools-for-african-teachers",
+      description: "Explore the full LessonForge teaching platform.",
+    },
+    {
+      title: "Teaching Blog",
+      href: "/blog",
+      description: "Read practical guides for African teachers.",
+    },
+  ];
+
+  return (
+    <section className="px-4 py-20 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mx-auto max-w-3xl text-center">
+          <div className="text-sm font-black uppercase tracking-[0.22em] text-[#6C63FF]">
+            Explore tools
+          </div>
+          <h2 className="mt-4 text-4xl font-black tracking-tight text-slate-950 sm:text-5xl">
+            Explore LessonForge Tools
+          </h2>
+          <p className="mt-5 text-lg leading-8 text-slate-600">
+            Start with the resource you need today, then turn it into a full lesson pack.
+          </p>
+        </div>
+        <div className="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+          {tools.map((tool) => (
+            <Link
+              key={tool.href}
+              href={tool.href}
+              className="group rounded-[24px] border border-slate-200 bg-white p-6 shadow-[0_22px_70px_-54px_rgba(15,23,42,0.65)] transition hover:-translate-y-1 hover:shadow-[0_30px_90px_-52px_rgba(108,99,255,0.85)]"
+            >
+              <h3 className="text-lg font-black text-slate-950">{tool.title}</h3>
+              <p className="mt-3 text-sm leading-6 text-slate-600">{tool.description}</p>
+              <span className="mt-5 inline-flex text-sm font-black text-[#6C63FF] transition group-hover:translate-x-1">
+                Open tool →
+              </span>
+            </Link>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
