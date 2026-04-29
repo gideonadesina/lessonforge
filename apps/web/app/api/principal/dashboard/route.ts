@@ -18,7 +18,9 @@ import {
 } from "@/lib/principal/utils";
 import type {
   BillingHistoryItem,
+  PrincipalActivityType,
   PrincipalDashboardPayload,
+  PrincipalGeneratedItem,
   TeacherListItem,
 } from "@/lib/principal/types";
  
@@ -53,6 +55,29 @@ type ProfileRow = {
 type ActivityRow = {
   user_id: string;
   created_at: string | null;
+};
+
+type LessonActivityRow = ActivityRow & {
+  id: string;
+  type?: string | null;
+  subject?: string | null;
+  topic?: string | null;
+  grade?: string | null;
+};
+
+type WorksheetActivityRow = ActivityRow & {
+  id: string;
+  subject?: string | null;
+  topic?: string | null;
+  grade?: string | null;
+};
+
+type ExamActivityRow = ActivityRow & {
+  id: string;
+  subject?: string | null;
+  topic_or_coverage?: string | null;
+  class_or_grade?: string | null;
+  exam_title?: string | null;
 };
 
 type SchoolCreditsRow = {
@@ -94,6 +119,40 @@ function pickLatestDate(...dates: Array<string | null | undefined>) {
  
   if (!validTimes.length) return null;
   return new Date(Math.max(...validTimes)).toISOString();
+}
+
+function normalizeActivityType(type: string | null | undefined): PrincipalActivityType {
+  const value = String(type ?? "").toLowerCase();
+  if (value === "slides" || value === "lesson_slides" || value === "slide_deck") return "slides";
+  if (value === "worksheet" || value === "worksheets") return "worksheet";
+  if (value === "exam" || value === "exam_builder") return "exam";
+  return "lesson_pack";
+}
+
+function defaultCreditsForType(type: PrincipalActivityType) {
+  if (type === "lesson_pack") return 4;
+  if (type === "slides") return 2;
+  return 1;
+}
+
+function readCreditValue(row: Record<string, unknown>) {
+  const candidates = [
+    row.credits_used,
+    row.credits_cost,
+    row.credit_cost,
+    row.credits,
+    row.cost,
+  ];
+  for (const value of candidates) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric > 0) return numeric;
+  }
+  return null;
+}
+
+function toDisplayText(value: string | null | undefined) {
+  const text = String(value ?? "").trim();
+  return text || null;
 }
  
 async function getSlotLimit(
@@ -233,19 +292,17 @@ export async function GET(req: NextRequest) {
       }
     }
  
-    const lessonCount = new Map<string, number>();
-    const worksheetCount = new Map<string, number>();
-    const lessonLastActive = new Map<string, string | null>();
-    const worksheetLastActive = new Map<string, string | null>();
- 
+    const generatedItemsByTeacher = new Map<string, PrincipalGeneratedItem[]>();
+    const creditsUsedFromUsageLogs = new Map<string, number>();
+    const creditsUsedFromItems = new Map<string, number>();
+
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    let weeklyLessons = 0;
-    let weeklyWorksheets = 0;
- 
+    const allGeneratedItems: PrincipalGeneratedItem[] = [];
+
     if (teacherIds.length) {
       const lessonRes = await admin
         .from("lessons")
-        .select("user_id, created_at")
+        .select("id, user_id, type, subject, topic, grade, created_at")
         .in("user_id", teacherIds)
         .order("created_at", { ascending: false })
         .limit(5000);
@@ -257,26 +314,27 @@ export async function GET(req: NextRequest) {
         );
       }
  
-      for (const row of (lessonRes.data ?? []) as ActivityRow[]) {
+      for (const row of (lessonRes.data ?? []) as LessonActivityRow[]) {
         const userId = String(row.user_id ?? "");
         if (!userId) continue;
- 
-        lessonCount.set(userId, (lessonCount.get(userId) ?? 0) + 1);
- 
-        const createdAt = row.created_at ?? null;
-        lessonLastActive.set(userId, pickLatestDate(lessonLastActive.get(userId), createdAt));
- 
-        if (createdAt) {
-          const created = new Date(createdAt);
-          if (Number.isFinite(created.getTime()) && created >= sevenDaysAgo) {
-            weeklyLessons += 1;
-          }
-        }
+
+        const type = normalizeActivityType(row.type);
+        const item: PrincipalGeneratedItem = {
+          id: String(row.id),
+          userId,
+          type,
+          subject: toDisplayText(row.subject),
+          topic: toDisplayText(row.topic),
+          grade: toDisplayText(row.grade),
+          createdAt: row.created_at ?? null,
+          creditsUsed: defaultCreditsForType(type),
+        };
+        allGeneratedItems.push(item);
       }
- 
+
       const worksheetRes = await admin
         .from("worksheets")
-        .select("user_id, created_at")
+        .select("id, user_id, subject, topic, grade, created_at")
         .in("user_id", teacherIds)
         .order("created_at", { ascending: false })
         .limit(5000);
@@ -288,26 +346,93 @@ export async function GET(req: NextRequest) {
         );
       }
  
-      for (const row of (worksheetRes.data ?? []) as ActivityRow[]) {
+      for (const row of (worksheetRes.data ?? []) as WorksheetActivityRow[]) {
         const userId = String(row.user_id ?? "");
         if (!userId) continue;
- 
-        worksheetCount.set(userId, (worksheetCount.get(userId) ?? 0) + 1);
- 
-        const createdAt = row.created_at ?? null;
-        worksheetLastActive.set(
+
+        allGeneratedItems.push({
+          id: String(row.id),
           userId,
-          pickLatestDate(worksheetLastActive.get(userId), createdAt)
+          type: "worksheet",
+          subject: toDisplayText(row.subject),
+          topic: toDisplayText(row.topic),
+          grade: toDisplayText(row.grade),
+          createdAt: row.created_at ?? null,
+          creditsUsed: defaultCreditsForType("worksheet"),
+        });
+      }
+
+      const examRes = await admin
+        .from("exams")
+        .select("id, user_id, subject, topic_or_coverage, class_or_grade, exam_title, created_at")
+        .in("user_id", teacherIds)
+        .order("created_at", { ascending: false })
+        .limit(5000);
+
+      if (examRes.error && !isMissingTableOrColumnError(examRes.error)) {
+        return NextResponse.json(
+          { ok: false, error: examRes.error.message },
+          { status: 500 }
         );
- 
-        if (createdAt) {
-          const created = new Date(createdAt);
-          if (Number.isFinite(created.getTime()) && created >= sevenDaysAgo) {
-            weeklyWorksheets += 1;
-          }
+      }
+
+      for (const row of (examRes.data ?? []) as ExamActivityRow[]) {
+        const userId = String(row.user_id ?? "");
+        if (!userId) continue;
+
+        allGeneratedItems.push({
+          id: String(row.id),
+          userId,
+          type: "exam",
+          subject: toDisplayText(row.subject),
+          topic: toDisplayText(row.topic_or_coverage) ?? toDisplayText(row.exam_title),
+          grade: toDisplayText(row.class_or_grade),
+          createdAt: row.created_at ?? null,
+          creditsUsed: defaultCreditsForType("exam"),
+        });
+      }
+
+      const usageLogRes = await admin
+        .from("usage_logs")
+        .select("*")
+        .in("user_id", teacherIds)
+        .limit(5000);
+
+      if (usageLogRes.error && !isMissingTableOrColumnError(usageLogRes.error)) {
+        return NextResponse.json(
+          { ok: false, error: usageLogRes.error.message },
+          { status: 500 }
+        );
+      }
+
+      for (const row of (usageLogRes.data ?? []) as Array<Record<string, unknown>>) {
+        const userId = String(row.user_id ?? "");
+        if (!userId) continue;
+        const creditValue = readCreditValue(row);
+        if (creditValue !== null) {
+          creditsUsedFromUsageLogs.set(userId, (creditsUsedFromUsageLogs.get(userId) ?? 0) + creditValue);
         }
       }
     }
+
+    allGeneratedItems.sort((a, b) => {
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      return bTime - aTime;
+    });
+
+    for (const item of allGeneratedItems) {
+      const current = generatedItemsByTeacher.get(item.userId) ?? [];
+      current.push(item);
+      generatedItemsByTeacher.set(item.userId, current);
+      creditsUsedFromItems.set(item.userId, (creditsUsedFromItems.get(item.userId) ?? 0) + item.creditsUsed);
+    }
+
+    const weeklyItems = allGeneratedItems.filter((item) => {
+      if (!item.createdAt) return false;
+      const created = new Date(item.createdAt);
+      return Number.isFinite(created.getTime()) && created >= sevenDaysAgo;
+    });
  
     const teachers: TeacherListItem[] = teacherMembers.map((member) => {
       const profile = profileMap.get(member.user_id);
@@ -317,11 +442,11 @@ export async function GET(req: NextRequest) {
       });
  
       const name = profile?.full_name || profile?.email || "Teacher";
-      const lastActiveAt = pickLatestDate(
-        member.last_active_at,
-        lessonLastActive.get(member.user_id),
-        worksheetLastActive.get(member.user_id)
-      );
+      const generatedItems = generatedItemsByTeacher.get(member.user_id) ?? [];
+      const lastGeneratedAt = generatedItems[0]?.createdAt ?? null;
+      const lastActiveAt = pickLatestDate(member.last_active_at, lastGeneratedAt);
+      const countType = (type: PrincipalActivityType) =>
+        generatedItems.filter((item) => item.type === type).length;
  
       return {
         userId: member.user_id,
@@ -329,10 +454,17 @@ export async function GET(req: NextRequest) {
         email: profile?.email ?? null,
         role: member.role ?? null,
         status,
-        lessonsGenerated: lessonCount.get(member.user_id) ?? 0,
-        worksheetsCreated: worksheetCount.get(member.user_id) ?? 0,
+        lessonsGenerated: countType("lesson_pack"),
+        slidesGenerated: countType("slides"),
+        worksheetsCreated: countType("worksheet"),
+        examsGenerated: countType("exam"),
+        creditsUsed:
+          creditsUsedFromUsageLogs.get(member.user_id) ??
+          creditsUsedFromItems.get(member.user_id) ??
+          0,
         lastActiveAt,
         joinedAt: member.created_at ?? null,
+        generatedItems,
       };
     });
  
@@ -340,7 +472,11 @@ export async function GET(req: NextRequest) {
       (sum, t) => sum + t.lessonsGenerated,
       0
     );
-    const activeTeachers = teachers.filter((t) => t.status === "active").length;
+    const totalSlidesGenerated = teachers.reduce((sum, t) => sum + t.slidesGenerated, 0);
+    const totalWorksheetsGenerated = teachers.reduce((sum, t) => sum + t.worksheetsCreated, 0);
+    const totalExamsGenerated = teachers.reduce((sum, t) => sum + t.examsGenerated, 0);
+    const totalCreditsUsed = teachers.reduce((sum, t) => sum + t.creditsUsed, 0);
+    const activeTeachers = teachers.filter((t) => t.lessonsGenerated > 0).length;
     const slotLimit = await getSlotLimit(admin, schoolId, Math.max(teachers.length, 1));
     const billingHistory = await getBillingHistory(admin, schoolId);
     const latestPaid = billingHistory.find((x) => x.status === "paid");
@@ -402,6 +538,76 @@ export async function GET(req: NextRequest) {
         ? Math.round((usedSchoolCredits / totalSchoolCredits) * 100)
         : 0;
 
+    const profileForItem = (userId: string) => profileMap.get(userId);
+    const recentActivity = allGeneratedItems.slice(0, 20).map((item) => ({
+      ...item,
+      teacherName:
+        profileForItem(item.userId)?.full_name ||
+        profileForItem(item.userId)?.email ||
+        "Teacher",
+      teacherEmail: profileForItem(item.userId)?.email ?? null,
+    }));
+
+    const weeklyByTeacher = new Map<string, { generatedCount: number; creditsUsed: number }>();
+    const weeklyBySubject = new Map<string, number>();
+    for (const item of weeklyItems) {
+      const teacherWeekly = weeklyByTeacher.get(item.userId) ?? {
+        generatedCount: 0,
+        creditsUsed: 0,
+      };
+      teacherWeekly.generatedCount += 1;
+      teacherWeekly.creditsUsed += item.creditsUsed;
+      weeklyByTeacher.set(item.userId, teacherWeekly);
+
+      const subject = item.subject ?? "Unspecified";
+      weeklyBySubject.set(subject, (weeklyBySubject.get(subject) ?? 0) + 1);
+    }
+
+    const mostActiveTeacherEntry = Array.from(weeklyByTeacher.entries()).sort(
+      (a, b) => b[1].creditsUsed - a[1].creditsUsed || b[1].generatedCount - a[1].generatedCount
+    )[0];
+    const mostGeneratedSubjectEntry = Array.from(weeklyBySubject.entries()).sort(
+      (a, b) => b[1] - a[1]
+    )[0];
+
+    const wasteByTeacherTopic = new Map<string, { userId: string; topic: string; count: number }>();
+    for (const item of allGeneratedItems) {
+      const topic = item.topic?.trim();
+      if (!topic) continue;
+      const key = `${item.userId}:${topic.toLowerCase()}`;
+      const existing = wasteByTeacherTopic.get(key) ?? { userId: item.userId, topic, count: 0 };
+      existing.count += 1;
+      wasteByTeacherTopic.set(key, existing);
+    }
+
+    const possibleCreditWaste = Array.from(wasteByTeacherTopic.values())
+      .filter((item) => item.count > 3)
+      .map((item) => ({
+        userId: item.userId,
+        teacherName:
+          profileForItem(item.userId)?.full_name ||
+          profileForItem(item.userId)?.email ||
+          "Teacher",
+        topic: item.topic,
+        count: item.count,
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    const lowActivityTeachers = teachers
+      .filter((teacher) => {
+        if (teacher.generatedItems.length > 0 || !teacher.joinedAt) return false;
+        const joined = new Date(teacher.joinedAt);
+        if (!Number.isFinite(joined.getTime())) return false;
+        return joined <= sevenDaysAgo;
+      })
+      .map((teacher) => ({
+        userId: teacher.userId,
+        name: teacher.name,
+        email: teacher.email,
+        joinedAt: teacher.joinedAt,
+      }));
+
     const payload = {
       school: {
         id: schoolId,
@@ -415,9 +621,35 @@ export async function GET(req: NextRequest) {
         totalTeachers: teachers.length,
         activeTeachers,
         totalLessonsGenerated,
-        weeklyActivityCount: weeklyLessons + weeklyWorksheets,
+        totalSlidesGenerated,
+        totalWorksheetsGenerated,
+        totalExamsGenerated,
+        totalCreditsUsed,
+        weeklyActivityCount: weeklyItems.length,
       },
       teachers,
+      recentActivity,
+      insights: {
+        mostActiveTeacherThisWeek: mostActiveTeacherEntry
+          ? {
+              userId: mostActiveTeacherEntry[0],
+              name:
+                profileForItem(mostActiveTeacherEntry[0])?.full_name ||
+                profileForItem(mostActiveTeacherEntry[0])?.email ||
+                "Teacher",
+              creditsUsed: mostActiveTeacherEntry[1].creditsUsed,
+              generatedCount: mostActiveTeacherEntry[1].generatedCount,
+            }
+          : null,
+        mostGeneratedSubjectThisWeek: mostGeneratedSubjectEntry
+          ? {
+              subject: mostGeneratedSubjectEntry[0],
+              count: mostGeneratedSubjectEntry[1],
+            }
+          : null,
+        possibleCreditWaste,
+        lowActivityTeachers,
+      },
       planning: {
         schemeProgressPercent,
         completedSchemeMilestones: completedMilestones,

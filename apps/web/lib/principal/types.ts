@@ -8,7 +8,24 @@ export type PrincipalOverview = {
   totalTeachers: number;
   activeTeachers: number;
   totalLessonsGenerated: number;
+  totalSlidesGenerated: number;
+  totalWorksheetsGenerated: number;
+  totalExamsGenerated: number;
+  totalCreditsUsed: number;
   weeklyActivityCount: number;
+};
+
+export type PrincipalActivityType = "lesson_pack" | "slides" | "worksheet" | "exam";
+
+export type PrincipalGeneratedItem = {
+  id: string;
+  userId: string;
+  type: PrincipalActivityType;
+  subject: string | null;
+  topic: string | null;
+  grade: string | null;
+  createdAt: string | null;
+  creditsUsed: number;
 };
 
 export type TeacherListItem = {
@@ -18,9 +35,43 @@ export type TeacherListItem = {
   role: string | null;
   status: TeacherStatus;
   lessonsGenerated: number;
+  slidesGenerated: number;
   worksheetsCreated: number;
+  examsGenerated: number;
+  creditsUsed: number;
   lastActiveAt: string | null;
   joinedAt: string | null;
+  generatedItems: PrincipalGeneratedItem[];
+};
+
+export type PrincipalActivityFeedItem = PrincipalGeneratedItem & {
+  teacherName: string;
+  teacherEmail: string | null;
+};
+
+export type PrincipalOperationalInsights = {
+  mostActiveTeacherThisWeek: {
+    userId: string;
+    name: string;
+    creditsUsed: number;
+    generatedCount: number;
+  } | null;
+  mostGeneratedSubjectThisWeek: {
+    subject: string;
+    count: number;
+  } | null;
+  possibleCreditWaste: Array<{
+    userId: string;
+    teacherName: string;
+    topic: string;
+    count: number;
+  }>;
+  lowActivityTeachers: Array<{
+    userId: string;
+    name: string;
+    email: string | null;
+    joinedAt: string | null;
+  }>;
 };
 
 export type PlanningOverview = {
@@ -72,6 +123,8 @@ export type PrincipalDashboardPayload = {
   };
   overview: PrincipalOverview;
   teachers: TeacherListItem[];
+  recentActivity: PrincipalActivityFeedItem[];
+  insights: PrincipalOperationalInsights;
   planning: PlanningOverview;
   subscription: SubscriptionSnapshot;
   billingHistory: BillingHistoryItem[];
