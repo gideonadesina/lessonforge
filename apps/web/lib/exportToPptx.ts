@@ -599,20 +599,17 @@ function estimateTextHeight(text: unknown, width: number, fontSize: number, line
 }
 
 function downloadPptx(output: string | ArrayBuffer | Blob | Uint8Array, fileName: string) {
+  const type = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
   const blob =
     output instanceof Blob
-      ? output
+      ? new Blob([output], { type })
       : output instanceof Uint8Array
-      ? new Blob([new Uint8Array(output)], {
-          type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        })
-      : new Blob([output], {
-          type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        });
+      ? new Blob([new Uint8Array(output)], { type })
+      : new Blob([output], { type });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = fileName;
+  anchor.download = fileName.toLowerCase().endsWith(".pptx") ? fileName : `${fileName}.pptx`;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();

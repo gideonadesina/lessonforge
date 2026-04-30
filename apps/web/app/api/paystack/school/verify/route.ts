@@ -8,6 +8,8 @@ import {
   type SchoolPlanId,
 } from "@/lib/billing/server-school-pricing";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendEmail } from "@/lib/emails/send";
+import { schoolWorkspaceEmail } from "@/lib/emails/templates";
 
 function normalizeSchoolPlanId(rawPlan: unknown): SchoolPlanId | null {
   if (!isValidSchoolPlanId(rawPlan)) return null;
@@ -88,6 +90,12 @@ function getCredits(metadata: Record<string, unknown>, planId: SchoolPlanId) {
     : getSchoolPlanSharedCredits(planId);
 }
 
+function getFirstName(value: unknown, fallback = "there") {
+  const name = String(value ?? "").trim();
+  if (!name) return fallback;
+  return name.split(/\s+/)[0] || fallback;
+}
+
 async function generateUniqueSchoolCode(
   admin: ReturnType<typeof createAdminClient>
 ) {
@@ -113,12 +121,13 @@ async function createOrResolveSchoolWorkspace(input: {
   planName: string;
   profilePlan: string;
   credits: number;
+  schoolName?: string | null;
 }) {
   const admin = createAdminClient();
 
   const { data: profile, error: profileError } = await admin
     .from("profiles")
-    .select("full_name, school_id")
+    .select("full_name, email, school_id")
     .eq("id", input.principalId)
     .maybeSingle();
 
@@ -139,14 +148,19 @@ async function createOrResolveSchoolWorkspace(input: {
         throw new Error(`Failed to update principal profile: ${profileUpdateError.message}`);
       }
 
-      return { schoolId: existingSchoolId, schoolCode: existingCode };
+      return {
+        schoolId: existingSchoolId,
+        schoolCode: existingCode,
+        schoolName: null,
+        principalEmail: String(profile?.email ?? "").trim() || null,
+        principalName: String(profile?.full_name ?? "").trim() || null,
+        created: false,
+      };
     }
   }
 
   const principalName = String(profile?.full_name ?? "").trim();
-  const schoolName = principalName
-    ? `${principalName}'s School`
-    : "Principal's School";
+  const schoolName = String(input.schoolName ?? "").trim() || "Your School";
   const now = new Date();
   const expiresAt = new Date(now);
   expiresAt.setFullYear(expiresAt.getFullYear() + 1);
@@ -208,7 +222,14 @@ async function createOrResolveSchoolWorkspace(input: {
       throw new Error(`Failed to create school code: ${codeError.message}`);
     }
 
-    return { schoolId, schoolCode: code };
+    return {
+      schoolId,
+      schoolCode: code,
+      schoolName,
+      principalEmail: String(profile?.email ?? "").trim() || null,
+      principalName: principalName || null,
+      created: true,
+    };
   }
 
   const message = lastError instanceof Error ? lastError.message : "unknown error";
@@ -299,12 +320,41 @@ export async function GET(req: Request) {
     const planName = getPlanName(metadata, planId);
     const profilePlan = getProfilePlanForSchoolPlan(planName);
     const credits = getCredits(metadata, planId);
-    const { schoolCode } = await createOrResolveSchoolWorkspace({
+    const {
+      schoolCode,
+      schoolName,
+      principalEmail,
+      principalName,
+      created,
+    } = await createOrResolveSchoolWorkspace({
       principalId: userId,
       planName,
       profilePlan,
       credits,
+      schoolName: String(metadata?.school_name ?? "").trim() || null,
     });
+
+    if (created) {
+      const to =
+        principalEmail ||
+        String(paystackData?.customer?.email ?? "").trim() ||
+        user.email ||
+        null;
+
+      if (to) {
+        await sendEmail({
+          to,
+          subject: "Your school workspace is ready",
+          html: schoolWorkspaceEmail({
+            firstName: getFirstName(principalName, "there"),
+            schoolName,
+            schoolCode,
+            planName,
+            schoolCredits: credits,
+          }),
+        });
+      }
+    }
 
     // Return success
     return NextResponse.json({

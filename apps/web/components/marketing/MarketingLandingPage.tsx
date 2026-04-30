@@ -211,7 +211,7 @@ export function MarketingLandingPage({
       </section>
 
       <footer className="bg-white px-4 py-8 text-center text-sm text-slate-500">
-        © 2025 LessonForge · lessonforge.app
+        © 2026 LessonForge · lessonforge.app
         <div className="mt-3 flex flex-wrap justify-center gap-4 font-semibold">
           {[
             ["Home", "/"],

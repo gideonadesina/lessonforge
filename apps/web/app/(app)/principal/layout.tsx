@@ -11,6 +11,7 @@ import {
   rolesFromUserMetadata,
 } from "@/lib/auth/roles";
 import { isPrincipalRole, isMissingTableOrColumnError } from "@/lib/principal/utils";
+import { repairPrincipalDerivedSchoolName } from "@/lib/principal/server";
 import PrincipalLayout from "@/components/principal/PrincipalLayout";
 import { cookies } from "next/headers";
 
@@ -122,7 +123,25 @@ export default async function PrincipalRouteLayout({ children }: { children: Rea
     user.email?.split("@")[0] ||
     "Principal";
 
-  const effectiveSchool = createdSchoolData ?? membershipSchool;
+  let effectiveSchool: { id: string; name: string | null; principal_name: string | null } | null = createdSchoolData ?? membershipSchool;
+  if (effectiveSchool) {
+    const repairedSchool = await repairPrincipalDerivedSchoolName({
+      school: {
+        id: effectiveSchool.id,
+        name: effectiveSchool.name,
+        code: null,
+        created_at: null,
+        created_by: user.id,
+        principal_name: effectiveSchool.principal_name,
+      },
+      principalId: user.id,
+    });
+    effectiveSchool = {
+      id: repairedSchool.id,
+      name: repairedSchool.name,
+      principal_name: repairedSchool.principal_name ?? null,
+    };
+  }
   const initialPrincipalName = effectiveSchool?.principal_name || fallbackPrincipalName;
   const initialSchoolName = effectiveSchool?.name ?? null;
 

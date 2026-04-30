@@ -35,6 +35,11 @@ function computeNotificationCount(payload: PrincipalDashboardPayload) {
   return Math.min(99, inactiveTeachers + slotAlert + activityAlert);
 }
 
+type SchoolProfileUpdatedEvent = CustomEvent<{
+  schoolName?: string | null;
+  principalName?: string | null;
+}>;
+
 export default function PrincipalLayout({
   children,
   initialUserEmail,
@@ -89,6 +94,23 @@ export default function PrincipalLayout({
     })();
   }, [initialSchoolName, supabase]);
 
+  useEffect(() => {
+    function onSchoolProfileUpdated(event: Event) {
+      const detail = (event as SchoolProfileUpdatedEvent).detail;
+      if (typeof detail?.schoolName === "string") {
+        setSchoolName(detail.schoolName.trim() || "Your School");
+      }
+      if (typeof detail?.principalName === "string" && detail.principalName.trim()) {
+        setPrincipalName(detail.principalName.trim());
+      }
+    }
+
+    window.addEventListener("lessonforge:school-profile-updated", onSchoolProfileUpdated);
+    return () => {
+      window.removeEventListener("lessonforge:school-profile-updated", onSchoolProfileUpdated);
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text-primary)]">
       <PrincipalSidebar
@@ -96,6 +118,7 @@ export default function PrincipalLayout({
         setMobileOpen={setMobileOpen}
         collapsed={collapsed}
         setCollapsed={setCollapsed}
+        schoolName={schoolName}
       />
 
       <div className={["transition-[padding] duration-300", collapsed ? "lg:pl-28" : "lg:pl-80"].join(" ")}>

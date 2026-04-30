@@ -144,6 +144,7 @@ async function createOrResolveSchoolWorkspace(input: {
   planName: string;
   profilePlan: string;
   credits: number;
+  schoolName?: string | null;
 }) {
   const admin = createAdminClient();
 
@@ -177,9 +178,7 @@ async function createOrResolveSchoolWorkspace(input: {
   }
 
   const principalName = String(profile?.full_name ?? "").trim();
-  const schoolName = principalName
-    ? `${principalName}'s School`
-    : "Principal's School";
+  const schoolName = String(input.schoolName ?? "").trim() || "Your School";
   const now = new Date();
   const expiresAt = new Date(now);
   expiresAt.setFullYear(expiresAt.getFullYear() + 1);
@@ -366,6 +365,7 @@ export async function GET(req: Request) {
         planName,
         profilePlan,
         credits,
+        schoolName: String(metadata?.school_name ?? "").trim() || null,
       });
 
       if (created) {
@@ -380,6 +380,7 @@ export async function GET(req: Request) {
             subject: "Your school workspace is ready",
             html: schoolWorkspaceEmail({
               firstName: getFirstName(principalName, "there"),
+              schoolName: null,
               schoolCode,
               planName,
               schoolCredits: credits,
@@ -466,6 +467,8 @@ export async function GET(req: Request) {
               paystackData?.currency
             )}`,
             newBalance: paymentResult.newBalance,
+            paymentReference: reference,
+            paidAt: paystackData?.paid_at ?? paystackData?.created_at ?? new Date().toISOString(),
           }),
         });
       }

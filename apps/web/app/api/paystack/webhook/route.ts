@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import {
+  getPlanPricing,
   isValidTeacherPlanId,
   type TeacherPlanId,
 } from "@/lib/billing/server-pricing";
@@ -14,6 +15,11 @@ import {
   type SchoolPlanId,
 } from "@/lib/billing/server-school-pricing";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendEmail } from "@/lib/emails/send";
+import {
+  paymentConfirmedEmail,
+  schoolWorkspaceEmail,
+} from "@/lib/emails/templates";
 
 export const runtime = "nodejs";
 
@@ -140,6 +146,19 @@ function getCredits(metadata: Record<string, unknown>, planId: SchoolPlanId) {
     : getSchoolPlanSharedCredits(planId);
 }
 
+function formatPaidAmount(amountMinor: unknown, currency: unknown) {
+  const normalizedCurrency = String(currency ?? "NGN").toUpperCase();
+  const numericAmount = Number(amountMinor ?? 0);
+  if (!Number.isFinite(numericAmount)) return 0;
+  return normalizedCurrency === "NGN" ? numericAmount / 100 : numericAmount / 100;
+}
+
+function getFirstName(value: unknown, fallback = "there") {
+  const name = String(value ?? "").trim();
+  if (!name) return fallback;
+  return name.split(/\s+/)[0] || fallback;
+}
+
 async function generateUniqueSchoolCode(
   admin: ReturnType<typeof createAdminClient>
 ) {
@@ -164,12 +183,13 @@ async function createOrResolveSchoolWorkspace(input: {
   principalId: string;
   planName: string;
   credits: number;
+  schoolName?: string | null;
 }) {
   const admin = createAdminClient();
 
   const { data: profile, error: profileError } = await admin
     .from("profiles")
-    .select("full_name, school_id")
+    .select("full_name, email, school_id")
     .eq("id", input.principalId)
     .maybeSingle();
 
@@ -186,14 +206,19 @@ async function createOrResolveSchoolWorkspace(input: {
         .update({ app_role: "principal", plan: input.planName })
         .eq("id", input.principalId);
 
-      return { schoolId: existingSchoolId, schoolCode: existingCode };
+      return {
+        schoolId: existingSchoolId,
+        schoolCode: existingCode,
+        schoolName: null,
+        principalEmail: String(profile?.email ?? "").trim() || null,
+        principalName: String(profile?.full_name ?? "").trim() || null,
+        created: false,
+      };
     }
   }
 
   const principalName = String(profile?.full_name ?? "").trim();
-  const schoolName = principalName
-    ? `${principalName}'s School`
-    : "Principal's School";
+  const schoolName = String(input.schoolName ?? "").trim() || "Your School";
   const now = new Date();
   const expiresAt = new Date(now);
   expiresAt.setFullYear(expiresAt.getFullYear() + 1);
@@ -255,7 +280,14 @@ async function createOrResolveSchoolWorkspace(input: {
       throw new Error(`Failed to create school code: ${codeError.message}`);
     }
 
-    return { schoolId, schoolCode: code };
+    return {
+      schoolId,
+      schoolCode: code,
+      schoolName,
+      principalEmail: String(profile?.email ?? "").trim() || null,
+      principalName: principalName || null,
+      created: true,
+    };
   }
 
   const message = lastError instanceof Error ? lastError.message : "unknown error";
@@ -310,11 +342,39 @@ export async function POST(req: Request) {
 
       const planName = getPlanName(metadata, planId);
       const credits = getCredits(metadata, planId);
-      const { schoolCode } = await createOrResolveSchoolWorkspace({
+      const {
+        schoolCode,
+        schoolName,
+        principalEmail,
+        principalName,
+        created,
+      } = await createOrResolveSchoolWorkspace({
         principalId,
         planName,
         credits,
+        schoolName: String(metadata?.school_name ?? "").trim() || null,
       });
+
+      if (created) {
+        const to =
+          principalEmail ||
+          String(paystackData?.customer?.email ?? "").trim() ||
+          null;
+
+        if (to) {
+          await sendEmail({
+            to,
+            subject: "Your school workspace is ready",
+            html: schoolWorkspaceEmail({
+              firstName: getFirstName(principalName, "there"),
+              schoolName,
+              schoolCode,
+              planName,
+              schoolCredits: credits,
+            }),
+          });
+        }
+      }
 
       return NextResponse.json({
         success: true,
@@ -379,6 +439,37 @@ export async function POST(req: Request) {
 
     // Update profile metadata (plan, expiry, paystack codes)
     await updateProfileMetadata(userId, plan, paystackData);
+
+    if (!paymentResult.alreadyProcessed) {
+      const admin = createAdminClient();
+      const { data: profile } = await admin
+        .from("profiles")
+        .select("email, full_name")
+        .eq("id", userId)
+        .maybeSingle();
+      const to =
+        String(profile?.email ?? "").trim() ||
+        String(paystackData?.customer?.email ?? "").trim();
+
+      if (to) {
+        await sendEmail({
+          to,
+          subject: "Payment confirmed — your credits are ready",
+          html: paymentConfirmedEmail({
+            firstName: getFirstName(profile?.full_name),
+            planName: getPlanPricing(plan)?.name ?? plan,
+            creditsAdded: paymentResult.creditsAwarded,
+            amountPaid: `NGN ${formatPaidAmount(
+              paystackData?.amount,
+              paystackData?.currency
+            )}`,
+            newBalance: paymentResult.newBalance,
+            paymentReference: reference,
+            paidAt: paystackData?.paid_at ?? paystackData?.created_at ?? new Date().toISOString(),
+          }),
+        });
+      }
+    }
 
     console.log(
       `Webhook: successfully processed payment ${reference} for user ${userId}, awarded ${paymentResult.creditsAwarded} credits`

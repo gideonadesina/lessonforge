@@ -183,6 +183,20 @@ function exportTextFile(filename: string, content: string, type = "text/plain;ch
   URL.revokeObjectURL(url);
 }
 
+function savePptxBlob(blob: Blob, filename = "lesson.pptx") {
+  const pptxBlob = new Blob([blob], {
+    type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  });
+  const url = URL.createObjectURL(pptxBlob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename.toLowerCase().endsWith(".pptx") ? filename : `${filename}.pptx`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 function deckToText(deck: SlideDeck): string {
   return [
     deck.deck_title,
@@ -345,9 +359,11 @@ export default function LessonSlidesPage() {
         color: "6C63FF",
       });
 
-      await pptx.writeFile({
-        fileName: `LessonForge_${getSafeFilenamePart(outputDeck.deck_title || formData.topic)}_Slides.pptx`
-      });
+      const blob = await pptx.write({ outputType: "blob" });
+      savePptxBlob(
+        blob as Blob,
+        `LessonForge_${getSafeFilenamePart(outputDeck.deck_title || formData.topic)}_Slides.pptx`
+      );
     } finally {
       setExportingPptx(false);
     }

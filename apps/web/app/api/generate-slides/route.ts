@@ -8,6 +8,7 @@ import {
   creditsLowEmail,
 } from "@/lib/emails/templates";
 import { normalizeSlides } from "@/lib/slideSchema";
+import { sanitizePexelsQuery } from "@/lib/pexelsQuery";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -79,25 +80,7 @@ type PexelsResponse = {
 // ─────────────────────────────────────────────────────────────
 
 function compressPexelsQuery(input?: string | null, topic?: string, subject?: string) {
-  const raw = (input || "").toLowerCase();
-
-  const removeWords = new Set([
-    "clear","colorful","beautiful","detailed","simple","clean",
-    "showing","including","with","that","all","main",
-    "visual","guide","picture","image","photo","diagram",
-    "labeled","labelled","illustration","educational","real","life","of","the","a","an",
-    "organs"
-  ]);
-
-  const cleanedWords = raw
-    .replace(/[.,;:!?()[\]{}]/g, " ")
-    .split(/\s+/)
-    .filter(Boolean)
-    .filter(w => !removeWords.has(w));
-
-  const words = cleanedWords.slice(0, 3);
-
-  return words.join(" ") || topic || subject || "classroom";
+  return sanitizePexelsQuery(input, topic, subject);
 }
 
 async function fetchPexelsImage(
@@ -105,11 +88,7 @@ async function fetchPexelsImage(
   apiKey: string
 ): Promise<{ url: string; photographer: string; alt: string } | null> {
   try {
-   const cleanQuery = query
-  .replace(/classroom-?safe|classroom-?friendly|educational style/gi, "")
-  .replace(/\s+/g, " ")
-  .trim()
-  .slice(0, 100);
+   const cleanQuery = sanitizePexelsQuery(query);
 
     if (!cleanQuery) return null;
 
@@ -789,13 +768,13 @@ Make this immediately usable by a real teacher. Every slide must have teacher_no
     }
 
     const newBalance = deductionResult.creditsRemaining;
-    // TODO: Use an email notification log to avoid repeated low-credit emails across requests.
+    const previousBalance = deductionResult.previousBalance;
     if (deductionResult.source === "personal" && user.email) {
       const firstName = getFirstName(
         user.user_metadata?.full_name ?? user.user_metadata?.name
       );
 
-      if (newBalance <= 5 && newBalance > 0) {
+      if (newBalance <= 5 && newBalance > 0 && previousBalance > 5) {
         await sendEmail({
           to: user.email,
           subject: "Your LessonForge credits are running low",
@@ -806,7 +785,7 @@ Make this immediately usable by a real teacher. Every slide must have teacher_no
         });
       }
 
-      if (newBalance === 0) {
+      if (newBalance === 0 && previousBalance > 0) {
         await sendEmail({
           to: user.email,
           subject: "You have used all your LessonForge credits",

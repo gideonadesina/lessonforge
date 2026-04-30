@@ -90,7 +90,7 @@ export default function DashboardHeader() {
                 : typeof school.shared_credits === "number"
                   ? school.shared_credits
                   : null;
-          setSchoolName(school.name ?? "School workspace");
+          setSchoolName(school.name ?? "Your School");
           setSchoolCredits(typeof remaining === "number" ? Math.max(0, remaining) : null);
         }
       }

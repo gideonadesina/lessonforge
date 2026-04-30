@@ -11,12 +11,18 @@ import {
 import SchoolPricingPlanCard from "@/components/billing/SchoolPricingPlanCard";
 import { track } from "@/lib/analytics";
 
+type PendingPrincipalOnboarding = {
+  principalName?: string;
+  schoolName?: string;
+};
+
 export default function PrincipalPricingPage() {
   const [busyPlanId, setBusyPlanId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [verifyReference, setVerifyReference] = useState<string | null>(null);
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const [verifyingPayment, setVerifyingPayment] = useState(false);
+  const [pendingOnboarding, setPendingOnboarding] = useState<PendingPrincipalOnboarding | null>(null);
 
   useEffect(() => {
     track("plan_viewed", {
@@ -24,6 +30,20 @@ export default function PrincipalPricingPage() {
       active_role: "principal",
       plan_name: "school_pricing",
     });
+  }, []);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem("lessonforge:principal-onboarding");
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as PendingPrincipalOnboarding;
+      setPendingOnboarding({
+        principalName: String(parsed.principalName ?? "").trim(),
+        schoolName: String(parsed.schoolName ?? "").trim(),
+      });
+    } catch {
+      setPendingOnboarding(null);
+    }
   }, []);
 
   async function getAccessToken() {
@@ -119,7 +139,11 @@ export default function PrincipalPricingPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ plan: planId }),
+        body: JSON.stringify({
+          plan: planId,
+          principalName: pendingOnboarding?.principalName ?? "",
+          schoolName: pendingOnboarding?.schoolName ?? "",
+        }),
       });
 
       const json = await res.json();

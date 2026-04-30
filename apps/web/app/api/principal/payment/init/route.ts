@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
           payment_purpose: "school",
           user_id: context.user.id,
           school_id: context.school?.id ?? null,
-          school_name: context.school?.name ?? `School - ${context.user.email}`,
+          school_name: context.school?.name ?? "Your School",
           plan_id: plan,
         },
       }),

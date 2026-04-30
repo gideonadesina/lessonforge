@@ -17,8 +17,8 @@ export const blogPosts: BlogPost[] = [
     excerpt:
       "A strong Nigerian lesson plan is clear, measurable, and tied to the curriculum. This guide explains the NERDC-friendly structure teachers can use every week.",
     author: "LessonForge Editorial",
-    date: "2025-01-08",
-    readTime: "7 min read",
+    date: "2026-01-08",
+    readTime: "",
     category: "Lesson Planning",
     pexelsQuery: "teacher classroom nigeria",
     content: `
@@ -59,7 +59,7 @@ Used properly, AI does not replace professional judgment. It removes the blank p
     excerpt:
       "WAEC preparation works best when students practise the format early and often. AI tools can help teachers create targeted revision without spending every night writing questions.",
     author: "LessonForge Editorial",
-    date: "2025-01-12",
+    date: "2026-01-12",
     readTime: "6 min read",
     category: "Exam Prep",
     pexelsQuery: "students studying exam",
@@ -101,11 +101,11 @@ AI is a preparation assistant, not the examiner. Teachers should verify facts, a
   },
   {
     slug: "ai-tools-for-teachers-africa",
-    title: "The Best AI Tools for African Teachers in 2025 (Honest Review)",
+    title: "The Best AI Tools for African Teachers in 2026 (Honest Review)",
     excerpt:
       "Generic AI tools are powerful, but they often miss African curriculum context. This review explains what to look for and where LessonForge fits.",
     author: "LessonForge Editorial",
-    date: "2025-01-18",
+    date: "2026-01-18",
     readTime: "8 min read",
     category: "AI Tools",
     pexelsQuery: "teacher laptop technology africa",
@@ -149,7 +149,7 @@ Use generic AI for brainstorming and explanations. Use a dedicated teaching plat
     excerpt:
       "Lesson plans guide the teaching process, while lesson notes carry the teaching content. Strong teachers use both for clarity, confidence, and better classroom delivery.",
     author: "LessonForge Editorial",
-    date: "2025-01-22",
+    date: "2026-01-22",
     readTime: "6 min read",
     category: "Teaching Tips",
     pexelsQuery: "teacher writing board classroom",
@@ -193,7 +193,7 @@ AI can generate both documents from the same topic, which keeps them consistent.
     excerpt:
       "Planning, notes, questions, slides, and marking guides consume a teacher's week. A practical AI workflow can return hours without reducing quality.",
     author: "LessonForge Editorial",
-    date: "2025-01-28",
+    date: "2026-01-28",
     readTime: "7 min read",
     category: "Productivity",
     pexelsQuery: "teacher working desk africa",
@@ -239,7 +239,7 @@ With a consistent workflow, saving ten hours a week is realistic for teachers ha
     excerpt:
       "Ghanaian and Kenyan teachers need lesson plans that respect local curriculum language and classroom expectations. This guide shows how to structure them well.",
     author: "LessonForge Editorial",
-    date: "2025-02-02",
+    date: "2026-02-02",
     readTime: "7 min read",
     category: "Curriculum",
     pexelsQuery: "school classroom ghana kenya africa",

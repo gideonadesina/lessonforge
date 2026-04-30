@@ -1,3 +1,12 @@
+function esc(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 const base = (content: string) => `
 <!DOCTYPE html>
 <html>
@@ -123,26 +132,35 @@ export function paymentConfirmedEmail({
   creditsAdded,
   amountPaid,
   newBalance,
+  paymentReference,
+  paidAt,
 }: {
   firstName: string;
   planName: string;
   creditsAdded: number;
   amountPaid: string;
   newBalance: number;
+  paymentReference?: string | null;
+  paidAt?: string | null;
 }) {
+  const date = paidAt || new Date().toISOString();
   return base(`
 <p>Hi ${firstName},</p>
-<p>Payment confirmed. Your credits are live
-and ready to use.</p>
+<p><strong>Payment confirmed.</strong> Your credits are live
+and ready to use. Keep this receipt for your records.</p>
 <table class="info">
   <tr><td class="label">Plan</td>
     <td class="value">${planName}</td></tr>
-  <tr><td class="label">Credits added</td>
-    <td class="value">${creditsAdded}</td></tr>
   <tr><td class="label">Amount paid</td>
     <td class="value">${amountPaid}</td></tr>
+  <tr><td class="label">Credits added</td>
+    <td class="value">${creditsAdded}</td></tr>
   <tr><td class="label">New balance</td>
     <td class="value">${newBalance} credits</td></tr>
+  <tr><td class="label">Date</td>
+    <td class="value">${esc(date)}</td></tr>
+  <tr><td class="label">Reference</td>
+    <td class="value">${esc(paymentReference || "Not provided")}</td></tr>
 </table>
 <a class="btn"
   href="https://lessonforge.app/generate">
@@ -161,11 +179,13 @@ we will sort it out immediately.</p>
 
 export function schoolWorkspaceEmail({
   firstName,
+  schoolName,
   schoolCode,
   planName,
   schoolCredits,
 }: {
   firstName: string;
+  schoolName?: string | null;
   schoolCode: string;
   planName: string;
   schoolCredits: number;
@@ -188,6 +208,8 @@ pool.</p>
   </p>
 </div>
 <table class="info">
+  <tr><td class="label">School</td>
+    <td class="value">${esc(schoolName || "Your school")}</td></tr>
   <tr><td class="label">Plan</td>
     <td class="value">${planName}</td></tr>
   <tr><td class="label">School credits</td>
@@ -268,4 +290,65 @@ check your account right away.</p>
   Built for African classrooms<br/>
   support@lessonforge.app
 </div>`);
+}
+
+export function supportRequestEmail({
+  issueType,
+  senderName,
+  senderEmail,
+  message,
+  userId,
+  activeRole,
+  pagePath,
+  timestamp,
+}: {
+  issueType: string;
+  senderName: string;
+  senderEmail: string;
+  message: string;
+  userId?: string | null;
+  activeRole?: string | null;
+  pagePath?: string | null;
+  timestamp?: string | null;
+}) {
+  return base(`
+<p><strong>New support request</strong></p>
+<table class="info">
+  <tr><td class="label">Issue type</td>
+    <td class="value">${esc(issueType)}</td></tr>
+  <tr><td class="label">Sender name</td>
+    <td class="value">${esc(senderName || "Not provided")}</td></tr>
+  <tr><td class="label">Sender email</td>
+    <td class="value">${esc(senderEmail)}</td></tr>
+  <tr><td class="label">User ID</td>
+    <td class="value">${esc(userId || "Not available")}</td></tr>
+  <tr><td class="label">Active role</td>
+    <td class="value">${esc(activeRole || "Not available")}</td></tr>
+  <tr><td class="label">Page path</td>
+    <td class="value">${esc(pagePath || "Not available")}</td></tr>
+  <tr><td class="label">Timestamp</td>
+    <td class="value">${esc(timestamp || new Date().toISOString())}</td></tr>
+</table>
+<div class="tip">
+  <p>${esc(message).replace(/\n/g, "<br/>")}</p>
+</div>`);
+}
+
+export function productUpdateEmail({
+  title,
+  summary,
+  ctaUrl,
+  ctaText,
+}: {
+  title: string;
+  summary: string;
+  ctaUrl: string;
+  ctaText: string;
+}) {
+  return base(`
+<p><strong>${esc(title)}</strong></p>
+<p>${esc(summary)}</p>
+<a class="btn" href="${esc(ctaUrl)}">${esc(ctaText)}</a>
+<hr/>
+<p class="muted">You are receiving this because you use LessonForge.</p>`);
 }

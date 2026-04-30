@@ -1,0 +1,535 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  Building2,
+  CheckCircle2,
+  CreditCard,
+  LifeBuoy,
+  LineChart,
+  RefreshCw,
+  Search,
+  Users,
+  Zap,
+} from "lucide-react";
+import type { AdminDashboardData, AdminPaymentRow, AdminUserRow } from "@/lib/admin/metrics";
+
+type SortKey = keyof AdminUserRow;
+
+function fmt(value: unknown) {
+  if (value === null || value === undefined || value === "") return "Not available yet";
+  if (typeof value === "number") return new Intl.NumberFormat("en-US").format(value);
+  return String(value);
+}
+
+function money(value: number, currency = "NGN") {
+  return `${currency} ${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value)}`;
+}
+
+function DateText({ value }: { value: string | null | undefined }) {
+  const [formatted, setFormatted] = useState("");
+
+  useEffect(() => {
+    if (!value) {
+      setFormatted("Not available yet");
+      return;
+    }
+
+    const parsed = new Date(value);
+    setFormatted(
+      Number.isNaN(parsed.getTime())
+        ? "Not available yet"
+        : parsed.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
+    );
+  }, [value]);
+
+  return <>{formatted}</>;
+}
+
+function DateTimeText({ value }: { value: string | null | undefined }) {
+  const [formatted, setFormatted] = useState("");
+
+  useEffect(() => {
+    if (!value) {
+      setFormatted("Not available yet");
+      return;
+    }
+
+    const parsed = new Date(value);
+    setFormatted(
+      Number.isNaN(parsed.getTime())
+        ? "Not available yet"
+        : parsed.toLocaleString(undefined, {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          })
+    );
+  }, [value]);
+
+  return <>{formatted}</>;
+}
+
+function toneClasses(tone?: string) {
+  if (tone === "green") return "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300";
+  if (tone === "yellow") return "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300";
+  if (tone === "red") return "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300";
+  return "border-[var(--border)] bg-[var(--card)] text-[var(--text-primary)]";
+}
+
+function statusPill(status: string) {
+  const className =
+    status === "Active"
+      ? "bg-emerald-100 text-emerald-700"
+      : status === "Idle"
+      ? "bg-amber-100 text-amber-700"
+      : status === "Churned"
+      ? "bg-rose-100 text-rose-700"
+      : "bg-slate-100 text-slate-600";
+  return <span className={`rounded-full px-2 py-1 text-xs font-semibold ${className}`}>{status}</span>;
+}
+
+function creditPill(balance: unknown) {
+  const value = Number(balance);
+  const tone = !Number.isFinite(value)
+    ? "bg-slate-100 text-slate-600"
+    : value === 0
+    ? "bg-rose-100 text-rose-700"
+    : value <= 5
+    ? "bg-amber-100 text-amber-700"
+    : "bg-emerald-100 text-emerald-700";
+  return <span className={`rounded-full px-2 py-1 text-xs font-semibold ${tone}`}>{fmt(balance)}</span>;
+}
+
+function MiniBars({
+  rows,
+  valueKey,
+  moneyMode = false,
+}: {
+  rows: Array<{ label: string; revenue?: number; total?: number }>;
+  valueKey: "revenue" | "total";
+  moneyMode?: boolean;
+}) {
+  const max = Math.max(1, ...rows.map((row) => Number(row[valueKey] ?? 0)));
+  return (
+    <div className="space-y-2">
+      {rows.map((row) => {
+        const value = Number(row[valueKey] ?? 0);
+        return (
+          <div key={row.label} className="grid grid-cols-[56px_1fr_90px] items-center gap-3 text-xs">
+            <span className="text-[var(--text-secondary)]">{row.label}</span>
+            <div className="h-2 overflow-hidden rounded-full bg-[var(--card-alt)]">
+              <div className="h-full rounded-full bg-violet-600" style={{ width: `${Math.max(4, (value / max) * 100)}%` }} />
+            </div>
+            <span className="text-right font-semibold text-[var(--text-primary)]">
+              {moneyMode ? money(value) : new Intl.NumberFormat("en-US").format(value)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
+      <h2 className="text-lg font-black text-[var(--text-primary)]">{title}</h2>
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}
+
+function UsersTable({ users }: { users: AdminUserRow[] }) {
+  const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("signupDate");
+  const [direction, setDirection] = useState<"asc" | "desc">("desc");
+
+  const rows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = q
+      ? users.filter((user) =>
+          [user.name, user.email, user.role, user.schoolName, user.status]
+            .join(" ")
+            .toLowerCase()
+            .includes(q)
+        )
+      : users;
+    return [...filtered].sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      const an = typeof av === "number" ? av : Date.parse(String(av ?? ""));
+      const bn = typeof bv === "number" ? bv : Date.parse(String(bv ?? ""));
+      const result =
+        Number.isFinite(an) && Number.isFinite(bn)
+          ? an - bn
+          : String(av ?? "").localeCompare(String(bv ?? ""));
+      return direction === "asc" ? result : -result;
+    });
+  }, [direction, query, sortKey, users]);
+
+  function setSort(next: SortKey) {
+    if (sortKey === next) {
+      setDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(next);
+    setDirection("desc");
+  }
+
+  const headers: Array<[SortKey, string]> = [
+    ["name", "Name"],
+    ["email", "Email"],
+    ["role", "Role"],
+    ["schoolName", "School"],
+    ["schoolCode", "Code"],
+    ["creditType", "Credit type"],
+    ["currentCreditBalance", "Credits"],
+    ["totalGenerations", "Generations"],
+    ["paidOrFree", "Paid"],
+    ["totalAmountPaid", "Amount"],
+    ["signupDate", "Signup"],
+    ["lastActiveDate", "Last active"],
+    ["status", "Status"],
+  ];
+
+  return (
+    <div className="space-y-3">
+      <label className="relative block max-w-md">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search users..."
+          className="w-full rounded-xl border border-[var(--border)] bg-[var(--card-alt)] py-2 pl-9 pr-3 text-sm outline-none focus:border-violet-400"
+        />
+      </label>
+      <div className="overflow-x-auto">
+        <table className="min-w-[1500px] w-full text-left text-sm">
+          <thead className="text-xs uppercase text-[var(--text-tertiary)]">
+            <tr>
+              {headers.map(([key, label]) => (
+                <th key={key} className="whitespace-nowrap px-3 py-2">
+                  <button type="button" onClick={() => setSort(key)} className="inline-flex items-center gap-1 font-bold">
+                    {label}
+                    {sortKey === key ? direction === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" /> : null}
+                  </button>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--border)]">
+            {rows.map((user) => (
+              <tr key={user.id} className="align-top">
+                <td className="px-3 py-3 font-semibold text-[var(--text-primary)]">{user.name}</td>
+                <td className="px-3 py-3 text-[var(--text-secondary)]">{user.email}</td>
+                <td className="px-3 py-3">{user.role}</td>
+                <td className="px-3 py-3">{user.schoolName}</td>
+                <td className="px-3 py-3">{user.schoolCode}</td>
+                <td className="px-3 py-3">{user.creditType}</td>
+                <td className="px-3 py-3">{creditPill(user.currentCreditBalance)}</td>
+                <td className="px-3 py-3">{user.totalGenerations}</td>
+                <td className="px-3 py-3">{user.paidOrFree}</td>
+                <td className="px-3 py-3">{money(user.totalAmountPaid)}</td>
+                <td className="px-3 py-3"><DateText value={user.signupDate} /></td>
+                <td className="px-3 py-3"><DateText value={user.lastActiveDate} /></td>
+                <td className="px-3 py-3">{statusPill(user.status)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function PaymentsTable({ payments }: { payments: AdminPaymentRow[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-[900px] w-full text-left text-sm">
+        <thead className="text-xs uppercase text-[var(--text-tertiary)]">
+          <tr>
+            {["User", "Email", "Plan", "Amount", "Date", "Reference", "Source"].map((item) => (
+              <th key={item} className="px-3 py-2">{item}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[var(--border)]">
+          {payments.slice(0, 50).map((payment) => (
+            <tr key={`${payment.source}-${payment.reference}`}>
+              <td className="px-3 py-3 font-semibold">{payment.userName}</td>
+              <td className="px-3 py-3 text-[var(--text-secondary)]">{payment.email}</td>
+              <td className="px-3 py-3">{payment.plan}</td>
+              <td className="px-3 py-3">{money(payment.amount, payment.currency)}</td>
+              <td className="px-3 py-3"><DateText value={payment.date} /></td>
+              <td className="px-3 py-3 font-mono text-xs">{payment.reference}</td>
+              <td className="px-3 py-3">{payment.source}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export default function AdminDashboard({ data: initialData }: { data: AdminDashboardData }) {
+  const [data, setData] = useState(initialData);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+
+  async function refreshData() {
+    setRefreshing(true);
+    setRefreshError(null);
+    try {
+      const response = await fetch("/api/admin/dashboard", { cache: "no-store" });
+      if (!response.ok) throw new Error(`Refresh failed (${response.status})`);
+      const nextData = (await response.json()) as AdminDashboardData;
+      setData(nextData);
+    } catch (error) {
+      setRefreshError(error instanceof Error ? error.message : "Refresh failed");
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-[var(--bg)] px-4 py-6 text-[var(--text-primary)] md:px-8">
+      <div className="mx-auto max-w-[1500px] space-y-6">
+        <header className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-sm font-bold uppercase tracking-wide text-violet-700">Founder Admin</p>
+            <h1 className="text-3xl font-black">LessonForge God-Eye Dashboard</h1>
+          </div>
+          <div className="flex flex-col items-start gap-2 md:items-end">
+            <button
+              type="button"
+              onClick={refreshData}
+              disabled={refreshing}
+              className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-bold text-[var(--text-primary)] shadow-sm hover:bg-[var(--card-alt)] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+              {refreshing ? "Refreshing" : "Refresh"}
+            </button>
+            <p className="text-sm text-[var(--text-secondary)]">Last updated: <DateTimeText value={data.lastUpdated} /></p>
+            {refreshError ? <p className="text-xs font-semibold text-rose-600">{refreshError}</p> : null}
+          </div>
+        </header>
+
+        <div className={`rounded-2xl border p-4 ${toneClasses(data.intelligence.tone)}`}>
+          <div className="flex items-start gap-3">
+            {data.intelligence.tone === "green" ? <CheckCircle2 className="mt-0.5 h-5 w-5" /> : <AlertTriangle className="mt-0.5 h-5 w-5" />}
+            <p className="font-semibold">{data.intelligence.message}</p>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {data.stats.map((stat) => (
+            <div key={stat.label} className={`rounded-2xl border p-4 shadow-sm ${toneClasses(stat.tone)}`}>
+              <p className="text-xs font-bold uppercase tracking-wide opacity-75">{stat.label}</p>
+              <p className="mt-2 text-2xl font-black">
+                {stat.label.toLowerCase().includes("revenue") && typeof stat.value === "number" ? money(stat.value) : fmt(stat.value)}
+              </p>
+              {stat.note ? <p className="mt-1 text-xs opacity-70">{stat.note}</p> : null}
+            </div>
+          ))}
+        </div>
+
+        <Section title="Users">
+          <UsersTable users={data.users} />
+        </Section>
+
+        <div className="grid gap-6 xl:grid-cols-2">
+          <Section title="Financial Overview">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <SmallStat icon={CreditCard} label="Paid users" value={data.users.filter((u) => u.paidOrFree === "Paid").length} />
+              <SmallStat icon={Users} label="Free users" value={data.users.filter((u) => u.paidOrFree === "Free").length} />
+              <SmallStat icon={LineChart} label="Payments" value={data.payments.length} />
+            </div>
+            <div className="mt-5">
+              <MiniBars rows={data.revenueTrend} valueKey="revenue" moneyMode />
+            </div>
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <SimpleList
+                title="Revenue per school"
+                rows={
+                  data.revenueBySchool.length
+                    ? data.revenueBySchool.map((item) => `${item.name} — ${money(item.revenue)}`)
+                    : ["Not available yet"]
+                }
+              />
+              <SimpleList
+                title="Revenue per teacher"
+                rows={
+                  data.revenueByTeacher.length
+                    ? data.revenueByTeacher.map((item) => `${item.name} — ${money(item.revenue)}`)
+                    : ["Not available yet"]
+                }
+              />
+            </div>
+            <div className="mt-5">
+              <PaymentsTable payments={data.payments} />
+            </div>
+          </Section>
+
+          <Section title="Generation Analytics">
+            <div className="grid gap-3 sm:grid-cols-4">
+              <SmallStat icon={Zap} label="Lessons" value={data.generation.lessons} />
+              <SmallStat icon={Zap} label="Slides" value={data.generation.slides} />
+              <SmallStat icon={Zap} label="Worksheets" value={data.generation.worksheets} />
+              <SmallStat icon={Zap} label="Total" value={data.generation.total} />
+            </div>
+            <div className="mt-5">
+              <MiniBars rows={data.generation.trend} valueKey="total" />
+            </div>
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <SimpleList title="Top teachers" rows={data.generation.topTeachers.map((t) => `${t.name} — ${t.total}`)} />
+              <SimpleList
+                title="Most generated topics"
+                rows={data.generation.topTopics?.map((t) => `${t.topic} — ${t.count}`) ?? ["Topic analytics not available yet."]}
+              />
+            </div>
+          </Section>
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-2">
+          <Section title="Credits Intelligence">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <SmallStat icon={CreditCard} label="School credit users" value={data.credits.schoolCreditUsers} />
+              <SmallStat icon={CreditCard} label="Personal credit users" value={data.credits.personalCreditUsers} />
+              <SmallStat icon={CheckCircle2} label="With credits" value={data.credits.usersWithCredits} />
+              <SmallStat icon={AlertTriangle} label="0 credits" value={data.credits.zeroCreditUsers} tone="red" />
+              <SmallStat icon={AlertTriangle} label="Low credits" value={data.credits.lowCreditUsers} tone="yellow" />
+              <SmallStat icon={AlertTriangle} label="Ran out, not recharged" value={data.credits.ranOutNotRecharged} tone="red" />
+            </div>
+          </Section>
+
+          <Section title="New Users Feed">
+            <div className="space-y-2">
+              {data.newUsers.slice(0, 12).map((user) => (
+                <div key={user.id} className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card-alt)] px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold">{user.name}</p>
+                    <p className="truncate text-xs text-[var(--text-secondary)]">
+                      {user.email} · {user.role} · <DateText value={user.signupDate} />
+                    </p>
+                  </div>
+                  <span className={`rounded-full px-2 py-1 text-xs font-bold ${user.totalGenerations > 0 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                    {user.totalGenerations > 0 ? "Generated" : "No generation"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Section>
+        </div>
+
+        <Section title="Support Inbox">
+          <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
+            <LifeBuoy className="mt-0.5 h-5 w-5" />
+            <p className="text-sm font-semibold">{data.support.message}</p>
+          </div>
+        </Section>
+
+        <Section title="School Overview">
+          <div className="overflow-x-auto">
+            <table className="min-w-[1100px] w-full text-left text-sm">
+              <thead className="text-xs uppercase text-[var(--text-tertiary)]">
+                <tr>
+                  {["School", "Code", "Principal", "Email", "Teachers", "Credits", "Generations", "Plan", "Created"].map((item) => (
+                    <th key={item} className="px-3 py-2">{item}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border)]">
+                {data.schools.map((school) => (
+                  <tr key={`${school.schoolName}-${school.schoolCode}`}>
+                    <td className="px-3 py-3 font-semibold">{school.schoolName}</td>
+                    <td className="px-3 py-3">{school.schoolCode}</td>
+                    <td className="px-3 py-3">{school.principalName}</td>
+                    <td className="px-3 py-3">{school.principalEmail}</td>
+                    <td className="px-3 py-3">{fmt(school.teacherCount)}</td>
+                    <td className="px-3 py-3">{creditPill(school.schoolCreditBalance)}</td>
+                    <td className="px-3 py-3">{fmt(school.totalGenerations)}</td>
+                    <td className="px-3 py-3">{school.planPurchased}</td>
+                    <td className="px-3 py-3"><DateText value={school.createdAt} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Section>
+
+        <Section title="Progress Intelligence">
+          <div className="grid gap-3 md:grid-cols-3">
+            <SmallStat icon={LineChart} label="User growth WoW" value={data.progress.userGrowthRate} />
+            <SmallStat icon={LineChart} label="Revenue growth WoW" value={data.progress.revenueGrowthRate} />
+            <SmallStat icon={Building2} label="Trend" value={data.progress.trend} />
+            <SmallStat icon={Building2} label="Best school" value={data.progress.bestPerformingSchool} />
+            <SmallStat icon={Users} label="Most active teacher" value={data.progress.mostActiveTeacher} />
+            <SmallStat icon={AlertTriangle} label="Biggest churn risk" value={data.progress.biggestChurnRisk} tone="red" />
+          </div>
+          <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm font-semibold text-violet-800 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-300">
+            {data.progress.recommendation}
+          </div>
+          <div className="mt-4">
+            <SimpleList
+              title="Churn risk"
+              rows={
+                data.progress.churnRisks.length
+                  ? data.progress.churnRisks.map((user) => (
+                      <span key={`${user.email}-${user.lastGenerationDate}`}>
+                        {user.name} · {user.email} · last generation <DateText value={user.lastGenerationDate} />
+                      </span>
+                    ))
+                  : ["No zero-credit users with generation inactivity over 14 days."]
+              }
+            />
+          </div>
+          <div className="mt-4 text-xs text-[var(--text-secondary)]">
+            Unavailable or approximate: {data.unavailable.join("; ")}.
+          </div>
+          <div className="mt-3 text-xs text-[var(--text-secondary)]">
+            Data sources: {data.sourceTables.map((item) => `${item.section}: ${item.tables.join(", ")}`).join("; ")}.
+          </div>
+        </Section>
+      </div>
+    </div>
+  );
+}
+
+function SmallStat({
+  icon: Icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: unknown;
+  tone?: "red" | "yellow" | "green";
+}) {
+  return (
+    <div className={`rounded-xl border p-3 ${toneClasses(tone)}`}>
+      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide opacity-75">
+        <Icon className="h-4 w-4" />
+        {label}
+      </div>
+      <p className="mt-2 text-lg font-black">{fmt(value)}</p>
+    </div>
+  );
+}
+
+function SimpleList({ title, rows }: { title: string; rows: React.ReactNode[] }) {
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--card-alt)] p-3">
+      <h3 className="text-sm font-bold">{title}</h3>
+      <div className="mt-2 space-y-1 text-sm text-[var(--text-secondary)]">
+        {rows.length ? rows.slice(0, 10).map((row, index) => <p key={typeof row === "string" ? row : index}>{row}</p>) : <p>Not available yet</p>}
+      </div>
+    </div>
+  );
+}

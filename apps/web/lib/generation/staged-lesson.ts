@@ -7,6 +7,7 @@ import {
   getGenerationCreditAvailability,
 } from "@/lib/credits/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sanitizePexelsQuery } from "@/lib/pexelsQuery";
 
 export const LESSON_PACK_CREDIT_COST = 4;
 
@@ -343,34 +344,11 @@ function isPexelsImageUrl(value: unknown): value is string {
 }
 
 function compressPexelsQuery(input?: string | null, topic?: string, subject?: string) {
-  const raw = `${input || topic || subject || "classroom"}`.toLowerCase();
-
-  const removeWords = new Set([
-    "clear","colorful","beautiful","detailed","simple","clean",
-    "showing","including","with","that","all","main",
-    "visual","guide","picture","image","photo","diagram",
-    "labeled","labelled","illustration","educational","real","life",
-    "of","the","a","an","and","for","to","in","on",
-    "lesson","slide","example","activity","students","teacher","classroom",
-    "organs","system"
-  ]);
-
-  const words = raw
-    .replace(/[.,;:!?()[\]{}]/g, " ")
-    .split(/\s+/)
-    .filter(Boolean)
-    .filter(w => !removeWords.has(w))
-    .slice(0, 3);
-
-  return words.join(" ") || topic || subject || "learning";
+  return sanitizePexelsQuery(input, topic, subject);
 }
 
 function cleanPexelsQuery(query: unknown, options: { allowGeneric?: boolean } = {}) {
-  const cleaned = cleanString(query)
-    .replace(/classroom-?safe|classroom-?friendly|educational style/gi, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 100);
+  const cleaned = sanitizePexelsQuery(cleanString(query));
 
   if (!cleaned || (!options.allowGeneric && hasGenericVisualText(cleaned))) return "";
   return cleaned;

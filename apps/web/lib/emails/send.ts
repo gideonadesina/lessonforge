@@ -12,7 +12,7 @@ export async function sendEmail({
   try {
     if (!process.env.RESEND_API_KEY) {
       console.warn("RESEND_API_KEY is missing. Email not sent.");
-      return;
+      return false;
     }
 
     await resend.emails.send({
@@ -21,7 +21,9 @@ export async function sendEmail({
       subject,
       html,
     });
+    return true;
   } catch (err) {
     console.error("Email send failed:", err);
+    return false;
   }
 }

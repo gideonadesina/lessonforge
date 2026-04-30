@@ -8,12 +8,18 @@ import {
   PrincipalLoadingState,
   PrincipalOnboardingRequiredState,
 } from "@/components/principal/PrincipalStates";
+import { useToast } from "@/components/ui/ToastProvider";
 import { formatDateOnly, getErrorMessage, usePrincipalDashboard } from "@/lib/principal/client";
 
 export default function PrincipalWorkspacePage() {
+  const { showToast } = useToast();
   const { loading, forbidden, error, setError, dashboard, onboardingRequired, getToken, loadDashboard } =
     usePrincipalDashboard();
   const [codeBusy, setCodeBusy] = useState(false);
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [schoolNameInput, setSchoolNameInput] = useState("");
+  const [principalNameInput, setPrincipalNameInput] = useState("");
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [codeRegenState, setCodeRegenState] = useState<"default" | "confirm" | "success">(
     "default"
   );
@@ -22,6 +28,70 @@ export default function PrincipalWorkspacePage() {
   useEffect(() => {
     void loadDashboard();
   }, [loadDashboard]);
+
+  useEffect(() => {
+    if (!dashboard) return;
+    setSchoolNameInput(dashboard.school.name === "Your School" ? "" : dashboard.school.name);
+    setPrincipalNameInput(dashboard.school.principalName ?? "");
+    setProfileError(null);
+  }, [dashboard]);
+
+  async function saveSchoolProfile() {
+    const schoolName = schoolNameInput.trim();
+    const principalName = principalNameInput.trim();
+
+    if (!schoolName) {
+      setProfileError("School name is required.");
+      return;
+    }
+
+    setProfileBusy(true);
+    setProfileError(null);
+    setError(null);
+
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Session expired.");
+
+      const res = await fetch("/api/principal/school/profile", {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ schoolName, principalName }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || "Failed to update school profile.");
+      }
+
+      const updatedSchool = json.data?.school as
+        | { name?: string; principalName?: string | null }
+        | undefined;
+      const nextSchoolName = updatedSchool?.name ?? schoolName;
+      setSchoolNameInput(nextSchoolName);
+      setPrincipalNameInput(updatedSchool?.principalName ?? principalName);
+
+      window.dispatchEvent(
+        new CustomEvent("lessonforge:school-profile-updated", {
+          detail: {
+            schoolName: nextSchoolName,
+            principalName: updatedSchool?.principalName ?? principalName,
+          },
+        })
+      );
+
+      await loadDashboard();
+      showToast("School profile updated");
+    } catch (err: unknown) {
+      const message = getErrorMessage(err, "Failed to update school profile.");
+      setProfileError(message);
+      showToast({ message, color: "rose" });
+    } finally {
+      setProfileBusy(false);
+    }
+  }
 
   async function regenerateCode() {
     setCodeBusy(true);
@@ -76,8 +146,54 @@ export default function PrincipalWorkspacePage() {
       {dashboard ? (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
           <div className="space-y-4 xl:col-span-7">
-            <SectionCard title="School profile" subtitle="Core workspace identity for your principal area.">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <SectionCard title="School Profile" subtitle="Core workspace identity shown to principals and teachers.">
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                      School Name
+                    </span>
+                    <input
+                      value={schoolNameInput}
+                      onChange={(event) => {
+                        setSchoolNameInput(event.target.value);
+                        if (profileError === "School name is required.") setProfileError(null);
+                      }}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-violet-500"
+                      placeholder="e.g. Greater Heights Academy"
+                    />
+                  </label>
+
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                      Principal Name
+                    </span>
+                    <input
+                      value={principalNameInput}
+                      onChange={(event) => setPrincipalNameInput(event.target.value)}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-violet-500"
+                      placeholder="Principal name"
+                    />
+                  </label>
+
+                </div>
+
+                {profileError ? (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
+                    {profileError}
+                  </div>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={saveSchoolProfile}
+                  disabled={profileBusy}
+                  className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
+                >
+                  {profileBusy ? "Saving..." : "Save Changes"}
+                </button>
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
                   <div className="text-xs uppercase tracking-wide text-[var(--text-tertiary)]">School name</div>
                   <div className="mt-1 text-sm font-bold text-[var(--text-primary)]">{dashboard.school.name}</div>
@@ -93,6 +209,7 @@ export default function PrincipalWorkspacePage() {
                 <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
                   <div className="text-xs uppercase tracking-wide text-[var(--text-tertiary)]">School ID</div>
                   <div className="mt-1 break-all font-mono text-xs text-[var(--text-secondary)]">{dashboard.school.id}</div>
+                </div>
                 </div>
               </div>
             </SectionCard>

@@ -1891,13 +1891,13 @@ export async function POST(req: NextRequest) {
     }
 
     const newBalance = deductionResult.creditsRemaining;
-    // TODO: Use an email notification log to avoid repeated low-credit emails across requests.
+    const previousBalance = deductionResult.previousBalance;
     if (deductionResult.source === "personal" && user.email) {
       const firstName = getFirstName(
         user.user_metadata?.full_name ?? user.user_metadata?.name
       );
 
-      if (newBalance <= 5 && newBalance > 0) {
+      if (newBalance <= 5 && newBalance > 0 && previousBalance > 5) {
         await sendEmail({
           to: user.email,
           subject: "Your LessonForge credits are running low",
@@ -1908,7 +1908,7 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      if (newBalance === 0) {
+      if (newBalance === 0 && previousBalance > 0) {
         await sendEmail({
           to: user.email,
           subject: "You have used all your LessonForge credits",

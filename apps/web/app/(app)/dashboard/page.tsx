@@ -143,7 +143,7 @@ export default function DashboardPage() {
       const school = json.data?.school ?? null;
       const hasSchool = Boolean(school?.id);
       setHasSchoolMembership(hasSchool);
-      setSchoolName(hasSchool ? school?.name ?? "School workspace" : null);
+      setSchoolName(hasSchool ? school?.name ?? "Your School" : null);
       if (!hasSchool) {
         setSchoolName(null);
         setSchoolCreditsRemaining(null);
@@ -576,7 +576,7 @@ export default function DashboardPage() {
                   School Mode
                 </div>
                 <h2 className="mt-1 text-sm font-bold text-[var(--text-primary)]">
-                  {schoolName ?? "School workspace"}
+                  {schoolName ?? "Your School"}
                 </h2>
                 <p className="mt-1 text-xs text-[var(--text-secondary)]">
                   Using school credits for generations first.

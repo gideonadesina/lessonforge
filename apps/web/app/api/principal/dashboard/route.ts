@@ -162,6 +162,7 @@ async function getSlotLimit(
 ) {
   return Math.max(fallback, 1);
 }
+
  
 async function getBillingHistory(
   admin: ReturnType<typeof createAdminClient>,
@@ -611,7 +612,7 @@ export async function GET(req: NextRequest) {
     const payload = {
       school: {
         id: schoolId,
-        name: context.school.name ?? "Unnamed School",
+        name: context.school.name ?? "Your School",
         principalName:
           (context.school as { principal_name?: string | null }).principal_name ?? null,
         code: schoolCode || "N/A",

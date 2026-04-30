@@ -21,6 +21,7 @@ type PrincipalSidebarProps = {
   setMobileOpen: (open: boolean) => void;
   collapsed: boolean;
   setCollapsed: (collapsed: boolean) => void;
+  schoolName: string | null;
 };
  
 type NavItem = {
@@ -68,14 +69,18 @@ function isActive(href: string, pathname: string) {
 function SidebarCard({
   collapsed,
   pathname,
+  schoolName,
   onNavigate,
   onCollapseToggle,
 }: {
   collapsed: boolean;
   pathname: string;
+  schoolName: string | null;
   onNavigate?: () => void;
   onCollapseToggle?: () => void;
 }) {
+  const workspaceName = schoolName || "Your School";
+
   return (
     <aside
       className={[
@@ -90,7 +95,7 @@ function SidebarCard({
         </Link>
         <div className={collapsed ? "hidden" : "min-w-0"}>
           {!collapsed ? (
-            <p className="truncate text-sm font-semibold text-[var(--text-primary)]">Principal Command Center</p>
+            <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{workspaceName}</p>
           ) : null}
         </div>
         {onCollapseToggle ? (
@@ -155,6 +160,7 @@ export default function PrincipalSidebar({
   setMobileOpen,
   collapsed,
   setCollapsed,
+  schoolName,
 }: PrincipalSidebarProps) {
   const pathname = usePathname();
  
@@ -165,6 +171,7 @@ export default function PrincipalSidebar({
           <SidebarCard
             collapsed={collapsed}
             pathname={pathname}
+            schoolName={schoolName}
             onCollapseToggle={() => setCollapsed(!collapsed)}
           />
         </div>
@@ -187,6 +194,7 @@ export default function PrincipalSidebar({
         <SidebarCard
           collapsed={false}
           pathname={pathname}
+          schoolName={schoolName}
           onNavigate={() => setMobileOpen(false)}
         />
       </div>

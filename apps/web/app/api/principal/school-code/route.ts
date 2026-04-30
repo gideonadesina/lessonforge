@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
 
     const schoolId = context.school.id;
     const admin = createAdminClient();
-    const newCode = generateSchoolCode(context.school.name ?? "LessonForge School");
+    const newCode = generateSchoolCode(context.school.name ?? "Your School");
      const billingGuard = await ensurePrincipalBillingActive(admin, schoolId);
     if (!billingGuard.ok) {
       return NextResponse.json({ ok: false, error: billingGuard.error, billing: billingGuard.billing }, { status: billingGuard.status });

@@ -39,10 +39,106 @@ type SchoolRecord = {
   principal_name?: string | null;
 };
 
+type PaymentPayloadRow = {
+  provider_payload?: unknown;
+  created_at?: string | null;
+};
+
 type MembershipRow = {
   school_id: string;
   role: string | null;
 };
+
+function isPrincipalDerivedSchoolName(schoolName: string | null | undefined) {
+  return /'s\s+school$/i.test(String(schoolName ?? "").trim());
+}
+
+function readNestedRecord(value: unknown, key: string): Record<string, unknown> | null {
+  if (!value || typeof value !== "object") return null;
+  const next = (value as Record<string, unknown>)[key];
+  return next && typeof next === "object" ? (next as Record<string, unknown>) : null;
+}
+
+function extractSchoolNameFromPayload(payload: unknown) {
+  if (!payload || typeof payload !== "object") return null;
+  const root = payload as Record<string, unknown>;
+  const metadata =
+    readNestedRecord(root, "metadata") ??
+    readNestedRecord(readNestedRecord(root, "data"), "metadata");
+  const value = String(metadata?.school_name ?? root.school_name ?? "").trim();
+  if (!value || isPrincipalDerivedSchoolName(value)) return null;
+  return value;
+}
+
+async function findStoredPaymentSchoolName(
+  admin: ReturnType<typeof createAdminClient>,
+  input: { schoolId: string; principalId: string }
+) {
+  const candidates: string[] = [];
+
+  const schoolPayments = await admin
+    .from("school_payment_transactions")
+    .select("provider_payload, created_at")
+    .or(`school_id.eq.${input.schoolId},user_id.eq.${input.principalId}`)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  if (!schoolPayments.error || isMissingTableOrColumnError(schoolPayments.error)) {
+    for (const row of (schoolPayments.data ?? []) as PaymentPayloadRow[]) {
+      const schoolName = extractSchoolNameFromPayload(row.provider_payload);
+      if (schoolName) candidates.push(schoolName);
+    }
+  }
+
+  const paymentTransactions = await admin
+    .from("payment_transactions")
+    .select("provider_payload, created_at")
+    .eq("user_id", input.principalId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  if (!paymentTransactions.error || isMissingTableOrColumnError(paymentTransactions.error)) {
+    for (const row of (paymentTransactions.data ?? []) as PaymentPayloadRow[]) {
+      const schoolName = extractSchoolNameFromPayload(row.provider_payload);
+      if (schoolName) candidates.push(schoolName);
+    }
+  }
+
+  return candidates[0] ?? null;
+}
+
+export async function repairPrincipalDerivedSchoolName(input: {
+  school: SchoolRecord;
+  principalId: string;
+}) {
+  if (!isPrincipalDerivedSchoolName(input.school.name)) return input.school;
+
+  const admin = createAdminClient();
+  const storedSchoolName = await findStoredPaymentSchoolName(admin, {
+    schoolId: input.school.id,
+    principalId: input.principalId,
+  });
+
+  if (!storedSchoolName) {
+    return { ...input.school, name: null };
+  }
+
+  const updateRes = await admin
+    .from("schools")
+    .update({ name: storedSchoolName })
+    .eq("id", input.school.id)
+    .select("id, name, code, created_at, created_by, principal_name")
+    .maybeSingle();
+
+  if (updateRes.error && !isMissingTableOrColumnError(updateRes.error)) {
+    return { ...input.school, name: storedSchoolName };
+  }
+
+  return ((updateRes.data as SchoolRecord | null) ?? {
+    ...input.school,
+    name: storedSchoolName,
+  });
+}
 
 function getUserClientWithToken(token: string) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -148,6 +244,13 @@ export async function resolvePrincipalContext(
     }
 
     school = (byCreatorRes.data as SchoolRecord | null) ?? null;
+  }
+
+  if (school) {
+    school = await repairPrincipalDerivedSchoolName({
+      school,
+      principalId: user.id,
+    });
   }
 
   const isPrincipal = Boolean(

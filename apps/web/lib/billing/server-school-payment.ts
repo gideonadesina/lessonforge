@@ -166,7 +166,7 @@ async function insertSchoolWorkspace(
 ): Promise<string> {
   const admin = createAdminClient();
   const normalizedSchoolName =
-    String(input.schoolName ?? "").trim() || "LessonForge School";
+    String(input.schoolName ?? "").trim() || "Your School";
   const principalName = String(input.principalName ?? "").trim() || null;
   let schoolCode = generateSchoolCode(normalizedSchoolName);
 
@@ -427,7 +427,7 @@ async function ensureActiveSchoolCode(
     throw new Error(`Failed to load school name: ${schoolError.message}`);
   }
 
-  const schoolName = String(school?.name ?? "LessonForge School");
+  const schoolName = String(school?.name ?? "Your School");
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const code = generateSchoolCode(schoolName);

@@ -153,6 +153,13 @@ export default function PrincipalOnboardingCard({ setParentError }: Props) {
               }
 
               setParentError(null);
+              window.localStorage.setItem(
+                "lessonforge:principal-onboarding",
+                JSON.stringify({
+                  principalName: principalName.trim(),
+                  schoolName: schoolName.trim(),
+                })
+              );
               setStep(2);
             }}
             disabled={busy}

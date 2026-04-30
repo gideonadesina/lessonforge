@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { paystackHeaders, appUrl } from "@/lib/paystack";
 import { createClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   isValidSchoolPlanId,
   getSchoolPlanPaystackAmount,
@@ -45,6 +46,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid school plan" }, { status: 400 });
     }
 
+    const admin = createAdminClient();
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("full_name, school_id")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    let existingSchoolName = "";
+    const existingSchoolId = String(profile?.school_id ?? "").trim();
+    if (existingSchoolId) {
+      const { data: school } = await admin
+        .from("schools")
+        .select("name")
+        .eq("id", existingSchoolId)
+        .maybeSingle();
+      existingSchoolName = String(school?.name ?? "").trim();
+    }
+
+    const resolvedSchoolName = String(schoolName ?? "").trim() || existingSchoolName;
+    const resolvedPrincipalName = String(principalName ?? "").trim() || String(profile?.full_name ?? "").trim();
+
+    if (!resolvedSchoolName) {
+      return NextResponse.json(
+        { error: "School name is required before activating a new workspace." },
+        { status: 400 }
+      );
+    }
+
     const amountMinor = getSchoolPlanPaystackAmount(plan, "NGN");
     const sharedCredits = getSchoolPlanSharedCredits(plan);
 
@@ -73,8 +102,8 @@ export async function POST(req: NextRequest) {
           payment_purpose: "school",
           principal_id: user.id,
           user_id: user.id,
-          school_name: String(schoolName ?? "").trim(),
-          principal_name: String(principalName ?? "").trim(),
+          school_name: resolvedSchoolName,
+          principal_name: resolvedPrincipalName,
           plan,
           plan_id: plan,
           currency: "NGN",

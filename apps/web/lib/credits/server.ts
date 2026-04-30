@@ -94,6 +94,7 @@ export async function consumePersonalCreditsDirectly(
         source: "personal",
         schoolId: null,
         creditsRemaining: nextBalance,
+        previousBalance: currentBalance,
       };
     }
   }
@@ -107,7 +108,7 @@ export async function consumePersonalCreditsDirectly(
 }
 
 export type ConsumeGenerationCreditResult =
-  | { ok: true; source: CreditSource; schoolId: string | null; creditsRemaining: number }
+  | { ok: true; source: CreditSource; schoolId: string | null; creditsRemaining: number; previousBalance: number }
   | {
       ok: false;
       error: string;
@@ -311,7 +312,7 @@ export async function consumeGenerationCredits(
   activeRole?: AppRole | string | null
 ): Promise<ConsumeGenerationCreditResult> {
   if (!Number.isFinite(cost) || cost <= 0) {
-    return { ok: true, source: "personal", schoolId: null, creditsRemaining: 0 };
+    return { ok: true, source: "personal", schoolId: null, creditsRemaining: 0, previousBalance: 0 };
   }
 
   const creditClient = createAdminClient();
@@ -441,6 +442,7 @@ export async function consumeGenerationCredits(
           source: "school",
           schoolId: availability.schoolId,
           creditsRemaining: nextSchoolCredits,
+          previousBalance: currentSchoolCredits,
         };
       }
     }
@@ -526,6 +528,7 @@ export async function consumeGenerationCredits(
         source: "personal",
         schoolId: null,
         creditsRemaining: nextBalance,
+        previousBalance: currentBalance,
       };
     }
   }
