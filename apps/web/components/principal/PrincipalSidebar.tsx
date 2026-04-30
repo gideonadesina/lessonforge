@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CreditCard,
+  HelpCircle,
   LayoutDashboard,
   Library,
   Sparkles,
@@ -57,6 +58,12 @@ const NAV_SECTIONS: NavSection[] = [
     title: "Billing",
     items: [
       { label: "School Pricing", href: "/principal/pricing", icon: CreditCard },
+    ],
+  },
+  {
+    title: "Support",
+    items: [
+      { label: "Help & Support", href: "/help", icon: HelpCircle },
     ],
   },
 ];

@@ -8,14 +8,17 @@ import {
   Building2,
   CheckCircle2,
   CreditCard,
+  Download,
   LifeBuoy,
   LineChart,
   RefreshCw,
   Search,
+  Send,
   Users,
   Zap,
 } from "lucide-react";
 import type { AdminDashboardData, AdminPaymentRow, AdminUserRow } from "@/lib/admin/metrics";
+import type { CampaignSnapshot } from "@/lib/feedback-campaign";
 
 type SortKey = keyof AdminUserRow;
 
@@ -277,6 +280,186 @@ function PaymentsTable({ payments }: { payments: AdminPaymentRow[] }) {
   );
 }
 
+function FeedbackCampaignSection({
+  snapshot,
+  onSnapshot,
+}: {
+  snapshot: CampaignSnapshot;
+  onSnapshot: (snapshot: CampaignSnapshot) => void;
+}) {
+  const [sending, setSending] = useState(false);
+  const [sendingTest, setSendingTest] = useState(false);
+  const [message, setMessage] = useState<string | null>(snapshot.message);
+
+  async function refreshCampaign() {
+    const response = await fetch("/api/admin/feedback-campaign", { cache: "no-store" });
+    if (!response.ok) return;
+    const next = (await response.json()) as CampaignSnapshot;
+    onSnapshot(next);
+    setMessage(next.message);
+  }
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void refreshCampaign();
+    }, 15000);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleSendNow() {
+    setSending(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/admin/feedback-campaign", {
+        method: "POST",
+        cache: "no-store",
+      });
+      const json = (await response.json()) as {
+        ok?: boolean;
+        message?: string;
+        snapshot?: CampaignSnapshot;
+      };
+      if (json.snapshot) onSnapshot(json.snapshot);
+      setMessage(json.message ?? (response.ok ? "Campaign run completed." : "Campaign run failed."));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Campaign run failed.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function handleSendTest() {
+    setSendingTest(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/admin/feedback-campaign", {
+        method: "POST",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "test" }),
+      });
+      const json = (await response.json()) as {
+        ok?: boolean;
+        message?: string;
+        snapshot?: CampaignSnapshot;
+      };
+      if (json.snapshot) onSnapshot(json.snapshot);
+      setMessage(json.message ?? (response.ok ? "Test email sent." : "Test email failed."));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Test email failed.");
+    } finally {
+      setSendingTest(false);
+    }
+  }
+
+  function exportCsv() {
+    window.location.href = "/api/admin/feedback-campaign/export";
+  }
+
+  const rows = snapshot.logs;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="grid gap-3 sm:grid-cols-4 lg:flex-1">
+          <SmallStat icon={Send} label="Total Sent" value={snapshot.stats.totalSent} />
+          <SmallStat icon={LineChart} label="Total Opened" value={snapshot.stats.totalOpened} />
+          <SmallStat icon={CheckCircle2} label="Total Replied" value={snapshot.stats.totalReplied} tone="green" />
+          <SmallStat icon={AlertTriangle} label="Total Not Replied" value={snapshot.stats.totalNotReplied} tone="yellow" />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleSendNow}
+            disabled={sending || sendingTest || !snapshot.tableReady}
+            className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-bold text-[var(--text-primary)] shadow-sm hover:bg-[var(--card-alt)] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Send className="h-4 w-4" />
+            {sending ? "Sending" : "Send Campaign Now"}
+          </button>
+          <button
+            type="button"
+            onClick={handleSendTest}
+            disabled={sending || sendingTest}
+            className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-bold text-[var(--text-primary)] shadow-sm hover:bg-[var(--card-alt)] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Send className="h-4 w-4" />
+            {sendingTest ? "Sending Test" : "Send Test Email"}
+          </button>
+          <button
+            type="button"
+            onClick={exportCsv}
+            disabled={!snapshot.tableReady}
+            className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-bold text-[var(--text-primary)] shadow-sm hover:bg-[var(--card-alt)] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Download className="h-4 w-4" />
+            Export CSV
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--card-alt)] px-3 py-2 text-sm text-[var(--text-secondary)]">
+        Next Scheduled Send: <span className="font-semibold text-[var(--text-primary)]"><DateTimeText value={snapshot.nextScheduledSend} /></span>
+      </div>
+
+      {message ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
+          {message}
+        </div>
+      ) : null}
+
+      <div className="overflow-x-auto">
+        <table className="min-w-[1050px] w-full text-left text-sm">
+          <thead className="text-xs uppercase text-[var(--text-tertiary)]">
+            <tr>
+              {["Name", "Email", "First Email Sent", "Follow-up Sent", "Opened", "Clicked", "Replied"].map((item) => (
+                <th key={item} className="px-3 py-2">{item}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--border)]">
+            {rows.map((row) => (
+              <tr key={row.email}>
+                <td className="px-3 py-3 font-semibold text-[var(--text-primary)]">{row.teacher_name}</td>
+                <td className="px-3 py-3 text-[var(--text-secondary)]">{row.email}</td>
+                <td className="px-3 py-3"><DateTimeText value={row.first_email_sent_at} /></td>
+                <td className="px-3 py-3">
+                  <span className={`rounded-full px-2 py-1 text-xs font-semibold ${row.follow_up_sent ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+                    {row.follow_up_sent ? "Yes" : "No"}
+                  </span>
+                </td>
+                <td className="px-3 py-3">
+                  <span className={`rounded-full px-2 py-1 text-xs font-semibold ${row.opened ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+                    {row.opened ? "Yes" : "No"}
+                  </span>
+                </td>
+                <td className="px-3 py-3">
+                  <span className={`rounded-full px-2 py-1 text-xs font-semibold ${row.clicked ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+                    {row.clicked ? "Yes" : "No"}
+                  </span>
+                </td>
+                <td className="px-3 py-3">
+                  <span className={`rounded-full px-2 py-1 text-xs font-semibold ${row.replied ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                    {row.replied ? "Yes" : "No"}
+                  </span>
+                </td>
+              </tr>
+            ))}
+            {!rows.length ? (
+              <tr>
+                <td className="px-3 py-4 text-sm text-[var(--text-secondary)]" colSpan={7}>
+                  No campaign logs yet.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboard({ data: initialData }: { data: AdminDashboardData }) {
   const [data, setData] = useState(initialData);
   const [refreshing, setRefreshing] = useState(false);
@@ -341,6 +524,15 @@ export default function AdminDashboard({ data: initialData }: { data: AdminDashb
 
         <Section title="Users">
           <UsersTable users={data.users} />
+        </Section>
+
+        <Section title="Feedback Campaign">
+          <FeedbackCampaignSection
+            snapshot={data.feedbackCampaign}
+            onSnapshot={(feedbackCampaign) =>
+              setData((current) => ({ ...current, feedbackCampaign }))
+            }
+          />
         </Section>
 
         <div className="grid gap-6 xl:grid-cols-2">

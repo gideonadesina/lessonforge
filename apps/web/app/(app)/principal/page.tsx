@@ -125,7 +125,7 @@ export default function PrincipalPage() {
         showToast({
           message:
             "Your school has run out of credits. Teachers cannot generate until you top up.",
-          action: { label: "Top up now", href: "/principal/billing" },
+          action: { label: "Top up now", href: "/principal/pricing" },
           duration: "persistent",
           color: "rose",
         });
@@ -148,7 +148,7 @@ export default function PrincipalPage() {
         });
         showToast({
           message: `School credits running low - ${dashboard.schoolCredits.remaining} credits left (${dashboard.schoolCredits.percentUsed}% used). Top up soon to avoid interruption.`,
-          action: { label: "Top up", href: "/principal/billing" },
+          action: { label: "Top up", href: "/principal/pricing" },
           duration: 10000,
           color: "amber",
         });
@@ -313,7 +313,7 @@ const showNoWorkspaceDashboard =
                 subtitle="A concise snapshot of where leadership attention should go now."
                 action={
                   <Link
-                    href="/principal/billing"
+                    href="/principal/pricing"
                     className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-400 dark:hover:bg-violet-900/40"
                   >
                     Manage billing

@@ -4,10 +4,12 @@ export async function sendEmail({
   to,
   subject,
   html,
+  replyTo,
 }: {
   to: string;
   subject: string;
   html: string;
+  replyTo?: string;
 }) {
   try {
     if (!process.env.RESEND_API_KEY) {
@@ -20,6 +22,7 @@ export async function sendEmail({
       to,
       subject,
       html,
+      ...(replyTo ? { replyTo } : {}),
     });
     return true;
   } catch (err) {

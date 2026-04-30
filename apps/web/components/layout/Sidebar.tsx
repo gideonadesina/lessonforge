@@ -7,6 +7,7 @@ import {
   CalendarDays,
   CreditCard,
   FileText,
+  HelpCircle,
   LayoutDashboard,
   Library,
   School,
@@ -58,6 +59,7 @@ const teacherNav: NavSection[] = [
       { href: "/school", label: "School", icon: School },
       { href: "/pricing", label: "Pricing", icon: CreditCard },
       { href: "/settings", label: "Settings", icon: Settings },
+      { href: "/help", label: "Help & Support", icon: HelpCircle },
     ],
   },
 ];
@@ -75,7 +77,7 @@ function SidebarCard({
   onNavigate?: () => void;
 }) {
   return (
-    <aside className="h-full w-72 overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-3 text-[var(--text-primary)] shadow-sm transition-all duration-300">
+    <aside className="h-full max-h-[calc(100vh-2rem)] w-72 overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-3 text-[var(--text-primary)] shadow-sm transition-all duration-300">
       <div className="mb-4 flex items-center justify-between gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card-alt)] px-3 py-3">
         <Link href="/dashboard" onClick={onNavigate} className="min-w-0">
           <img src="/lessonforge_logo_primary.svg" alt="LessonForge" height="48" />
@@ -85,10 +87,10 @@ function SidebarCard({
         </div>
       </div>
 
-      <nav className="space-y-4">
+      <nav className="flex flex-col gap-1">
         {teacherNav.map((section) => (
           <div key={section.label}>
-            <p className="px-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-tertiary)]">
+            <p className="px-2 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-tertiary)]">
               {section.label}
             </p>
             <div className="mt-1 space-y-1">

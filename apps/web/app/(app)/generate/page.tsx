@@ -8,7 +8,7 @@ import { useProfile } from "@/lib/useProfile";
 import TeacherPaywallModal from "@/components/billing/TeacherPaywallModal";
 import { useNetworkStatus } from "@/components/network/NetworkProvider";
 import { LESSON_PACK_CREDIT_COST } from "@/lib/billing/pricing";
-import { getInvalidJsonMessage, readJsonResponse } from "@/lib/http/safe-json";
+import { readJsonResponse } from "@/lib/http/safe-json";
 import { track } from "@/lib/analytics";
 import { enrichGeneratedLessonImages } from "@/lib/generation/enrich-images-client";
 import { renderLessonPackHTML } from "@/lib/export/renderLessonPack";
@@ -203,6 +203,12 @@ type GenerationMetadata = {
 type FailedStage = 2 | 3;
 type GeneratedSlide = NonNullable<Generated["slides"]>[number];
 
+const GENERIC_GENERATE_ERROR = "Something went wrong. Please try again.";
+const NETWORK_CONNECTION_ERROR =
+  "Poor network connection detected. Please check your internet and try again.";
+const SERVER_CONNECTION_ERROR =
+  "Could not connect to the server. Please check your network connection and try again.";
+
 const STAGED_PROGRESS_STEPS = [
   "Generating lesson plan",
   "Writing lesson notes",
@@ -233,6 +239,31 @@ function youtubeSearchUrl(query: string) {
 
 function getSlideImageSrc(slide: GeneratedSlide | undefined) {
   return slide?.image_url || slide?.image || null;
+}
+
+function getGenerateErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+
+  if (message === NETWORK_CONNECTION_ERROR || message === SERVER_CONNECTION_ERROR) {
+    return message;
+  }
+
+  if (
+    error instanceof TypeError ||
+    /failed to fetch/i.test(message) ||
+    /networkerror/i.test(message)
+  ) {
+    return NETWORK_CONNECTION_ERROR;
+  }
+
+  if (
+    /invalid response/i.test(message) ||
+    message === "We could not read the server response. Please try again."
+  ) {
+    return SERVER_CONNECTION_ERROR;
+  }
+
+  return GENERIC_GENERATE_ERROR;
 }
 
 function shuffleArray<T>(arr: T[]) {
@@ -368,13 +399,27 @@ export default function GeneratePage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [downloadingPack, setDownloadingPack] = useState(false); // ← NEW
   const [showExportMenu, setShowExportMenu] = useState(false);
-  const { isOnline, isUnstable } = useNetworkStatus();
-  const networkRef = useRef({ isOnline, isUnstable });
+  const { isOnline } = useNetworkStatus();
   const generatingRef = useRef(false);
 
   useEffect(() => {
-    networkRef.current = { isOnline, isUnstable };
-  }, [isOnline, isUnstable]);
+    const targetText = "Connection unstable. Trying to continue";
+
+    function removeUnstableBanner() {
+      if (typeof document === "undefined") return;
+      document.querySelectorAll("div").forEach((node) => {
+        if (node.textContent?.includes(targetText)) {
+          node.remove();
+        }
+      });
+    }
+
+    removeUnstableBanner();
+    const observer = new MutationObserver(removeUnstableBanner);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => observer.disconnect();
+  }, []);
 
   const [error, setError] = useState<string | null>(null);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
@@ -516,14 +561,6 @@ export default function GeneratePage() {
     result,
   ]);
 
-  function getResponseMessage(json: Record<string, unknown>, fallback: string) {
-    return typeof json.message === "string"
-      ? json.message
-      : typeof json.error === "string"
-      ? json.error
-      : fallback;
-  }
-
   function getResponseCode(json: Record<string, unknown>) {
     return typeof json.errorCode === "string"
       ? json.errorCode
@@ -564,7 +601,7 @@ export default function GeneratePage() {
 
     const parsedResponse = await readJsonResponse<Record<string, unknown>>(res);
     if (parsedResponse.parseError) {
-      throw new Error(getInvalidJsonMessage(res));
+      throw new Error(SERVER_CONNECTION_ERROR);
     }
 
     return { res, json: parsedResponse.data ?? {} };
@@ -650,7 +687,7 @@ export default function GeneratePage() {
         ) {
           setShowPaywall(true);
         }
-        throw new Error(getResponseMessage(json, "Generation failed"));
+        throw new Error(NETWORK_CONNECTION_ERROR);
       }
 
       const lessonId = typeof json.lessonId === "string" ? json.lessonId : "";
@@ -673,7 +710,7 @@ export default function GeneratePage() {
       if (!stage2.res.ok) {
         setFailedStage(2);
         setSaveMsg("Lesson saved. Some content could not be completed. You can retry from your library.");
-        throw new Error(getResponseMessage(stage2.json, "Stage 2 could not be completed."));
+        throw new Error(NETWORK_CONNECTION_ERROR);
       }
 
       const stage2Data = stage2.json.data as Generated;
@@ -688,7 +725,7 @@ export default function GeneratePage() {
       if (!stage3.res.ok) {
         setFailedStage(3);
         setSaveMsg("Lesson saved. Some content could not be completed. You can retry from your library.");
-        throw new Error(getResponseMessage(stage3.json, "Stage 3 could not be completed."));
+        throw new Error(NETWORK_CONNECTION_ERROR);
       }
 
       const generated = await enrichGeneratedLessonImages(
@@ -716,7 +753,7 @@ export default function GeneratePage() {
       setSaveMsg("Complete. Auto-saved to Library.");
       setIsGenerating(false);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      setError(getGenerateErrorMessage(e));
       setIsGenerating(false);
     } finally {
       generatingRef.current = false;
@@ -753,7 +790,7 @@ export default function GeneratePage() {
       );
 
       if (!retry.res.ok) {
-        throw new Error(getResponseMessage(retry.json, `Stage ${failedStage} retry failed.`));
+        throw new Error(NETWORK_CONNECTION_ERROR);
       }
 
       const nextData = retry.json.data as Generated;
@@ -776,7 +813,7 @@ export default function GeneratePage() {
       );
       router.refresh();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      setError(getGenerateErrorMessage(e));
     } finally {
       setRetryingStage(false);
     }

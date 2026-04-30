@@ -25,7 +25,6 @@ import {
   type AppRole,
 } from "@/lib/auth/roles";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
-import HelpMenu from "@/components/support/HelpMenu";
  
 type PrincipalTopbarProps = {
   onOpenMenu: () => void;
@@ -114,7 +113,12 @@ export default function PrincipalTopbar({
       persistActiveRole(nextRole);
       setActiveRole(nextRole);
       setProfileOpen(false);
-      window.location.href = result.homePath;
+      window.location.href =
+        nextRole === "principal"
+          ? "/principal"
+          : nextRole === "teacher"
+          ? "/dashboard"
+          : result.homePath;
     } catch (error: unknown) {
       setRoleError(getAuthErrorMessage(error, "Unable to switch role right now."));
     } finally {
@@ -160,8 +164,6 @@ export default function PrincipalTopbar({
         </div>
 
         <div className="flex shrink-0 items-center justify-end gap-2">
-          <HelpMenu userEmail={email} activeRole={activeRole ?? "principal"} />
-
           <button
             type="button"
             className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] text-[var(--text-secondary)] transition hover:bg-[var(--card-alt)]"

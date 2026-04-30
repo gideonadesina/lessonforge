@@ -19,7 +19,6 @@ import { useProfile } from "@/lib/useProfile";
 import { useToast } from "@/components/ui/ToastProvider";
 import type { Notification } from "@/lib/planning/types";
 import NotificationBellDropdown from "@/components/planning/NotificationBellDropdown";
-import HelpMenu from "@/components/support/HelpMenu";
 
 export default function Topbar({
   userEmail,
@@ -141,7 +140,12 @@ export default function Topbar({
       persistActiveRole(nextRole);
       setActiveRole(nextRole);
       setRoleMenuOpen(false);
-      window.location.href = result.homePath;
+      window.location.href =
+        nextRole === "principal"
+          ? "/principal"
+          : nextRole === "teacher"
+          ? "/dashboard"
+          : result.homePath;
     } catch (error: unknown) {
       setRoleError(
         getAuthErrorMessage(error, "Unable to switch role right now.")
@@ -299,12 +303,6 @@ export default function Topbar({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <HelpMenu
-            userEmail={userEmail}
-            userId={profile?.id}
-            activeRole={activeRole}
-          />
-
           {canSwitchRole && !isPrincipalArea ? (
             <div ref={roleMenuRef} className="relative">
               <button

@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getCampaignSnapshot, type CampaignSnapshot } from "@/lib/feedback-campaign";
 
 export const ADMIN_USER_ID = "a6ec2b75-6f89-4368-bb24-f010b459799d";
 const NA = "Not available yet";
@@ -103,6 +104,7 @@ export type AdminDashboardData = {
   };
   unavailable: string[];
   sourceTables: Array<{ section: string; tables: string[] }>;
+  feedbackCampaign: CampaignSnapshot;
 };
 
 type ProfileRow = {
@@ -442,6 +444,7 @@ function resolveProfileEmail(profile: ProfileRow | undefined, userId?: string | 
 
 export async function getAdminDashboardData(): Promise<AdminDashboardData> {
   const [
+    feedbackCampaign,
     profiles,
     schools,
     schoolMembers,
@@ -456,6 +459,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
     roles,
     authUsers,
   ] = await Promise.all([
+    getCampaignSnapshot(),
     safeSelectFirst<ProfileRow>(
       "profiles",
       [
@@ -1013,6 +1017,8 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       { section: "Generation analytics", tables: ["lessons", "worksheets", "exams", "profiles"] },
       { section: "Schools", tables: ["schools", "school_members", "school_codes", "profiles", "lessons", "worksheets"] },
       { section: "Last active approximation", tables: ["auth.users", "profiles", "lessons", "worksheets"] },
+      { section: "Feedback campaign", tables: ["profiles", "email_logs"] },
     ],
+    feedbackCampaign,
   };
 }
