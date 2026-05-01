@@ -17,7 +17,7 @@ import {
   Users,
   Zap,
 } from "lucide-react";
-import type { AdminDashboardData, AdminPaymentRow, AdminUserRow } from "@/lib/admin/metrics";
+import type { AdminDashboardData, AdminPaymentRow, AdminSchoolRow, AdminUserRow } from "@/lib/admin/metrics";
 import type { CampaignSnapshot } from "@/lib/feedback-campaign";
 
 type SortKey = keyof AdminUserRow;
@@ -460,6 +460,235 @@ function FeedbackCampaignSection({
   );
 }
 
+function firstName(name: string) {
+  return name.split(/\s+/)[0] || "there";
+}
+
+function CreditTopUpSection({
+  users,
+  schools,
+  onDone,
+}: {
+  users: AdminUserRow[];
+  schools: AdminSchoolRow[];
+  onDone: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<{ type: "user" | "school"; id: string; label: string } | null>(null);
+  const [amount, setAmount] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const userRows = users
+      .filter((user) => [user.name, user.email, user.schoolName].join(" ").toLowerCase().includes(q))
+      .slice(0, 6)
+      .map((user) => ({ type: "user" as const, id: user.id, label: `${user.name} - ${user.email}`, meta: `Current: ${fmt(user.currentCreditBalance)} credits` }));
+    const schoolRows = schools
+      .filter((school) => [school.schoolName, school.principalEmail, school.schoolCode].join(" ").toLowerCase().includes(q))
+      .slice(0, 6)
+      .map((school) => ({ type: "school" as const, id: school.id, label: `${school.schoolName} - ${school.principalEmail}`, meta: `Current: ${fmt(school.schoolCreditBalance)} shared credits` }));
+    return [...userRows, ...schoolRows].slice(0, 10);
+  }, [query, schools, users]);
+
+  async function topUp() {
+    if (!selected) {
+      setMessage("Choose a teacher or school first.");
+      return;
+    }
+    setSaving(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/admin/credits/top-up", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetType: selected.type, targetId: selected.id, amount: Number(amount) }),
+      });
+      const json = (await response.json()) as { error?: string; name?: string; creditsAdded?: number; newBalance?: number };
+      if (!response.ok) throw new Error(json.error ?? "Credit top-up failed.");
+      setMessage(`Added ${json.creditsAdded} credits to ${json.name}. New balance: ${json.newBalance}.`);
+      setAmount("");
+      onDone();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Credit top-up failed.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-3 lg:grid-cols-[1fr_180px_auto]">
+        <label className="relative block">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />
+          <input
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setSelected(null);
+            }}
+            placeholder="Search teacher or school by name or email"
+            className="w-full rounded-xl border border-[var(--border)] bg-[var(--card-alt)] py-2 pl-9 pr-3 text-sm outline-none focus:border-violet-400"
+          />
+        </label>
+        <input
+          value={amount}
+          onChange={(event) => setAmount(event.target.value)}
+          inputMode="numeric"
+          placeholder="Credits"
+          className="rounded-xl border border-[var(--border)] bg-[var(--card-alt)] px-3 py-2 text-sm outline-none focus:border-violet-400"
+        />
+        <button
+          type="button"
+          onClick={topUp}
+          disabled={saving}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-2 text-sm font-bold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <CreditCard className="h-4 w-4" />
+          {saving ? "Adding" : "Add Credits"}
+        </button>
+      </div>
+      {query && !selected ? (
+        <div className="grid gap-2 md:grid-cols-2">
+          {matches.map((item) => (
+            <button
+              key={`${item.type}-${item.id}`}
+              type="button"
+              onClick={() => {
+                setSelected({ type: item.type, id: item.id, label: item.label });
+                setQuery(item.label);
+              }}
+              className="rounded-xl border border-[var(--border)] bg-[var(--card-alt)] px-3 py-2 text-left text-sm hover:border-violet-300"
+            >
+              <span className="font-bold text-[var(--text-primary)]">{item.type === "school" ? "School" : "User"}</span>
+              <span className="ml-2 text-[var(--text-secondary)]">{item.label}</span>
+              <span className="block text-xs text-[var(--text-tertiary)]">{item.meta}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {selected ? <p className="text-sm font-semibold text-emerald-700">Selected: {selected.label}</p> : null}
+      {message ? <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">{message}</p> : null}
+    </div>
+  );
+}
+
+function NoGenerationAlertSection({ users }: { users: AdminUserRow[] }) {
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [sent, setSent] = useState<Record<string, string>>({});
+
+  async function send(user: AdminUserRow) {
+    setSendingId(user.id);
+    try {
+      const response = await fetch("/api/admin/no-generation-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      });
+      const json = (await response.json()) as { error?: string; message?: string };
+      setSent((current) => ({ ...current, [user.id]: response.ok ? json.message ?? "Sent." : json.error ?? "Send failed." }));
+    } catch (error) {
+      setSent((current) => ({ ...current, [user.id]: error instanceof Error ? error.message : "Send failed." }));
+    } finally {
+      setSendingId(null);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {users.slice(0, 40).map((user) => (
+        <div key={user.id} className="flex flex-col gap-3 rounded-xl border border-[var(--border)] bg-[var(--card-alt)] px-3 py-2 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">{user.name}</p>
+            <p className="truncate text-xs text-[var(--text-secondary)]">{user.email} - signed up <DateText value={user.signupDate} /></p>
+            {sent[user.id] ? <p className="mt-1 text-xs font-semibold text-emerald-700">{sent[user.id]}</p> : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => send(user)}
+            disabled={sendingId === user.id}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-bold hover:bg-[var(--card)] disabled:opacity-60"
+          >
+            <Send className="h-4 w-4" />
+            {sendingId === user.id ? "Sending" : `Email ${firstName(user.name)}`}
+          </button>
+        </div>
+      ))}
+      {!users.length ? <p className="text-sm text-[var(--text-secondary)]">No users currently match this alert.</p> : null}
+    </div>
+  );
+}
+
+function CreditHealthSection({ schools }: { schools: AdminSchoolRow[] }) {
+  return (
+    <div className="space-y-2">
+      {schools.map((school) => (
+        <div key={school.id} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+            <span className="font-bold">{school.schoolName}</span>
+            <span>{fmt(school.schoolCreditBalance)} of {fmt(school.creditAllowance)} credits left ({fmt(school.percentRemaining)}%)</span>
+          </div>
+          <p className="text-xs">Principal: {school.principalName} - {school.principalEmail}</p>
+        </div>
+      ))}
+      {!schools.length ? <p className="text-sm text-[var(--text-secondary)]">No schools are below 20% of allowance.</p> : null}
+    </div>
+  );
+}
+
+function ActivityHeatmap({ rows }: { rows: AdminDashboardData["activityHeatmap"] }) {
+  const max = Math.max(1, ...rows.map((row) => row.count));
+  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  return (
+    <div className="overflow-x-auto">
+      <div className="grid min-w-[780px] grid-cols-[44px_repeat(24,1fr)] gap-1 text-xs">
+        <div />
+        {Array.from({ length: 24 }, (_, hour) => <div key={hour} className="text-center text-[var(--text-tertiary)]">{hour}</div>)}
+        {days.map((day) => (
+          <div key={day} className="contents">
+            <div className="py-1 font-bold text-[var(--text-secondary)]">{day}</div>
+            {Array.from({ length: 24 }, (_, hour) => {
+              const count = rows.find((row) => row.day === day && row.hour === hour)?.count ?? 0;
+              const opacity = count ? 0.2 + (count / max) * 0.8 : 0.06;
+              return <div key={`${day}-${hour}`} title={`${day} ${hour}:00 - ${count}`} className="h-6 rounded bg-violet-700" style={{ opacity }} />;
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RetentionSection({ retention }: { retention: AdminDashboardData["retention"] }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-3">
+      <SmallStat icon={Users} label="Day 1 return" value={`${retention.day1}/${retention.eligibleDay1}`} />
+      <SmallStat icon={Users} label="Day 3 return" value={`${retention.day3}/${retention.eligibleDay3}`} />
+      <SmallStat icon={Users} label="Day 7 return" value={`${retention.day7}/${retention.eligibleDay7}`} />
+    </div>
+  );
+}
+
+function RevenueFunnelSection({ steps }: { steps: AdminDashboardData["revenueFunnel"] }) {
+  const max = Math.max(1, ...steps.map((step) => step.count));
+  return (
+    <div className="space-y-3">
+      {steps.map((step) => (
+        <div key={step.label} className="grid gap-2 text-sm md:grid-cols-[180px_1fr_150px] md:items-center">
+          <div className="font-bold">{step.label}</div>
+          <div className="h-3 overflow-hidden rounded-full bg-[var(--card-alt)]">
+            <div className="h-full rounded-full bg-emerald-600" style={{ width: `${Math.max(3, (step.count / max) * 100)}%` }} />
+          </div>
+          <div className="text-[var(--text-secondary)]">{fmt(step.count)} {step.dropoffFromPrevious !== null ? `- dropoff ${fmt(step.dropoffFromPrevious)}` : ""}</div>
+          {step.note ? <p className="md:col-span-3 text-xs text-[var(--text-tertiary)]">{step.note}</p> : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function AdminDashboard({ data: initialData }: { data: AdminDashboardData }) {
   const [data, setData] = useState(initialData);
   const [refreshing, setRefreshing] = useState(false);
@@ -521,6 +750,61 @@ export default function AdminDashboard({ data: initialData }: { data: AdminDashb
             </div>
           ))}
         </div>
+
+        <Section title="Manual Credit Top-up">
+          <CreditTopUpSection users={data.users} schools={data.schools} onDone={refreshData} />
+        </Section>
+
+        <div className="grid gap-6 xl:grid-cols-2">
+          <Section title="No Generation Alerts">
+            <NoGenerationAlertSection users={data.noGenerationAlerts} />
+          </Section>
+
+          <Section title="Credits Health">
+            <CreditHealthSection schools={data.credits.lowSchoolHealth} />
+          </Section>
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-2">
+          <Section title="User Activity Heatmap">
+            <ActivityHeatmap rows={data.activityHeatmap} />
+          </Section>
+
+          <Section title="Retention Tracker">
+            <RetentionSection retention={data.retention} />
+          </Section>
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-2">
+          <Section title="Generation Quality Signal">
+            <div className="grid gap-4 md:grid-cols-2">
+              <SimpleList
+                title="Generated once and never returned"
+                rows={data.generation.quality.generatedOnceNeverReturned.map((user) => `${user.name} - ${user.email}`)}
+              />
+              <SimpleList
+                title="Regular generators"
+                rows={data.generation.quality.regularGenerators.map((user) => `${user.name} - ${user.totalGenerations} generations`)}
+              />
+            </div>
+          </Section>
+
+          <Section title="Referral Tracker">
+            <div className="space-y-2">
+              {data.referrals.slice(0, 25).map((row) => (
+                <div key={`${row.referredUserEmail}-${row.referredByCode}`} className="rounded-xl border border-[var(--border)] bg-[var(--card-alt)] px-3 py-2 text-sm">
+                  <p className="font-semibold">{row.referredUserName} - {row.referredUserEmail}</p>
+                  <p className="text-xs text-[var(--text-secondary)]">Via {row.referredByCode} from {row.referrerName} - {row.referrerEmail}</p>
+                </div>
+              ))}
+              {!data.referrals.length ? <p className="text-sm text-[var(--text-secondary)]">No referral signups yet.</p> : null}
+            </div>
+          </Section>
+        </div>
+
+        <Section title="Revenue Conversion Funnel">
+          <RevenueFunnelSection steps={data.revenueFunnel} />
+        </Section>
 
         <Section title="Users">
           <UsersTable users={data.users} />

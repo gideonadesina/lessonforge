@@ -44,15 +44,35 @@ export type AdminPaymentRow = {
 };
 
 export type AdminSchoolRow = {
+  id: string;
   schoolName: string;
   schoolCode: string;
   principalName: string;
   principalEmail: string;
   teacherCount: MetricValue;
   schoolCreditBalance: MetricValue;
+  creditsUsed: number;
+  creditAllowance: number;
+  percentRemaining: number | null;
   totalGenerations: MetricValue;
   planPurchased: string;
   createdAt: string | null;
+};
+
+export type AdminReferralRow = {
+  referredUserName: string;
+  referredUserEmail: string;
+  referredByCode: string;
+  referrerName: string;
+  referrerEmail: string;
+  signupDate: string | null;
+};
+
+export type AdminFunnelStep = {
+  label: string;
+  count: number;
+  dropoffFromPrevious: number | null;
+  note?: string;
 };
 
 export type AdminDashboardData = {
@@ -76,6 +96,10 @@ export type AdminDashboardData = {
     topTopics: Array<{ topic: string; count: number }> | null;
     neverGenerated: AdminUserRow[];
     trend: Array<{ label: string; total: number }>;
+    quality: {
+      generatedOnceNeverReturned: AdminUserRow[];
+      regularGenerators: AdminUserRow[];
+    };
   };
   credits: {
     schoolCreditUsers: number;
@@ -85,7 +109,20 @@ export type AdminDashboardData = {
     lowCreditUsers: number;
     ranOutNotRecharged: number;
     rows: AdminUserRow[];
+    lowSchoolHealth: AdminSchoolRow[];
   };
+  noGenerationAlerts: AdminUserRow[];
+  activityHeatmap: Array<{ day: string; hour: number; count: number }>;
+  retention: {
+    day1: number;
+    day3: number;
+    day7: number;
+    eligibleDay1: number;
+    eligibleDay3: number;
+    eligibleDay7: number;
+  };
+  referrals: AdminReferralRow[];
+  revenueFunnel: AdminFunnelStep[];
   newUsers: AdminUserRow[];
   support: {
     stored: false;
@@ -117,6 +154,8 @@ type ProfileRow = {
   credits?: number | null;
   credits_balance?: number | null;
   plan?: string | null;
+  referral_code?: string | null;
+  referred_by?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -221,6 +260,13 @@ type ExamRow = {
   user_id?: string | null;
   topic_or_coverage?: string | null;
   exam_title?: string | null;
+  created_at?: string | null;
+};
+
+type AnalyticsEventRow = {
+  user_id?: string | null;
+  event_name?: string | null;
+  name?: string | null;
   created_at?: string | null;
 };
 
@@ -457,12 +503,15 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
     subscriptionsRaw,
     userRoles,
     roles,
+    analyticsEvents,
     authUsers,
   ] = await Promise.all([
     getCampaignSnapshot(),
     safeSelectFirst<ProfileRow>(
       "profiles",
       [
+        "id, full_name, email, role, app_role, credits, credits_balance, school_id, plan, referral_code, referred_by, created_at, updated_at",
+        "id, full_name, email, role, app_role, credits_balance, school_id, plan, referral_code, referred_by, created_at, updated_at",
         "id, full_name, email, role, app_role, credits, credits_balance, school_id, plan, created_at, updated_at",
         "id, full_name, email, role, app_role, credits_balance, school_id, plan, created_at, updated_at",
         "id, full_name, email, role, school_id, credits_balance, created_at, updated_at",
@@ -540,6 +589,16 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
     safeSelectFirst<RoleRow>(
       "roles",
       ["user_id, role", "user_id, name", "profile_id, role", "id, role"],
+    ),
+    safeSelectFirst<AnalyticsEventRow>(
+      "analytics_events",
+      [
+        "user_id, event_name, created_at",
+        "user_id, name, created_at",
+        "event_name, created_at",
+        "name, created_at",
+      ],
+      "created_at"
     ),
     listAuthUsers(),
   ]);
@@ -653,12 +712,22 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
   }
   const generationCountByUser = countBy(generationRows, (row) => row.userId);
   const latestGenerationByUser = new Map<string, string | null>();
+  const generationDatesByUser = new Map<string, Date[]>();
   for (const row of generationRows) {
     if (!row.userId || !row.createdAt) continue;
+    const generatedAt = asDate(row.createdAt);
+    if (generatedAt) {
+      const dates = generationDatesByUser.get(row.userId) ?? [];
+      dates.push(generatedAt);
+      generationDatesByUser.set(row.userId, dates);
+    }
     const current = latestGenerationByUser.get(row.userId);
     if (!current || new Date(row.createdAt) > new Date(current)) {
       latestGenerationByUser.set(row.userId, row.createdAt);
     }
+  }
+  for (const dates of generationDatesByUser.values()) {
+    dates.sort((a, b) => a.getTime() - b.getTime());
   }
 
   const amountPaidByUser = new Map<string, number>();
@@ -901,13 +970,20 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
 
   const schoolRows: AdminSchoolRow[] = schools.map((school) => {
     const principal = (school.created_by ? profilesById.get(school.created_by) : null) ?? principalBySchool.get(school.id) ?? null;
+    const remaining = Math.max(0, Number(school.shared_credits ?? 0));
+    const used = Math.max(0, Number(school.credits_used ?? 0));
+    const allowance = remaining + used;
     return {
+      id: school.id,
       schoolName: school.name || NA,
       schoolCode: activeCodes.get(school.id) || school.code || school.license_code || NA,
       principalName: school.principal_name || principal?.full_name || NA,
       principalEmail: principal?.email || NA,
       teacherCount: teacherCountBySchool.get(school.id) ?? 0,
-      schoolCreditBalance: Number(school.shared_credits ?? 0),
+      schoolCreditBalance: remaining,
+      creditsUsed: used,
+      creditAllowance: allowance,
+      percentRemaining: allowance > 0 ? Math.round((remaining / allowance) * 100) : null,
       totalGenerations: schoolGenerations.get(school.id) ?? 0,
       planPurchased: school.plan_type || school.plan || NA,
       createdAt: school.created_at ?? null,
@@ -936,6 +1012,132 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       : newUsersWeek < newUsersPrevWeek || revenueWeek < revenuePrevWeek
       ? "Trending downward"
       : "Flat";
+
+  const noGenerationAlerts = users
+    .filter((user) => {
+      const signupDate = asDate(user.signupDate);
+      return user.totalGenerations === 0 && Boolean(signupDate && now.getTime() - signupDate.getTime() > 86400000);
+    })
+    .sort((a, b) => Number(asDate(a.signupDate)?.getTime() ?? 0) - Number(asDate(b.signupDate)?.getTime() ?? 0));
+
+  const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const heatmapBuckets = new Map<string, number>();
+  for (const label of dayLabels) {
+    for (let hour = 0; hour < 24; hour += 1) heatmapBuckets.set(`${label}-${hour}`, 0);
+  }
+  for (const row of generationRows) {
+    const date = asDate(row.createdAt);
+    if (!date) continue;
+    const label = dayLabels[date.getDay()];
+    const key = `${label}-${date.getHours()}`;
+    heatmapBuckets.set(key, (heatmapBuckets.get(key) ?? 0) + 1);
+  }
+  const activityHeatmap = dayLabels.flatMap((day) =>
+    Array.from({ length: 24 }, (_, hour) => ({
+      day,
+      hour,
+      count: heatmapBuckets.get(`${day}-${hour}`) ?? 0,
+    }))
+  );
+
+  function isTeacherUser(user: AdminUserRow) {
+    return user.role === "teacher" || user.role === "both";
+  }
+
+  function retainedOnDay(user: AdminUserRow, targetDay: number) {
+    const signupDate = asDate(user.signupDate);
+    if (!signupDate || now.getTime() - signupDate.getTime() < targetDay * 86400000) return false;
+    const dates = generationDatesByUser.get(user.id) ?? [];
+    return dates.some((date) => {
+      const daysSinceSignup = Math.floor((date.getTime() - signupDate.getTime()) / 86400000);
+      return daysSinceSignup === targetDay;
+    });
+  }
+
+  function eligibleForDay(user: AdminUserRow, targetDay: number) {
+    const signupDate = asDate(user.signupDate);
+    return Boolean(signupDate && now.getTime() - signupDate.getTime() >= targetDay * 86400000);
+  }
+
+  const teacherUsers = users.filter(isTeacherUser);
+  const generatedOnceNeverReturned = teacherUsers
+    .filter((user) => user.totalGenerations === 1)
+    .sort((a, b) => Number(asDate(b.lastActiveDate)?.getTime() ?? 0) - Number(asDate(a.lastActiveDate)?.getTime() ?? 0));
+  const regularGenerators = teacherUsers
+    .filter((user) => user.totalGenerations >= 3)
+    .sort((a, b) => b.totalGenerations - a.totalGenerations);
+
+  const lowSchoolHealth = activeSchoolRows
+    .filter((school) => school.percentRemaining !== null && school.percentRemaining < 20)
+    .sort((a, b) => Number(a.percentRemaining ?? 100) - Number(b.percentRemaining ?? 100));
+
+  const profilesByReferralCode = new Map<string, ProfileRow>();
+  for (const profile of allProfiles) {
+    const code = profile.referral_code?.trim().toUpperCase();
+    if (code) profilesByReferralCode.set(code, profile);
+  }
+  const referrals = allProfiles
+    .filter((profile) => profile.referred_by?.trim())
+    .map((profile) => {
+      const referredByCode = profile.referred_by?.trim().toUpperCase() ?? "";
+      const referrer = profilesByReferralCode.get(referredByCode);
+      return {
+        referredUserName: resolveProfileName(profile, profile.id),
+        referredUserEmail: resolveProfileEmail(profile, profile.id),
+        referredByCode,
+        referrerName: referrer ? resolveProfileName(referrer, referrer.id) : NA,
+        referrerEmail: referrer ? resolveProfileEmail(referrer, referrer.id) : NA,
+        signupDate: profile.created_at ?? authUsers.get(profile.id)?.createdAt ?? null,
+      };
+    })
+    .sort((a, b) => Number(asDate(b.signupDate)?.getTime() ?? 0) - Number(asDate(a.signupDate)?.getTime() ?? 0));
+
+  const analyticsEventName = (row: AnalyticsEventRow) => String(row.event_name ?? row.name ?? "").toLowerCase();
+  const eventUserIds = (names: string[]) => {
+    const wanted = new Set(names.map((name) => name.toLowerCase()));
+    return new Set(
+      analyticsEvents
+        .filter((row) => row.user_id && wanted.has(analyticsEventName(row)))
+        .map((row) => row.user_id as string)
+    );
+  };
+  const pricingVisitedUserIds = eventUserIds(["plan_viewed", "pricing_page_viewed"]);
+  const paymentAttemptedUserIds = new Set<string>();
+  for (const payment of [...teacherPaymentsRaw, ...schoolPaymentsRaw, ...subscriptionPayments]) {
+    const userId = payment.user_id || (payment.school_id ? schoolsById.get(payment.school_id)?.created_by : null);
+    if (userId) paymentAttemptedUserIds.add(userId);
+  }
+  for (const userId of eventUserIds(["payment_started", "payment_attempted"])) paymentAttemptedUserIds.add(userId);
+  const paymentCompletedUserIds = new Set<string>();
+  for (const payment of allPayments) {
+    const userId = payment.user_id || (payment.school_id ? schoolsById.get(payment.school_id)?.created_by : null);
+    if (userId) paymentCompletedUserIds.add(userId);
+  }
+  const signupCount = teacherUsers.length;
+  const firstGenerationCount = teacherUsers.filter((user) => user.totalGenerations > 0).length;
+  const creditLimitHitCount = teacherUsers.filter((user) => Number(user.currentCreditBalance ?? -1) === 0).length;
+  const pricingVisitedCount = pricingVisitedUserIds.size;
+  const paymentAttemptedCount = paymentAttemptedUserIds.size;
+  const paymentCompletedCount = paymentCompletedUserIds.size;
+  const funnelRaw = [
+    { label: "Signup", count: signupCount },
+    { label: "First generation", count: firstGenerationCount },
+    { label: "Credit limit hit", count: creditLimitHitCount, note: "Approximated from teachers currently at 0 credits." },
+    {
+      label: "Pricing page visited",
+      count: pricingVisitedCount,
+      note: analyticsEvents.length ? undefined : "Requires analytics_events table; GA-only events are not queryable server-side.",
+    },
+    { label: "Payment attempted", count: paymentAttemptedCount },
+    { label: "Payment completed", count: paymentCompletedCount },
+  ];
+  const revenueFunnel = funnelRaw.map((step, index) => {
+    const previous = funnelRaw[index - 1]?.count;
+    return {
+      ...step,
+      dropoffFromPrevious: typeof previous === "number" ? Math.max(0, previous - step.count) : null,
+    };
+  });
 
   return {
     lastUpdated: now.toISOString(),
@@ -969,6 +1171,10 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       topTopics: topicCounts.length ? topicCounts : null,
       neverGenerated: signedUpNoGeneration,
       trend: generationTrend,
+      quality: {
+        generatedOnceNeverReturned,
+        regularGenerators,
+      },
     },
     credits: {
       schoolCreditUsers: users.filter((user) => user.creditType === "School Credits").length,
@@ -978,7 +1184,20 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       lowCreditUsers,
       ranOutNotRecharged,
       rows: users.filter((user) => user.creditType !== "Unknown"),
+      lowSchoolHealth,
     },
+    noGenerationAlerts,
+    activityHeatmap,
+    retention: {
+      day1: teacherUsers.filter((user) => retainedOnDay(user, 1)).length,
+      day3: teacherUsers.filter((user) => retainedOnDay(user, 3)).length,
+      day7: teacherUsers.filter((user) => retainedOnDay(user, 7)).length,
+      eligibleDay1: teacherUsers.filter((user) => eligibleForDay(user, 1)).length,
+      eligibleDay3: teacherUsers.filter((user) => eligibleForDay(user, 3)).length,
+      eligibleDay7: teacherUsers.filter((user) => eligibleForDay(user, 7)).length,
+    },
+    referrals,
+    revenueFunnel,
     newUsers: [...users].sort((a, b) => Number(asDate(b.signupDate)?.getTime() ?? 0) - Number(asDate(a.signupDate)?.getTime() ?? 0)).slice(0, 20),
     support: {
       stored: false,
@@ -1010,6 +1229,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       "Exact credit consumption rate over time",
       "Last active date is approximate when auth last sign-in is unavailable",
       "Churn status is approximate from generation/login timestamps",
+      "Revenue funnel pricing visits require analytics_events storage; Google Analytics-only events cannot be read by this dashboard",
     ],
     sourceTables: [
       { section: "Users, teachers, principals, credits, churn risk", tables: ["profiles", "auth.users", "user_roles", "roles", "school_members", "schools", "lessons", "worksheets", "exams"] },
@@ -1018,6 +1238,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       { section: "Schools", tables: ["schools", "school_members", "school_codes", "profiles", "lessons", "worksheets"] },
       { section: "Last active approximation", tables: ["auth.users", "profiles", "lessons", "worksheets"] },
       { section: "Feedback campaign", tables: ["profiles", "email_logs"] },
+      { section: "Referral and funnel tracking", tables: ["profiles.referred_by", "profiles.referral_code", "analytics_events when available", "payment transactions"] },
     ],
     feedbackCampaign,
   };

@@ -352,3 +352,17 @@ export function productUpdateEmail({
 <hr/>
 <p class="muted">You are receiving this because you use LessonForge.</p>`);
 }
+
+export function noGenerationNudgeEmail({ firstName }: { firstName: string }) {
+  return base(`
+<p>Hi ${esc(firstName)},</p>
+<p>I noticed you signed up for LessonForge but haven't generated your first lesson yet.</p>
+<p>I built LessonForge because I watched teachers like you spend hours every week formatting instead of teaching. That time belongs to your students, not to formatting.</p>
+<p>It takes 60 seconds to generate your first lesson — I promise it'll surprise you.</p>
+<p>Just click the button below and type your topic. That's it.</p>
+<a class="btn" style="font-size:17px;padding:18px 28px" href="https://lessonforge.app/generate">Generate Your First Lesson</a>
+<div class="sig">
+  — <strong>Gideon</strong><br/>
+  Founder of LessonForge
+</div>`);
+}
