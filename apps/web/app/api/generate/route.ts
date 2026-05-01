@@ -13,6 +13,7 @@ import {
   creditsFinishedEmail,
   creditsLowEmail,
 } from "@/lib/emails/templates";
+import { sendFirstGenerationEmailOnce } from "@/lib/emails/first-generation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -1892,6 +1893,17 @@ export async function POST(req: NextRequest) {
 
     const newBalance = deductionResult.creditsRemaining;
     const previousBalance = deductionResult.previousBalance;
+    const savedLessonId =
+      typeof (savedLesson as { id?: unknown }).id === "string"
+        ? (savedLesson as { id: string }).id
+        : null;
+
+    if (savedLessonId) {
+      void sendFirstGenerationEmailOnce({ userId: user.id, lessonId: savedLessonId }).catch((error) => {
+        console.error("[generate] First generation email failed:", error);
+      });
+    }
+
     if (deductionResult.source === "personal" && user.email) {
       const firstName = getFirstName(
         user.user_metadata?.full_name ?? user.user_metadata?.name
@@ -1917,7 +1929,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ data, saved: true }, { status: 200 });
+    return NextResponse.json({ data, lessonId: savedLessonId, saved: true }, { status: 200 });
 
   } catch (err: unknown) {
     const message =

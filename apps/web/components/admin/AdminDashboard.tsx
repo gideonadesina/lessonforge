@@ -689,6 +689,135 @@ function RevenueFunnelSection({ steps }: { steps: AdminDashboardData["revenueFun
   );
 }
 
+function AdminNotificationComposer({
+  users,
+  schools,
+  releaseMode = false,
+}: {
+  users: AdminUserRow[];
+  schools: AdminSchoolRow[];
+  releaseMode?: boolean;
+}) {
+  const [title, setTitle] = useState("");
+  const [message, setMessage] = useState("");
+  const [type, setType] = useState<"info" | "warning" | "success" | "reminder">("info");
+  const [recipientMode, setRecipientMode] = useState<"all" | "teachers" | "principals" | "school" | "user">("all");
+  const [schoolId, setSchoolId] = useState("");
+  const [userId, setUserId] = useState("");
+  const [sending, setSending] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  async function send() {
+    setSending(true);
+    setStatus(null);
+    try {
+      const response = await fetch("/api/admin/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          message,
+          type,
+          recipientMode: releaseMode ? "all" : recipientMode,
+          schoolId,
+          userId,
+          releaseNote: releaseMode,
+        }),
+      });
+      const json = (await response.json()) as { error?: string; sent?: number };
+      if (!response.ok) throw new Error(json.error ?? "Notification send failed.");
+      setStatus(`Sent to ${json.sent ?? 0} user${json.sent === 1 ? "" : "s"}.`);
+      setTitle("");
+      setMessage("");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Notification send failed.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-3 md:grid-cols-2">
+        <input
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder={releaseMode ? "Release note title" : "Notification title"}
+          className="rounded-xl border border-[var(--border)] bg-[var(--card-alt)] px-3 py-2 text-sm outline-none focus:border-violet-400"
+        />
+        {!releaseMode ? (
+          <select
+            value={type}
+            onChange={(event) => setType(event.target.value as typeof type)}
+            className="rounded-xl border border-[var(--border)] bg-[var(--card-alt)] px-3 py-2 text-sm outline-none focus:border-violet-400"
+          >
+            <option value="info">Info</option>
+            <option value="warning">Warning</option>
+            <option value="success">Success</option>
+            <option value="reminder">Reminder</option>
+          </select>
+        ) : null}
+      </div>
+      <textarea
+        value={message}
+        onChange={(event) => setMessage(event.target.value)}
+        placeholder={releaseMode ? "Write release notes..." : "Write notification message..."}
+        rows={4}
+        className="w-full rounded-xl border border-[var(--border)] bg-[var(--card-alt)] px-3 py-2 text-sm outline-none focus:border-violet-400"
+      />
+      {!releaseMode ? (
+        <div className="grid gap-3 md:grid-cols-3">
+          <select
+            value={recipientMode}
+            onChange={(event) => setRecipientMode(event.target.value as typeof recipientMode)}
+            className="rounded-xl border border-[var(--border)] bg-[var(--card-alt)] px-3 py-2 text-sm outline-none focus:border-violet-400"
+          >
+            <option value="all">All users</option>
+            <option value="teachers">All teachers</option>
+            <option value="principals">All principals</option>
+            <option value="school">Specific school</option>
+            <option value="user">Individual user</option>
+          </select>
+          <select
+            value={schoolId}
+            onChange={(event) => setSchoolId(event.target.value)}
+            disabled={recipientMode !== "school"}
+            className="rounded-xl border border-[var(--border)] bg-[var(--card-alt)] px-3 py-2 text-sm outline-none focus:border-violet-400 disabled:opacity-50"
+          >
+            <option value="">Choose school</option>
+            {schools.map((school) => (
+              <option key={school.id} value={school.id}>{school.schoolName}</option>
+            ))}
+          </select>
+          <select
+            value={userId}
+            onChange={(event) => setUserId(event.target.value)}
+            disabled={recipientMode !== "user"}
+            className="rounded-xl border border-[var(--border)] bg-[var(--card-alt)] px-3 py-2 text-sm outline-none focus:border-violet-400 disabled:opacity-50"
+          >
+            <option value="">Choose user</option>
+            {users.map((user) => (
+              <option key={user.id} value={user.id}>{user.name} - {user.email}</option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={send}
+          disabled={sending}
+          className="inline-flex items-center gap-2 rounded-xl bg-violet-700 px-4 py-2 text-sm font-bold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <Send className="h-4 w-4" />
+          {sending ? "Sending" : releaseMode ? "Publish Release Notes" : "Send Notification"}
+        </button>
+        {status ? <p className="text-sm font-semibold text-[var(--text-secondary)]">{status}</p> : null}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboard({ data: initialData }: { data: AdminDashboardData }) {
   const [data, setData] = useState(initialData);
   const [refreshing, setRefreshing] = useState(false);
@@ -754,6 +883,16 @@ export default function AdminDashboard({ data: initialData }: { data: AdminDashb
         <Section title="Manual Credit Top-up">
           <CreditTopUpSection users={data.users} schools={data.schools} onDone={refreshData} />
         </Section>
+
+        <div className="grid gap-6 xl:grid-cols-2">
+          <Section title="Notifications">
+            <AdminNotificationComposer users={data.users} schools={data.schools} />
+          </Section>
+
+          <Section title="Release Notes">
+            <AdminNotificationComposer users={data.users} schools={data.schools} releaseMode />
+          </Section>
+        </div>
 
         <div className="grid gap-6 xl:grid-cols-2">
           <Section title="No Generation Alerts">

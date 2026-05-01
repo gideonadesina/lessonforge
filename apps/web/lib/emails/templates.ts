@@ -366,3 +366,22 @@ export function noGenerationNudgeEmail({ firstName }: { firstName: string }) {
   Founder of LessonForge
 </div>`);
 }
+
+export function firstLessonReadyEmail({
+  firstName,
+  lessonUrl,
+}: {
+  firstName: string;
+  lessonUrl: string;
+}) {
+  return base(`
+<p>Hi ${esc(firstName)},</p>
+<p>Your lesson plan is ready.</p>
+<p>I built LessonForge because African teachers like you deserve tools that actually understand your classroom not generic AI built for someone else.</p>
+<p>Here is your lesson: <a href="${esc(lessonUrl)}">${esc(lessonUrl)}</a>.</p>
+<p>I would love to know what you think. Just hit reply.</p>
+<div class="sig">
+  Gideon Adesina,<br/>
+  Founder of LessonForge
+</div>`);
+}

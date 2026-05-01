@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     const { data: notifications, error: notificationsError } = await auth.supabase
       .from("notifications")
       .select(
-        "id, user_id, notification_type, message, sub_message, action_label, action_url, timetable_slot_id, dismissed_at, read_at, notification_date, created_at"
+        "id, user_id, title, type, read, notification_type, message, sub_message, action_label, action_url, timetable_slot_id, dismissed_at, read_at, notification_date, created_at"
       )
       .eq("user_id", auth.user.id)
       .is("dismissed_at", null)
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
       .select("id", { count: "exact", head: true })
       .eq("user_id", auth.user.id)
       .is("dismissed_at", null)
-      .is("read_at", null);
+      .eq("read", false);
 
     if (unreadCountError) {
       return NextResponse.json(

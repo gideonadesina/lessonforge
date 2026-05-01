@@ -13,6 +13,7 @@ import {
   validateStage1,
 } from "@/lib/generation/staged-lesson";
 import { ROLE_COOKIE_KEY } from "@/lib/auth/roles";
+import { sendFirstGenerationEmailOnce } from "@/lib/emails/first-generation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -104,6 +105,10 @@ export async function POST(req: NextRequest) {
       activeRole
     );
     if (deductionResponse) return deductionResponse;
+
+    void sendFirstGenerationEmailOnce({ userId: auth.userId, lessonId }).catch((error) => {
+      console.error("[generate:stage1] First generation email failed:", error);
+    });
 
     return NextResponse.json({ ok: true, lessonId, generationMeta: meta, data, saved: true }, { status: 200 });
   } catch (error: unknown) {

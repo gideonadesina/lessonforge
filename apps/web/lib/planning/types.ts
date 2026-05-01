@@ -114,9 +114,14 @@ export enum NotificationType {
   NEUTRAL = "NEUTRAL",
 }
 
+export type NotificationKind = "info" | "warning" | "success" | "reminder";
+
 export type Notification = {
   id: string;
   user_id: string;
+  title: string;
+  type: NotificationKind;
+  read: boolean;
   notification_type: NotificationType;
   message: string;
   sub_message: string | null;

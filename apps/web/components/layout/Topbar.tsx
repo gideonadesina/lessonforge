@@ -82,16 +82,18 @@ export default function Topbar({
   }, []);
 
   useEffect(() => {
-    if (isPrincipalArea) return;
-
     let active = true;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let subscribedUserId: string | null = null;
+
     async function loadNotifications() {
       try {
         const {
           data: { session },
         } = await supabase.auth.getSession();
         const token = session?.access_token ?? "";
-        if (!token) return;
+        if (!session || !token) return;
+        const currentUserId = session.user.id;
 
         const res = await fetch("/api/notifications", {
           headers: { Authorization: `Bearer ${token}` },
@@ -103,6 +105,25 @@ export default function Topbar({
         if (!active) return;
         setNotifications((json.data?.notifications ?? []) as Notification[]);
         setUnreadCount(Number(json.data?.unreadCount ?? 0));
+
+        if (subscribedUserId !== currentUserId) {
+          subscribedUserId = currentUserId;
+          channel = supabase
+            .channel(`notifications:${currentUserId}`)
+            .on(
+              "postgres_changes",
+              {
+                event: "*",
+                schema: "public",
+                table: "notifications",
+                filter: `user_id=eq.${currentUserId}`,
+              },
+              () => {
+                void loadNotifications();
+              }
+            )
+            .subscribe();
+        }
       } catch {
         // Keep topbar resilient if notifications are unavailable.
       }
@@ -116,8 +137,9 @@ export default function Topbar({
     return () => {
       active = false;
       window.clearInterval(timer);
+      if (channel) void supabase.removeChannel(channel);
     };
-  }, [isPrincipalArea, supabase]);
+  }, [supabase]);
 
   async function logout() {
     try {
@@ -235,7 +257,7 @@ export default function Topbar({
 
       setNotifications((prev) => {
         const dismissed = prev.find((item) => item.id === id);
-        if (dismissed?.read_at == null) {
+        if (dismissed && !dismissed.read) {
           setUnreadCount((count) => Math.max(0, count - 1));
         }
         return prev.filter((item) => item.id !== id);
@@ -260,7 +282,7 @@ export default function Topbar({
 
       setUnreadCount(0);
       setNotifications((prev) =>
-        prev.map((item) => ({ ...item, read_at: item.read_at ?? new Date().toISOString() }))
+        prev.map((item) => ({ ...item, read: true, read_at: item.read_at ?? new Date().toISOString() }))
       );
     } catch {
       showToast("Could not mark notifications as read.");
@@ -362,6 +384,28 @@ export default function Topbar({
 
           {isPrincipalArea ? (
             <>
+              <div ref={bellRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setBellOpen((current) => !current)}
+                  className="relative rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--card-alt)]"
+                  aria-label="Notifications"
+                >
+                  <span aria-hidden>🔔</span>
+                  {unreadCount > 0 ? (
+                    <span className="absolute -right-1 -top-1 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-[#E24B4A] px-1 text-[10px] font-semibold text-white">
+                      {unreadBadge}
+                    </span>
+                  ) : null}
+                </button>
+                {bellOpen ? (
+                  <NotificationBellDropdown
+                    notifications={notifications}
+                    onDismiss={dismissNotification}
+                    onMarkAllRead={markAllNotificationsRead}
+                  />
+                ) : null}
+              </div>
               <Link
                 href="/principal/generate"
                 className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--card-alt)]"

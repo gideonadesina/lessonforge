@@ -141,6 +141,9 @@ export async function POST(
     // Ignore duplicate insertion collisions because dedup is guaranteed by unique index.
     const notificationRes = await (admin as any).from("notifications").insert({
       user_id: user.id,
+      title: message,
+      type: "success",
+      read: false,
       notification_type: NotificationType.COMPLETED,
       message,
       sub_message: subMessage,

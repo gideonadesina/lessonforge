@@ -179,6 +179,9 @@ export default function AcademicCalendarClient({
     if (diffDays >= 0 && diffDays <= 7) {
       await supabase.from("notifications").insert({
         user_id: userId,
+        title: form.title.trim(),
+        type: "info",
+        read: false,
         notification_type: "INFO",
         message: form.title.trim(),
         sub_message: `Upcoming calendar event on ${form.event_date}`,

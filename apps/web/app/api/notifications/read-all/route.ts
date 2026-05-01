@@ -31,9 +31,9 @@ export async function POST(req: NextRequest) {
 
     const { error } = await (supabase as any)
       .from("notifications")
-      .update({ read_at: now })
+      .update({ read: true, read_at: now })
       .eq("user_id", user.id)
-      .is("read_at", null);
+      .eq("read", false);
 
     if (error) {
       return jsonError(error.message, 500);

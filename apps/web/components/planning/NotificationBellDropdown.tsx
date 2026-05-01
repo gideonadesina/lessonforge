@@ -1,13 +1,13 @@
 "use client";
 
 import type { Notification } from "@/lib/planning/types";
-import { NotificationType } from "@/lib/planning/types";
+import { NotificationType, type NotificationKind } from "@/lib/planning/types";
 
-function dotColor(type: NotificationType) {
-  if (type === NotificationType.URGENT) return "bg-[#E24B4A]";
-  if (type === NotificationType.PREP_WARNING) return "bg-[#BA7517]";
-  if (type === NotificationType.COMPLETED) return "bg-[#639922]";
-  if (type === NotificationType.INFO) return "bg-[#534AB7]";
+function dotColor(type: NotificationType | NotificationKind) {
+  if (type === NotificationType.URGENT || type === "warning") return "bg-[#E24B4A]";
+  if (type === NotificationType.PREP_WARNING || type === "reminder") return "bg-[#BA7517]";
+  if (type === NotificationType.COMPLETED || type === "success") return "bg-[#639922]";
+  if (type === NotificationType.INFO || type === "info") return "bg-[#534AB7]";
   return "bg-slate-400";
 }
 
@@ -49,12 +49,15 @@ export default function NotificationBellDropdown({
               >
                 <span
                   className={`mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full ${dotColor(
-                    notification.notification_type
+                    notification.type ?? notification.notification_type
                   )}`}
                   aria-hidden
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs text-slate-900 dark:text-slate-100">
+                  <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">
+                    {notification.title}
+                  </p>
+                  <p className="mt-0.5 text-xs text-slate-700 dark:text-slate-300">
                     {notification.message}
                   </p>
                   {notification.sub_message ? (

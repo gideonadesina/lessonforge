@@ -104,6 +104,9 @@ export async function POST() {
     const now = new Date();
     const today = isoUtcDate();
     const dow = utcDayOfWeek(now);
+    const tomorrowDate = withMinutesOffset(now, 24 * 60);
+    const tomorrow = isoUtcDate(tomorrowDate);
+    const tomorrowDow = utcDayOfWeek(tomorrowDate);
     const in48h = withMinutesOffset(now, 48 * 60);
 
     const [timetableRes, prefRes] = await Promise.all([
@@ -145,6 +148,57 @@ export async function POST() {
         .order("start_time", { ascending: true });
 
       if (slotsErr) continue;
+
+      const { data: tomorrowSlots } = await (admin as any)
+        .from("timetable_slots")
+        .select("id, timetable_id, day_of_week, start_time, duration_minutes, class_name, subject, scheme_entry_id")
+        .eq("timetable_id", timetable.id)
+        .eq("day_of_week", tomorrowDow)
+        .order("start_time", { ascending: true });
+
+      for (const tomorrowSlot of (tomorrowSlots ?? []) as SlotRow[]) {
+        let topic = tomorrowSlot.subject;
+        if (tomorrowSlot.scheme_entry_id) {
+          const { data: schemeRow } = await admin
+            .from("scheme_of_work")
+            .select("id, user_id, topic")
+            .eq("id", tomorrowSlot.scheme_entry_id)
+            .eq("user_id", timetable.user_id)
+            .maybeSingle();
+          const scheme = (schemeRow ?? null) as SchemeEntryRow | null;
+          if (scheme?.topic) topic = scheme.topic;
+        }
+
+        const { data: existingReminder } = await (admin as any)
+          .from("notifications")
+          .select("id")
+          .eq("user_id", timetable.user_id)
+          .eq("timetable_slot_id", tomorrowSlot.id)
+          .eq("notification_date", tomorrow)
+          .ilike("title", "Reminder:%")
+          .limit(1)
+          .maybeSingle();
+
+        if (!existingReminder?.id) {
+          const { error: reminderErr } = await (admin as any)
+            .from("notifications")
+            .insert({
+              user_id: timetable.user_id,
+              title: `Reminder: You have ${topic} planned for tomorrow`,
+              message: `Reminder: You have ${topic} planned for tomorrow`,
+              type: "reminder",
+              read: false,
+              timetable_slot_id: tomorrowSlot.id,
+              notification_type: "NEUTRAL",
+              notification_date: tomorrow,
+              sub_message: `${tomorrowSlot.class_name} at ${tomorrowSlot.start_time} UTC`,
+              action_label: "Open planning",
+              action_url: "/planning",
+            });
+
+          if (!reminderErr) insertedCount += 1;
+        }
+      }
 
       for (const slot of (slots ?? []) as SlotRow[]) {
         let schemeTopic = "";
@@ -195,6 +249,9 @@ export async function POST() {
               .from("notifications")
               .insert({
                 user_id: timetable.user_id,
+                title: urgentMsg,
+                type: "warning",
+                read: false,
                 timetable_slot_id: slot.id,
                 notification_type: "URGENT",
                 notification_date: today,
@@ -214,6 +271,9 @@ export async function POST() {
             .from("notifications")
             .insert({
               user_id: timetable.user_id,
+              title: `Prepare lesson for ${slot.class_name}`,
+              type: "reminder",
+              read: false,
               timetable_slot_id: slot.id,
               notification_type: "PREP_WARNING",
               notification_date: today,

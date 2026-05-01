@@ -98,18 +98,18 @@ function firstEmailHtml(name: string, email: string) {
   return campaignEmailShell(`
     <div style="font-family:Arial,sans-serif;color:#1a1a2e;line-height:1.7;font-size:15px;">
       <p>Hi ${first},</p>
-      <p>My name is Gideon Adesina — I'm the founder of LessonForge.</p>
+      <p>My name is Gideon Adesina I'm the founder of LessonForge.</p>
       <p>I built it because teachers across Africa were losing hours every week to formatting lesson plans instead of actually teaching. That felt wrong, so I decided to do something about it.</p>
-      <p>You're one of our first users — and that means everything to me.</p>
+      <p>You're one of our first users and that means everything to me.</p>
       <p>I'm reaching out personally because your honest opinion will shape what we build next.</p>
       <p>Two quick questions:</p>
       <ol>
         <li>Did LessonForge actually save you time preparing lessons?</li>
         <li>What's the ONE thing missing that would make you use it every single week?</li>
       </ol>
-      <p>Just hit reply — no forms, no surveys. Your words come straight to me.</p>
+      <p>Just hit reply no forms, no surveys. Your words come straight to me.</p>
       <p>Thank you for being one of the first.</p>
-      <p>— Gideon Adesina<br/>Founder, LessonForge<br/>lessonforge.app | support@lessonforge.app</p>
+      <p> Gideon Adesina<br/>Founder, LessonForge<br/>lessonforge.app | support@lessonforge.app</p>
     </div>
   `);
 }
@@ -120,7 +120,7 @@ function followUpHtml(name: string, email: string) {
     <div style="font-family:Arial,sans-serif;color:#1a1a2e;line-height:1.7;font-size:15px;">
       <p>Hi ${first},</p>
       <p>I sent you a note a few days ago and just wanted to follow up one last time.</p>
-      <p>I'm building LessonForge specifically for African teachers and your honest feedback — even just one sentence — would mean the world to me right now.</p>
+      <p>I'm building LessonForge specifically for African teachers and your honest feedback even just one sentence — would mean the world to me right now.</p>
       <p>What's the ONE thing that would make LessonForge a tool you use every single week?</p>
       <p>Just hit reply. That's it.</p>
       <p>Thank you so much</p>
