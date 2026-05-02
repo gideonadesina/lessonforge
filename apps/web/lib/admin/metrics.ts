@@ -24,6 +24,8 @@ export type AdminUserRow = {
   schoolCode: string;
   creditType: string;
   currentCreditBalance: MetricValue;
+  creditsLeft: number;
+  freeCredits: number;
   totalGenerations: number;
   paidOrFree: "Paid" | "Free";
   totalAmountPaid: number;
@@ -153,6 +155,7 @@ type ProfileRow = {
   school_id?: string | null;
   credits?: number | null;
   credits_balance?: number | null;
+  free_credits?: number | null;
   plan?: string | null;
   referral_code?: string | null;
   referred_by?: string | null;
@@ -420,7 +423,7 @@ async function safeSelectFirst<T>(table: string, selects: string[], orderColumn?
 }
 
 function profileCredits(profile: ProfileRow) {
-  return Number(profile.credits ?? profile.credits_balance ?? 0);
+  return Number(profile.credits_balance ?? 0);
 }
 
 function isPrincipalRole(role: string | null | undefined) {
@@ -510,9 +513,9 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
     safeSelectFirst<ProfileRow>(
       "profiles",
       [
-        "id, full_name, email, role, app_role, credits, credits_balance, school_id, plan, referral_code, referred_by, created_at, updated_at",
+        "id, full_name, email, role, app_role, credits_balance, free_credits, school_id, plan, referral_code, referred_by, created_at, updated_at",
+        "id, full_name, email, role, app_role, credits_balance, free_credits, school_id, plan, created_at, updated_at",
         "id, full_name, email, role, app_role, credits_balance, school_id, plan, referral_code, referred_by, created_at, updated_at",
-        "id, full_name, email, role, app_role, credits, credits_balance, school_id, plan, created_at, updated_at",
         "id, full_name, email, role, app_role, credits_balance, school_id, plan, created_at, updated_at",
         "id, full_name, email, role, school_id, credits_balance, created_at, updated_at",
       ],
@@ -795,6 +798,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       "";
     const schoolCredits = effectiveSchool ? Number(effectiveSchool.shared_credits ?? 0) : null;
     const personalCredits = profileCredits(profile);
+    const freeCredits = Math.max(0, Number(profile.free_credits ?? 0));
     const totalGenerations = generationCountByUser.get(profile.id) ?? 0;
     const authUser = authUsers.get(profile.id);
     const lastActiveDate = latestGenerationByUser.get(profile.id) || authUser?.lastSignInAt || profile.updated_at || authUser?.updatedAt || null;
@@ -807,6 +811,8 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       schoolCode: schoolCode || NA,
       creditType: effectiveSchool ? "School Credits" : personalCredits > 0 ? "Personal Credits" : "None",
       currentCreditBalance: effectiveSchool ? schoolCredits : personalCredits,
+      creditsLeft: personalCredits,
+      freeCredits,
       totalGenerations,
       paidOrFree: (amountPaidByUser.get(profile.id) ?? 0) > 0 ? "Paid" : "Free",
       totalAmountPaid: amountPaidByUser.get(profile.id) ?? 0,
@@ -823,12 +829,12 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
     const date = asDate(user.signupDate);
     return Boolean(date && date >= prevWeekStart && date < weekStart);
   }).length;
-  const zeroCreditUsers = users.filter((user) => Number(user.currentCreditBalance ?? -1) === 0).length;
+  const zeroCreditUsers = users.filter((user) => Number(user.creditsLeft ?? -1) === 0).length;
   const lowCreditUsers = users.filter((user) => {
-    const balance = Number(user.currentCreditBalance ?? NaN);
-    return Number.isFinite(balance) && balance > 0 && balance <= 5;
+    const balance = Number(user.creditsLeft ?? NaN);
+    return Number.isFinite(balance) && balance >= 1 && balance <= 3;
   }).length;
-  const ranOutNotRecharged = users.filter((user) => Number(user.currentCreditBalance ?? -1) === 0 && user.paidOrFree === "Paid").length;
+  const ranOutNotRecharged = users.filter((user) => Number(user.creditsLeft ?? -1) === 0 && user.paidOrFree === "Paid").length;
   const signedUpNoGeneration = users.filter((user) => user.totalGenerations === 0);
   const revenueUp = revenueWeek > revenuePrevWeek;
 

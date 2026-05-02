@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { getInvalidJsonMessage, readJsonResponse } from "@/lib/http/safe-json";
 import { track } from "@/lib/analytics";
+import { shouldUsePersonalCredits } from "@/lib/credits/source-preference";
 
 import ExamBuilderForm from "@/components/exam-builder/ExamBuilderForm";
 import ExamList from "@/components/exam-builder/ExamList";
@@ -246,7 +247,7 @@ export default function ExamBuilderPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, usePersonalCredits: shouldUsePersonalCredits() }),
       });
       let json = await readApiJson(res);
       let creditSource: "personal" | "school" | undefined;

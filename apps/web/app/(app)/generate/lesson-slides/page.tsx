@@ -7,6 +7,7 @@ import type { SlideDeck } from "@/lib/slideRenderer";
 import { getInvalidJsonMessage, readJsonResponse } from "@/lib/http/safe-json";
 import { track } from "@/lib/analytics";
 import { enrichGeneratedLessonImages } from "@/lib/generation/enrich-images-client";
+import { shouldUsePersonalCredits } from "@/lib/credits/source-preference";
 
 // ─────────────────────────────────────────────────────────────
 // OPTIONS — Nigerian curriculum aligned
@@ -418,7 +419,7 @@ export default function LessonSlidesPage() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify(formData),
+      body: JSON.stringify({ ...formData, usePersonalCredits: shouldUsePersonalCredits() }),
     });
 
     const parsedResponse = await readJsonResponse(res);

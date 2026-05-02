@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { getInvalidJsonMessage, readJsonResponse } from "@/lib/http/safe-json";
 import { track } from "@/lib/analytics";
+import { shouldUsePersonalCredits } from "@/lib/credits/source-preference";
  
 type WorksheetSource = "generated" | "uploaded";
 type PrintLayout = "standard" | "exam" | "worksheet";
@@ -268,6 +269,7 @@ export default function WorksheetsPage() {
         printLayout,
         contentMode,
         instructions: splitInstructions(instructionsText),
+        usePersonalCredits: shouldUsePersonalCredits(),
       };
  
       let res = await fetch("/api/worksheets", {

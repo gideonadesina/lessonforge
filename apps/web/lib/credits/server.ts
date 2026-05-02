@@ -363,14 +363,8 @@ export async function consumeGenerationCredits(
         };
       }
 
-      // Personal credits available — return confirmation request
-      return {
-        ok: false,
-        source: "school",
-        errorCode: "needs_personal_confirmation",
-        error: "Your school has run out of credits. Use personal credits?",
-        personalCreditsAvailable: personalBalance,
-      };
+      // School credits cannot cover the request; fall back to personal credits automatically.
+      return consumePersonalCreditsDirectly(creditClient, userId, cost);
     }
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -399,6 +393,8 @@ export async function consumeGenerationCredits(
       const currentSchoolCredits = Math.max(0, Number(schoolRow?.shared_credits ?? 0));
       const currentCreditsUsed = Math.max(0, Number(schoolRow?.credits_used ?? 0));
       if (currentSchoolCredits < cost) {
+        const personalFallback = await consumePersonalCreditsDirectly(creditClient, userId, cost);
+        if (personalFallback.ok) return personalFallback;
         return {
           ok: false,
           source: "school",

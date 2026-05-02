@@ -103,7 +103,7 @@ function creditPill(balance: unknown) {
     ? "bg-slate-100 text-slate-600"
     : value === 0
     ? "bg-rose-100 text-rose-700"
-    : value <= 5
+    : value <= 3
     ? "bg-amber-100 text-amber-700"
     : "bg-emerald-100 text-emerald-700";
   return <span className={`rounded-full px-2 py-1 text-xs font-semibold ${tone}`}>{fmt(balance)}</span>;
@@ -148,21 +148,32 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function UsersTable({ users }: { users: AdminUserRow[] }) {
+function UsersTable({ users, onDone }: { users: AdminUserRow[]; onDone: () => void }) {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("signupDate");
   const [direction, setDirection] = useState<"asc" | "desc">("desc");
+  const [creditFilter, setCreditFilter] = useState<"all" | "out" | "low">("all");
+  const [topUpUserId, setTopUpUserId] = useState<string | null>(null);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const creditFiltered =
+      creditFilter === "out"
+        ? users.filter((user) => (user.role === "teacher" || user.role === "both") && Number(user.creditsLeft) === 0)
+        : creditFilter === "low"
+        ? users.filter((user) => {
+            const balance = Number(user.creditsLeft);
+            return (user.role === "teacher" || user.role === "both") && balance >= 1 && balance <= 3;
+          })
+        : users;
     const filtered = q
-      ? users.filter((user) =>
+      ? creditFiltered.filter((user) =>
           [user.name, user.email, user.role, user.schoolName, user.status]
             .join(" ")
             .toLowerCase()
             .includes(q)
         )
-      : users;
+      : creditFiltered;
     return [...filtered].sort((a, b) => {
       const av = a[sortKey];
       const bv = b[sortKey];
@@ -174,7 +185,7 @@ function UsersTable({ users }: { users: AdminUserRow[] }) {
           : String(av ?? "").localeCompare(String(bv ?? ""));
       return direction === "asc" ? result : -result;
     });
-  }, [direction, query, sortKey, users]);
+  }, [creditFilter, direction, query, sortKey, users]);
 
   function setSort(next: SortKey) {
     if (sortKey === next) {
@@ -192,8 +203,9 @@ function UsersTable({ users }: { users: AdminUserRow[] }) {
     ["schoolName", "School"],
     ["schoolCode", "Code"],
     ["creditType", "Credit type"],
-    ["currentCreditBalance", "Credits"],
-    ["totalGenerations", "Generations"],
+    ["creditsLeft", "Credits Left"],
+    ["freeCredits", "Free Credits"],
+    ["totalGenerations", "Total Generations"],
     ["paidOrFree", "Paid"],
     ["totalAmountPaid", "Amount"],
     ["signupDate", "Signup"],
@@ -201,19 +213,69 @@ function UsersTable({ users }: { users: AdminUserRow[] }) {
     ["status", "Status"],
   ];
 
+  async function topUpUser(user: AdminUserRow) {
+    const amountInput = window.prompt(`Add how many credits to ${user.name}?`, "10");
+    if (!amountInput) return;
+    const amount = Number(amountInput);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      window.alert("Enter a valid credit amount.");
+      return;
+    }
+
+    setTopUpUserId(user.id);
+    try {
+      const response = await fetch("/api/admin/credits/top-up", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetType: "user", targetId: user.id, amount }),
+      });
+      const json = (await response.json()) as { error?: string; name?: string; creditsAdded?: number; newBalance?: number };
+      if (!response.ok) throw new Error(json.error ?? "Credit top-up failed.");
+      window.alert(`Added ${json.creditsAdded} credits to ${json.name}. New balance: ${json.newBalance}.`);
+      onDone();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Credit top-up failed.");
+    } finally {
+      setTopUpUserId(null);
+    }
+  }
+
   return (
     <div className="space-y-3">
-      <label className="relative block max-w-md">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search users..."
-          className="w-full rounded-xl border border-[var(--border)] bg-[var(--card-alt)] py-2 pl-9 pr-3 text-sm outline-none focus:border-violet-400"
-        />
-      </label>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <label className="relative block max-w-md flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search users..."
+            className="w-full rounded-xl border border-[var(--border)] bg-[var(--card-alt)] py-2 pl-9 pr-3 text-sm outline-none focus:border-violet-400"
+          />
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {[
+            ["all", "All"],
+            ["out", "Out of Credits"],
+            ["low", "Low Credits"],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setCreditFilter(value as typeof creditFilter)}
+              className={[
+                "rounded-xl border px-3 py-2 text-sm font-bold",
+                creditFilter === value
+                  ? "border-violet-300 bg-violet-50 text-violet-700"
+                  : "border-[var(--border)] bg-[var(--card)] text-[var(--text-secondary)] hover:bg-[var(--card-alt)]",
+              ].join(" ")}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="overflow-x-auto">
-        <table className="min-w-[1500px] w-full text-left text-sm">
+        <table className="min-w-[1650px] w-full text-left text-sm">
           <thead className="text-xs uppercase text-[var(--text-tertiary)]">
             <tr>
               {headers.map(([key, label]) => (
@@ -224,6 +286,7 @@ function UsersTable({ users }: { users: AdminUserRow[] }) {
                   </button>
                 </th>
               ))}
+              <th className="whitespace-nowrap px-3 py-2">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
@@ -235,13 +298,25 @@ function UsersTable({ users }: { users: AdminUserRow[] }) {
                 <td className="px-3 py-3">{user.schoolName}</td>
                 <td className="px-3 py-3">{user.schoolCode}</td>
                 <td className="px-3 py-3">{user.creditType}</td>
-                <td className="px-3 py-3">{creditPill(user.currentCreditBalance)}</td>
+                <td className="px-3 py-3">{creditPill(user.creditsLeft)}</td>
+                <td className="px-3 py-3">{fmt(user.freeCredits)}</td>
                 <td className="px-3 py-3">{user.totalGenerations}</td>
                 <td className="px-3 py-3">{user.paidOrFree}</td>
                 <td className="px-3 py-3">{money(user.totalAmountPaid)}</td>
                 <td className="px-3 py-3"><DateText value={user.signupDate} /></td>
                 <td className="px-3 py-3"><DateText value={user.lastActiveDate} /></td>
                 <td className="px-3 py-3">{statusPill(user.status)}</td>
+                <td className="px-3 py-3">
+                  <button
+                    type="button"
+                    onClick={() => topUpUser(user)}
+                    disabled={topUpUserId === user.id}
+                    className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--card-alt)] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <CreditCard className="h-3.5 w-3.5" />
+                    {topUpUserId === user.id ? "Adding" : "Top up"}
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -485,7 +560,7 @@ function CreditTopUpSection({
     const userRows = users
       .filter((user) => [user.name, user.email, user.schoolName].join(" ").toLowerCase().includes(q))
       .slice(0, 6)
-      .map((user) => ({ type: "user" as const, id: user.id, label: `${user.name} - ${user.email}`, meta: `Current: ${fmt(user.currentCreditBalance)} credits` }));
+      .map((user) => ({ type: "user" as const, id: user.id, label: `${user.name} - ${user.email}`, meta: `Current: ${fmt(user.creditsLeft)} personal credits` }));
     const schoolRows = schools
       .filter((school) => [school.schoolName, school.principalEmail, school.schoolCode].join(" ").toLowerCase().includes(q))
       .slice(0, 6)
@@ -946,7 +1021,7 @@ export default function AdminDashboard({ data: initialData }: { data: AdminDashb
         </Section>
 
         <Section title="Users">
-          <UsersTable users={data.users} />
+          <UsersTable users={data.users} onDone={refreshData} />
         </Section>
 
         <Section title="Feedback Campaign">

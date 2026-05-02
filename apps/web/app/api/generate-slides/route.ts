@@ -614,28 +614,17 @@ export async function POST(req: NextRequest) {
 
         const personalBalance = Math.max(0, Number((profileData as any)?.credits_balance ?? 0));
 
-        if (personalBalance >= SLIDES_CREDIT_COST) {
+        if (personalBalance < SLIDES_CREDIT_COST) {
           return NextResponse.json(
             {
               ok: false,
-              errorCode: "needs_personal_confirmation",
-              personalCreditsAvailable: personalBalance,
-              message: "Your school has run out of credits.",
-              cost: SLIDES_CREDIT_COST,
+              error: "school_out_of_credits",
+              message: "Your school has run out of credits and your personal balance is too low. Top up personal credits or contact your principal.",
+              upgrade_url: "/pricing",
             },
             { status: 402 }
           );
         }
-
-        return NextResponse.json(
-          {
-            ok: false,
-            error: "school_out_of_credits",
-            message: "Your school has used all its credits. Your principal has been notified and will add more credits soon.",
-            upgrade_url: null,
-          },
-          { status: 402 }
-        );
       }
 
       return NextResponse.json(

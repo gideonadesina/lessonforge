@@ -694,29 +694,18 @@ export async function POST(req: NextRequest) {
             Number((profileData as any)?.credits_balance ?? 0)
           );
 
-          if (personalBalance >= 1) {
+          if (personalBalance < 1) {
             return NextResponse.json(
               {
                 ok: false,
-                errorCode: "needs_personal_confirmation",
-                personalCreditsAvailable: personalBalance,
-                message: "Your school has run out of credits.",
-                cost: 1,
+                error: "school_out_of_credits",
+                message:
+                  "Your school has run out of credits and your personal balance is too low. Top up personal credits or contact your principal.",
+                upgrade_url: "/pricing",
               },
               { status: 402 }
             );
           }
-
-          return NextResponse.json(
-            {
-              ok: false,
-              error: "school_out_of_credits",
-              message:
-                "Your school has run out of credits. Contact your principal to top up.",
-              upgrade_url: null,
-            },
-            { status: 402 }
-          );
         }
         return NextResponse.json(
           {

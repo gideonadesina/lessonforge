@@ -781,27 +781,18 @@ export async function checkCreditsOrResponse(
         );
       }
       const personalCreditsAvailable = Math.max(0, Number((profile as JsonRecord | null)?.credits_balance ?? 0));
-      if (personalCreditsAvailable >= LESSON_PACK_CREDIT_COST) {
+      if (personalCreditsAvailable < LESSON_PACK_CREDIT_COST) {
         return NextResponse.json(
           {
             ok: false,
-            errorCode: "needs_personal_confirmation",
-            personalCreditsAvailable,
-            cost: LESSON_PACK_CREDIT_COST,
-            message: "Your school has run out of credits.",
+            error: "school_out_of_credits",
+            errorCode: "school_out_of_credits",
+            message:
+              "Your school has run out of credits and your personal balance is too low. Top up personal credits or contact your principal.",
           },
           { status: 402 }
         );
       }
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "school_out_of_credits",
-          errorCode: "school_out_of_credits",
-          message: "Your school has run out of credits. Please contact your principal.",
-        },
-        { status: 402 }
-      );
     }
 
     return NextResponse.json(

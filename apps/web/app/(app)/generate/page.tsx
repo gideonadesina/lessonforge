@@ -12,6 +12,7 @@ import { readJsonResponse } from "@/lib/http/safe-json";
 import { track } from "@/lib/analytics";
 import { enrichGeneratedLessonImages } from "@/lib/generation/enrich-images-client";
 import { renderLessonPackHTML } from "@/lib/export/renderLessonPack";
+import { shouldUsePersonalCredits } from "@/lib/credits/source-preference";
 import {
   AlertCircle,
   CheckCircle2,
@@ -569,7 +570,7 @@ export default function GeneratePage() {
       : "";
   }
 
-  function buildRequestBody(usePersonalCredits = false): GenerationMetadata {
+  function buildRequestBody(usePersonalCredits = shouldUsePersonalCredits()): GenerationMetadata {
     return {
       curriculum: curriculum.trim(),
       schoolLevel: schoolLevel.trim(),
